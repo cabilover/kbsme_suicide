@@ -1,0 +1,147 @@
+# 기본 설정 파일
+# 데이터 분할 및 검증 전략 설정
+
+# 데이터 분할 설정
+data_split:
+  test_ids_ratio: 0.15  # 최종 테스트 세트에 사용할 ID 비율
+  random_state: 42      # 재현성을 위한 시드
+
+# 검증 전략 설정
+validation:
+  strategy: "group_kfold"  # 주요 검증 전략: "time_series_walk_forward", "time_series_group_kfold", "group_kfold"
+  
+  # --- 모든 전략에 공통 적용될 수 있는 파라미터 ---
+  val_ids_ratio: 0.15                  # 각 폴드 내에서 검증에 사용할 ID 비율 (훈련 ID 풀에서 분할)
+
+  # --- "time_series_walk_forward" 전략 전용 파라미터 ---
+  validation_start_year: 2021          # Walk-Forward 검증 시작 연도
+  min_train_years: 3                   # 최소 훈련 연도 수 (Walk-Forward 시)
+  max_train_years: 8                   # 최대 훈련 연도 수 (Walk-Forward 시)
+
+  # --- "time_series_group_kfold" 또는 "group_kfold" 전략 전용 파라미터 ---
+  num_cv_folds: 5                      # 교차 검증 폴드 수 (K-Fold 계열 전략 사용 시)
+  # group_kfold_by: "id"               # GroupKFold를 적용할 그룹 컬럼 (이미 id로 고정되어 있지만 명시적으로)
+                                     # (참고: time_series_group_kfold는 시간과 ID를 모두 고려해야 하므로 구현이 복잡)
+
+# 시계열 설정
+time_series:
+  date_column: "dov"                   # 날짜 컬럼명
+  year_column: "yov"                   # 연도 컬럼명
+  id_column: "id"                      # 개인 ID 컬럼명
+
+# 전처리 설정
+preprocessing:
+  # 시계열 보간 설정
+  time_series_imputation:
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "suicide_t", "suicide_a"]
+    fallback_strategy: "mean"  # ffill/bfill 후에도 결측치가 남을 경우 사용할 전략
+  
+  # 수치형 결측치 처리
+  numerical_imputation:
+    strategy: "mean"  # "mean", "median", "constant"
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "age"]
+  
+  # 범주형 결측치 처리
+  categorical_imputation:
+    strategy: "most_frequent"  # "most_frequent", "constant"
+    columns: ["sex", "psychia_cate"]
+  
+  # 범주형 인코딩 설정
+  categorical_encoding:
+    method: "ordinal"  # "onehot", "ordinal", "none"
+    # onehot: One-Hot Encoding (XGBoost에 적합)
+    # ordinal: Ordinal Encoding (순서가 있는 범주형에 적합)
+    # none: 인코딩 없음
+
+# 피처 엔지니어링 설정
+features:
+  # 타겟 컬럼 (단일 타겟으로 단순화)
+  target_columns: ["suicide_a_next_year"]
+  
+  # 선택된 피처 목록 (문제 발생 가능성 있는 변수들 제외)
+  selected_features: [
+    # 기본 인구학적 정보
+    "age", "sex",
+    
+    # 정신 건강 점수
+    "comp", "anxiety_score", "depress_score", "sleep_score",
+    
+    # 자살 관련 (현재 시점)
+    "suicide_t", "suicide_a",
+    
+    # 분류 정보
+    "psychia_cate",
+    
+    # 시간 기반 피처
+    "month", "day_of_week", "day_of_year",
+    
+    # 과거 이력 피처 (2년 이동 통계)
+    "anxiety_score_rolling_mean_2y", "anxiety_score_rolling_std_2y", "anxiety_score_yoy_change",
+    "depress_score_rolling_mean_2y", "depress_score_rolling_std_2y", "depress_score_yoy_change",
+    "sleep_score_rolling_mean_2y", "sleep_score_rolling_std_2y", "sleep_score_yoy_change",
+    "comp_rolling_mean_2y", "comp_rolling_std_2y", "comp_yoy_change"
+  ]
+  
+  # 기존 피처 검증 설정
+  validation:
+    scope: "sample"  # "sample", "full", "none"
+    # sample: 샘플 ID만 검증 (빠름, 개발용)
+    # full: 전체 ID 검증 (느림, 프로덕션용)
+    # none: 검증 건너뛰기 (가장 빠름)
+    sample_size: 10  # scope가 "sample"일 때 검증할 ID 수
+  
+  # 지연 피처 설정
+  enable_lagged_features: false  # 초기에는 비활성화
+  lag_periods: [1, 2, 3]  # 몇 년 전 데이터를 사용할지
+  lagged_features:
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+  
+  # 이동 통계 피처 설정
+  enable_rolling_stats: false  # 초기에는 비활성화 (이미 기존 데이터에 있음)
+  rolling_stats:
+    window_sizes: [2, 3]  # 이동 윈도우 크기
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+
+# 모델 설정
+model:
+  # XGBoost 모델 파라미터
+  xgboost:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 1
+    scale_pos_weight: 1.0  # 분류 문제에서 자동으로 계산됨
+    early_stopping_rounds: 10
+    verbose: 0
+
+# 학습 설정
+training:
+  # Early Stopping 설정
+  early_stopping: true
+  patience: 10
+  
+  # 불균형 처리 설정
+  handle_imbalance: true
+  
+  # 모델 저장 설정
+  save_best_model: true
+  model_save_path: "models/"
+
+# 평가 설정
+evaluation:
+  # 회귀 지표
+  regression_metrics: ["mae", "rmse", "r2"]
+  
+  # 분류 지표
+  classification_metrics: ["precision", "recall", "f1", "roc_auc"]
+  
+  # 결과 저장 설정
+  save_predictions: true
+  save_feature_importance: true
+
+# 로깅 설정
+logging:
+  log_splits_info: true               # 분할 정보 로깅 여부
+  log_fold_details: true              # 각 폴드 상세 정보 로깅 여부 
