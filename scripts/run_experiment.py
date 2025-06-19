@@ -92,12 +92,23 @@ def log_experiment_params(config: Dict[str, Any]):
         "enable_rolling_stats": config['features']['enable_rolling_stats']
     }
     
-    # 모델 파라미터
+    # XGBoost 모델 파라미터 (상세 로깅)
+    xgboost_config = config['model']['xgboost']
     model_params = {
-        "n_estimators": config['model']['xgboost']['n_estimators'],
-        "max_depth": config['model']['xgboost']['max_depth'],
-        "learning_rate": config['model']['xgboost']['learning_rate'],
-        "early_stopping_rounds": config['model']['xgboost']['early_stopping_rounds']
+        # 기본 파라미터
+        "n_estimators": xgboost_config['n_estimators'],
+        "max_depth": xgboost_config['max_depth'],
+        "learning_rate": xgboost_config['learning_rate'],
+        "subsample": xgboost_config['subsample'],
+        "colsample_bytree": xgboost_config['colsample_bytree'],
+        "min_child_weight": xgboost_config['min_child_weight'],
+        "scale_pos_weight": xgboost_config['scale_pos_weight'],
+        "early_stopping_rounds": xgboost_config['early_stopping_rounds'],
+        "verbose": xgboost_config['verbose'],
+        
+        # 파라미터 소스 추적
+        "param_source": "config_file",
+        "config_file_path": "configs/default_config.yaml"
     }
     
     # 학습 파라미터
@@ -121,6 +132,13 @@ def log_experiment_params(config: Dict[str, Any]):
     
     mlflow.log_params(all_params)
     logger.info("실험 파라미터 로깅 완료")
+    
+    # XGBoost 파라미터 상세 출력 (디버깅용)
+    logger.info("=== XGBoost 파라미터 확인 ===")
+    for key, value in model_params.items():
+        if key.startswith('param_source') or key.startswith('config_file'):
+            continue
+        logger.info(f"  {key}: {value}")
 
 
 def evaluate_final_model(test_df: pd.DataFrame, cv_results: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:

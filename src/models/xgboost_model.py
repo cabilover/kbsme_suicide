@@ -148,6 +148,11 @@ class XGBoostModel(BaseEstimator):
                 params['scale_pos_weight'] = pos_weight
                 logger.info(f"  - scale_pos_weight: {pos_weight:.2f}")
             
+            # 실제 적용되는 파라미터 로깅
+            logger.info(f"=== {original_target} 모델 파라미터 ===")
+            for key, value in params.items():
+                logger.info(f"  {key}: {value}")
+            
             # Early Stopping 관련 파라미터를 fit에서 제외하고 모델 생성 시 사용할 파라미터에서 분리
             model_params = params.copy()
             fit_params = {}

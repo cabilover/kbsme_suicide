@@ -171,6 +171,13 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 - **범주형 인코딩 표준화**: OrdinalEncoder 사용으로 안정성 향상
 - **타겟 결측치 자동 처리**: 학습 과정에서 결측치가 있는 샘플 자동 제거
 
+### 환경 호환성 및 실험 관리 시스템 완성
+- **XGBoost 버전 충돌 해결**: conda와 pip 간 버전 충돌 문제 완전 해결
+- **NumPy 호환성 문제 해결**: NumPy 1.26.4로 다운그레이드하여 MLflow UI 실행 가능
+- **실험 파라미터 추적 시스템 고도화**: config에서 모든 XGBoost 파라미터가 MLflow에 상세 로깅
+- **MLflow UI 안정화**: 모든 config 파라미터가 웹 UI에서 확인 가능
+- **파라미터 적용 검증**: 실제 모델에 적용되는 파라미터와 config 파라미터 일치성 확인
+
 ### 성능 지표 (최신 실험 결과)
 - **교차 검증 성공**: 5개 폴드에서 모두 정상 학습 완료
 - **Early Stopping 정상 동작**: 과적합 방지를 위한 조기 종료 기능 활성화
@@ -179,7 +186,7 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 - **재현율/정밀도/F1**: 0.0 (소수 클래스 예측 어려움)
 
 ## 다음 단계
-현재 Phase 5-2 (기준 모델 구축 및 ML 파이프라인 개발 + 코드 품질 개선) 완료
+현재 Phase 5-2 (기준 모델 구축 및 ML 파이프라인 개발 + 코드 품질 개선 + 환경 호환성 완성) 완료 ✅
 → Phase 5-3 (고급 모델 개발 및 성능 최적화) 진행 예정
 
 ## 참고 문서
@@ -188,6 +195,6 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 
 ## 기술 스택
 - **Python**: 3.10.18
-- **주요 라이브러리**: pandas, numpy, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6
+- **주요 라이브러리**: pandas, numpy<2, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6
 - **환경 관리**: conda
 - **코드 품질**: PEP 8 준수, 모듈화, 문서화, 안정성 확보 
