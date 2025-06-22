@@ -1,0 +1,170 @@
+# 하이퍼파라미터 튜닝 설정 파일
+# 기본 설정 파일과 연동하여 사용
+
+# 기본 설정 파일 참조
+base_config: "configs/default_config.yaml"
+
+# 튜닝 기본 설정
+tuning:
+  # 최적화 방향
+  direction: "maximize"  # "maximize" 또는 "minimize"
+  
+  # 튜닝 횟수
+  n_trials: 1  # 테스트를 위해 1회로 줄임
+  
+  # 병렬 처리 설정
+  n_jobs: 1  # 병렬 처리 시 1로 설정 (MLflow 충돌 방지)
+  
+  # 조기 종료 설정
+  early_stopping:
+    enabled: true
+    patience: 20  # 20번 연속 개선 없으면 조기 종료
+    min_trials: 30  # 최소 30번은 시도
+
+# Optuna Sampler 설정
+sampler:
+  # 사용할 샘플러 타입
+  type: "tpe"  # "tpe", "random", "cmaes", "nsgaii", "qmc"
+  
+  # TPE 설정 (type이 "tpe"일 때)
+  tpe:
+    n_startup_trials: 10  # 초기 랜덤 시도 횟수
+    n_ei_candidates: 24   # EI 계산 후보 수
+    multivariate: true    # 다변량 TPE 사용
+    group: true           # 그룹화된 파라미터 지원
+  
+  # CMA-ES 설정 (type이 "cmaes"일 때)
+  cmaes:
+    x0:  # 초기 중앙값 (기본 설정과 연동)
+      n_estimators: 100
+      max_depth: 6
+      learning_rate: 0.1
+      subsample: 0.8
+      colsample_bytree: 0.8
+      min_child_weight: 1
+      reg_alpha: 0.1
+      reg_lambda: 1.0
+    sigma0: 0.1  # 초기 표준편차
+
+# XGBoost 하이퍼파라미터 검색 범위
+xgboost_params:
+  # 트리 개수
+  n_estimators:
+    type: "int"
+    low: 50
+    high: 1000
+    log: false
+  
+  # 최대 깊이
+  max_depth:
+    type: "int"
+    low: 3
+    high: 12
+    log: false
+  
+  # 학습률
+  learning_rate:
+    type: "float"
+    low: 0.01
+    high: 0.3
+    log: true
+  
+  # 서브샘플 비율
+  subsample:
+    type: "float"
+    low: 0.6
+    high: 1.0
+    log: false
+  
+  # 컬럼 서브샘플 비율
+  colsample_bytree:
+    type: "float"
+    low: 0.6
+    high: 1.0
+    log: false
+  
+  # 최소 자식 가중치
+  min_child_weight:
+    type: "int"
+    low: 1
+    high: 10
+    log: false
+  
+  # L1 정규화
+  reg_alpha:
+    type: "float"
+    low: 1e-8
+    high: 10.0
+    log: true
+  
+  # L2 정규화
+  reg_lambda:
+    type: "float"
+    low: 1e-8
+    high: 10.0
+    log: true
+  
+  # 불균형 처리 (자동 계산되지만 튜닝 가능)
+  scale_pos_weight:
+    type: "float"
+    low: 0.5
+    high: 10.0
+    log: true
+
+# 평가 지표 설정
+evaluation:
+  # 주요 최적화 지표
+  primary_metric: "f1_score"  # "f1_score", "precision", "recall", "roc_auc"
+  
+  # 다중 지표 최적화 (NSGA-II 사용 시)
+  multi_objective:
+    enabled: false
+    metrics: ["f1_score", "precision", "recall"]
+    directions: ["maximize", "maximize", "maximize"]
+  
+  # 교차 검증 설정 (기본 설정과 연동)
+  cv:
+    strategy: "group_kfold"  # 기본 설정의 validation.strategy 사용
+    n_folds: 5              # 기본 설정의 validation.num_cv_folds 사용
+    shuffle: false
+
+# 결과 저장 설정
+results:
+  # 최고 모델 저장
+  save_best_model: true
+  model_save_path: "models/best_tuned_model.joblib"
+  
+  # 튜닝 결과 저장
+  save_study: true
+  study_save_path: "models/optuna_study.pkl"
+  
+  # 결과 시각화
+  create_plots: true
+  plots_save_path: "data/tuning_results/"
+
+# MLflow 연동 설정
+mlflow:
+  # 실험 이름
+  experiment_name: "hyperparameter_tuning"
+  
+  # 중첩 실행 사용
+  use_nested_runs: true
+  
+  # 파라미터 로깅
+  log_params: true
+  
+  # 메트릭 로깅
+  log_metrics: true
+  
+  # 아티팩트 로깅
+  log_artifacts: true
+
+# 기본 설정 오버라이드 (필요시)
+override_base_config:
+  # 튜닝 중에만 변경할 기본 설정들
+  enabled: false  # 기본적으로 비활성화
+  
+  # 예시: 튜닝 중에만 다른 설정 사용
+  # model:
+  #   xgboost:
+  #     early_stopping_rounds: 5  # 튜닝 중에는 더 빠른 조기 종료 
