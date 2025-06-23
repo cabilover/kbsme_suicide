@@ -127,6 +127,12 @@ class CatBoostModel(BaseModel):
         """
         params = self.model_params.copy()
         
+        # CatBoost는 n_jobs, nthread, thread_count(최상위) 등은 인식하지 않음
+        for key in ['n_jobs', 'nthread', 'thread_count']:
+            if key in params:
+                params.pop(key)
+        # thread_count는 fit/predict에서만 사용
+        
         # 분류 문제인 경우
         if target in self.classification_targets:
             params['loss_function'] = 'Logloss'

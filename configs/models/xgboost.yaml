@@ -1,0 +1,51 @@
+# XGBoost 모델 설정 파일
+# XGBoost 모델 전용 설정
+
+# 모델 설정
+model:
+  model_type: "xgboost"
+  
+  # XGBoost 모델 파라미터
+  xgboost:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 1
+    scale_pos_weight: 1.0  # 분류 문제에서 자동으로 계산됨
+    early_stopping_rounds: 10
+    verbose: 0
+    
+    # Focal Loss 설정
+    use_focal_loss: false  # Focal Loss 사용 여부 (true/false)
+    focal_loss:
+      alpha: 0.25  # 클래스 가중치 (0 < alpha < 1). 소수 클래스에 더 큰 가중치
+      gamma: 2.0   # 포커싱 파라미터 (gamma >= 0). 쉬운 샘플의 기여도를 낮춤
+
+# 리샘플링 설정 (불균형 데이터 처리)
+resampling:
+  enabled: false  # 리샘플링 활성화 여부
+  method: "smote"  # "smote", "borderline_smote", "adasyn", "under_sampling", "hybrid"
+  random_state: 42  # 재현성을 위한 시드
+  
+  # SMOTE 설정
+  smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # Borderline SMOTE 설정
+  borderline_smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # ADASYN 설정
+  adasyn_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # 언더샘플링 설정
+  under_sampling_strategy: "random"  # "random", "tomek", "enn"
+  
+  # 하이브리드 샘플링 설정
+  hybrid_strategy: "smote_tomek"  # "smote_tomek", "smote_enn"
+  
+  # 시계열 특화 설정
+  time_series_adapted:
+    enabled: false
+    time_weight: 0.3
+    pattern_preservation: true 

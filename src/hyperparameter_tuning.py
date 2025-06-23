@@ -26,7 +26,7 @@ sys.path.append(str(project_root))
 from src.splits import load_config, split_test_set, get_cv_splits
 from src.preprocessing import transform_data, fit_preprocessing_pipeline
 from src.feature_engineering import transform_features, get_feature_columns, get_target_columns_from_data
-from src.models.xgboost_model import XGBoostModel
+from src.models import ModelFactory
 from src.evaluation import calculate_all_metrics
 
 # 로깅 설정
@@ -50,7 +50,9 @@ class HyperparameterTuner:
             base_config_path: 기본 설정 파일 경로 (선택사항)
         """
         self.tuning_config_path = tuning_config_path
-        self.base_config_path = base_config_path or self._get_base_config_path()
+        if base_config_path is None:
+            raise ValueError("base_config_path를 명시적으로 지정해야 합니다. (계층적 config 체계에서는 임시 병합 config 파일 경로를 넘겨주세요)")
+        self.base_config_path = base_config_path
         
         # 설정 로드
         self.tuning_config = self._load_tuning_config()
@@ -71,8 +73,8 @@ class HyperparameterTuner:
         logger.info(f"  - 튜닝 횟수: {self.tuning_config['tuning']['n_trials']}")
     
     def _get_base_config_path(self) -> str:
-        """기본 설정 파일 경로를 반환합니다."""
-        return "configs/default_config.yaml"
+        """(더 이상 사용하지 않음)"""
+        raise NotImplementedError("_get_base_config_path는 계층적 config 체계에서 사용하지 않습니다.")
     
     def _load_tuning_config(self) -> Dict[str, Any]:
         """튜닝 설정 파일을 로드합니다."""
@@ -143,18 +145,14 @@ class HyperparameterTuner:
     def _suggest_parameters(self, trial: optuna.Trial) -> Dict[str, Any]:
         """
         Optuna trial에서 하이퍼파라미터를 제안합니다.
-        
         Args:
             trial: Optuna trial 객체
-            
         Returns:
-            제안된 하이퍼파라미터 딕셔너리
+            제안된 하이퍼파라미터 딕셔너리 (모델 파라미터만)
         """
         params = {}
-        
         # 모델 타입 확인
         model_type = self.config.get('model', {}).get('model_type', 'xgboost')
-        
         # 모델 타입별 파라미터 설정
         if model_type == 'xgboost':
             model_params = self.tuning_config.get('xgboost_params', {})
@@ -167,23 +165,19 @@ class HyperparameterTuner:
         else:
             logger.warning(f"지원하지 않는 모델 타입: {model_type}. XGBoost 파라미터를 사용합니다.")
             model_params = self.tuning_config.get('xgboost_params', {})
-        
         for param_name, param_config in model_params.items():
             param_type = param_config['type']
-            
             if param_type == "categorical":
                 params[param_name] = trial.suggest_categorical(param_name, param_config['choices'])
             else:
-                # YAML에서 파싱된 값들을 명시적으로 숫자 타입으로 변환
                 low = float(param_config['low']) if param_type == "float" else int(param_config['low'])
                 high = float(param_config['high']) if param_type == "float" else int(param_config['high'])
                 log = param_config.get('log', False)
-                
                 if param_type == "int":
                     params[param_name] = trial.suggest_int(param_name, low, high, log=log)
                 elif param_type == "float":
                     params[param_name] = trial.suggest_float(param_name, low, high, log=log)
-        
+        # 튜닝/실험용 파라미터(n_jobs 등)는 모델 파라미터 dict에 포함하지 않음
         return params
     
     def _objective(self, trial: optuna.Trial) -> float:
@@ -338,64 +332,61 @@ class HyperparameterTuner:
             mlflow.log_param("error", str(e))
             return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
     
-    def optimize(self) -> Tuple[Dict[str, Any], float]:
+    def optimize(self, start_mlflow_run: bool = True) -> Tuple[Dict[str, Any], float]:
         """
         하이퍼파라미터 최적화를 실행합니다.
         
+        Args:
+            start_mlflow_run: MLflow run을 시작할지 여부 (중첩 실행 시 False)
+            
         Returns:
             최적 하이퍼파라미터와 최고 성능 점수
         """
         logger.info("하이퍼파라미터 최적화 시작")
-        
         # MLflow 실험 설정
         experiment_name = self.tuning_config['mlflow']['experiment_name']
         mlflow.set_experiment(experiment_name)
-        
         # Optuna study 생성
         sampler = self._create_sampler()
         direction = self.tuning_config['tuning']['direction']
-        
-        # 모델 타입 확인
         model_type = self.config.get('model', {}).get('model_type', 'xgboost')
-        
         self.study = optuna.create_study(
             direction=direction,
             sampler=sampler,
             study_name=f"{model_type}_optimization_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
-        
         # 최적화 실행
         n_trials = self.tuning_config['tuning']['n_trials']
-        n_jobs = self.tuning_config['tuning']['n_jobs']
+        n_jobs = self.tuning_config['tuning'].get('n_jobs', 1)
         
-        with mlflow.start_run():
-            # 실험 정보 로깅
-            mlflow.log_param("optimization_algorithm", self.tuning_config['sampler']['type'])
-            mlflow.log_param("n_trials", n_trials)
-            mlflow.log_param("direction", direction)
-            mlflow.log_param("primary_metric", self.tuning_config['evaluation']['primary_metric'])
-            
-            # 최적화 실행
-            self.study.optimize(
-                self._objective,
-                n_trials=n_trials,
-                n_jobs=n_jobs,
-                show_progress_bar=True
-            )
-            
-            # 최적 결과 저장
-            self.best_params = self.study.best_params
-            self.best_score = self.study.best_value
-            
-            # MLflow에 최적 결과 로깅
-            mlflow.log_params(self.best_params)
-            mlflow.log_metric("best_score", self.best_score)
-            
-            logger.info(f"최적화 완료!")
-            logger.info(f"  - 최고 성능: {self.best_score:.4f}")
-            logger.info(f"  - 최적 파라미터: {self.best_params}")
-            
-            return self.best_params, self.best_score
+        if start_mlflow_run:
+            with mlflow.start_run():
+                return self._run_optimization(n_trials, n_jobs)
+        else:
+            return self._run_optimization(n_trials, n_jobs)
+    
+    def _run_optimization(self, n_trials: int, n_jobs: int) -> Tuple[Dict[str, Any], float]:
+        """실제 최적화 실행 로직"""
+        mlflow.log_param("optimization_algorithm", self.tuning_config['sampler']['type'])
+        mlflow.log_param("n_trials", n_trials)
+        mlflow.log_param("direction", self.tuning_config['tuning']['direction'])
+        mlflow.log_param("primary_metric", self.tuning_config['evaluation']['primary_metric'])
+        
+        self.study.optimize(
+            self._objective,
+            n_trials=n_trials,
+            n_jobs=n_jobs,
+            show_progress_bar=True
+        )
+        
+        self.best_params = self.study.best_params
+        self.best_score = self.study.best_value
+        mlflow.log_params(self.best_params)
+        mlflow.log_metric("best_score", self.best_score)
+        logger.info(f"최적화 완료!")
+        logger.info(f"  - 최고 성능: {self.best_score:.4f}")
+        logger.info(f"  - 최적 파라미터: {self.best_params}")
+        return self.best_params, self.best_score
     
     def save_results(self):
         """튜닝 결과를 저장합니다."""
@@ -484,7 +475,8 @@ class HyperparameterTuner:
         X_train = train_engineered[feature_columns]
         y_train = train_engineered[target_columns]
         
-        model = XGBoostModel(model_config)
+        # ModelFactory를 사용하여 모델 타입에 따라 동적으로 모델 생성
+        model = ModelFactory.create_model(model_config)
         model.fit(X_train, y_train)
         
         # 모델 저장

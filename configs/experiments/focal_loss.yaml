@@ -1,0 +1,54 @@
+# Focal Loss 실험 설정 파일
+# Focal Loss를 사용한 불균형 데이터 처리 실험
+
+# 실험 설정
+experiment:
+  name: "focal_loss_experiment"
+  description: "Focal Loss를 사용한 불균형 데이터 처리 실험"
+  tags:
+    - "focal_loss"
+    - "imbalanced_data"
+    - "suicide_prediction"
+
+# 기본 설정 오버라이드
+overrides:
+  # 모델 설정 오버라이드
+  model:
+    xgboost:
+      use_focal_loss: true  # Focal Loss 활성화
+      focal_loss:
+        alpha: 0.25  # 소수 클래스 가중치 (0.25 = 소수 클래스에 3배 가중치)
+        gamma: 2.0   # 포커싱 파라미터 (쉬운 샘플의 기여도를 낮춤)
+  
+  # 피처 설정 오버라이드 (단일 타겟으로 집중)
+  features:
+    target_columns: ["suicide_a_next_year"]  # 자살 시도 예측에 집중
+  
+  # 평가 설정 오버라이드
+  evaluation:
+    # 불균형 데이터에 특화된 메트릭
+    classification_metrics: ["precision", "recall", "f1", "roc_auc", "balanced_accuracy", "average_precision"]
+    cv_metrics: ["f1", "recall", "balanced_accuracy", "roc_auc"]
+  
+  # MLflow 설정 오버라이드
+  mlflow:
+    experiment_name: "focal_loss_experiment"
+    tags:
+      - "focal_loss"
+      - "imbalanced_data"
+      - "suicide_prediction"
+      - "alpha_0.25"
+      - "gamma_2.0"
+
+# 실험 특화 설정
+focal_loss_experiment:
+  # Focal Loss 파라미터 탐색 범위
+  alpha_range: [0.1, 0.25, 0.5, 0.75, 0.9]
+  gamma_range: [0.5, 1.0, 2.0, 3.0, 5.0]
+  
+  # 실험 목표
+  primary_metric: "f1_score"
+  secondary_metrics: ["recall", "balanced_accuracy"]
+  
+  # 실험 설명
+  description: "Focal Loss의 alpha와 gamma 파라미터를 조정하여 극단적 불균형 데이터(849:1)에서 소수 클래스 예측 성능을 개선하는 실험" 

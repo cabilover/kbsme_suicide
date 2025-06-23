@@ -408,28 +408,22 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
     return available_features
 
 
-def main():
+def main(config=None):
     """
     테스트용 메인 함수
     """
     import yaml
-    
-    # 설정 로드
-    with open("configs/default_config.yaml", 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
+    if config is None:
+        print("[WARNING] config 인자가 전달되지 않았습니다. 외부에서 config를 넘겨주세요.")
+        return
     # 테스트 데이터 로드
     data_path = "data/processed/processed_data_with_features.csv"
     df = pd.read_csv(data_path, nrows=1000)
-    
     logger.info(f"테스트 데이터 로드: {len(df):,} 행")
-    
     # 피처 엔지니어링 수행
     df_engineered, feature_info = fit_feature_engineering(df, config)
-    
     # 피처 컬럼 확인
     feature_columns = get_feature_columns(df_engineered, config)
-    
     logger.info("피처 엔지니어링 테스트 완료!")
 
 

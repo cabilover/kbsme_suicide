@@ -1,0 +1,465 @@
+catboost_params:
+  bagging_temperature:
+    high: 1.0
+    log: false
+    low: 0.1
+    type: float
+  border_count:
+    high: 255
+    log: false
+    low: 32
+    type: int
+  depth:
+    high: 10
+    log: false
+    low: 3
+    type: int
+  iterations:
+    high: 500
+    log: false
+    low: 50
+    type: int
+  l2_leaf_reg:
+    high: 10
+    log: true
+    low: 1
+    type: float
+  learning_rate:
+    high: 0.3
+    log: true
+    low: 0.01
+    type: float
+  random_strength:
+    high: 10.0
+    log: true
+    low: 0.1
+    type: float
+data:
+  encoding: utf-8
+  file_path: data/processed_data.csv
+  na_values:
+  - ''
+  - nan
+  - NaN
+  - 'NULL'
+  - 'null'
+data_split:
+  method: stratified_kfold
+  n_splits: 5
+  random_state: 42
+  test_ids_ratio: 0.15
+  test_size: 0.2
+  val_size: 0.2
+evaluation:
+  classification_metrics:
+  - precision
+  - recall
+  - f1
+  - roc_auc
+  - balanced_accuracy
+  cv:
+    n_folds: 5
+    shuffle: false
+    strategy: group_kfold
+  cv_metrics:
+  - accuracy
+  - f1
+  - auc
+  - rmse
+  - r2
+  primary_metric: f1_score
+  regression_metrics:
+  - mae
+  - rmse
+  - r2
+  save_confusion_matrix: true
+  save_feature_importance: true
+  save_precision_recall_curve: true
+  save_predictions: true
+  save_roc_curve: true
+  secondary_metrics:
+  - recall
+  - precision
+  - balanced_accuracy
+  - roc_auc
+experiment:
+  description: Optuna 기반 하이퍼파라미터 최적화 실험
+  name: hyperparameter_tuning_experiment
+  tags:
+  - hyperparameter_tuning
+  - optuna
+  - optimization
+features:
+  categorical_columns:
+  - gender
+  - marital_status
+  - education_level
+  - income_level
+  - residence_type
+  - insurance_type
+  - primary_diagnosis
+  - comorbidity
+  - medication_type
+  - treatment_type
+  - follow_up_status
+  enable_lagged_features: false
+  enable_rolling_stats: false
+  exclude_columns:
+  - id
+  - patient_id
+  - visit_date
+  - visit_year
+  lag_periods:
+  - 1
+  - 2
+  - 3
+  lagged_features:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+  rolling_stats:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+    window_sizes:
+    - 2
+    - 3
+  selected_features:
+  - age
+  - sex
+  - comp
+  - anxiety_score
+  - depress_score
+  - sleep_score
+  - suicide_t
+  - suicide_a
+  - psychia_cate
+  - month
+  - day_of_week
+  - day_of_year
+  - anxiety_score_rolling_mean_2y
+  - anxiety_score_rolling_std_2y
+  - anxiety_score_yoy_change
+  - depress_score_rolling_mean_2y
+  - depress_score_rolling_std_2y
+  - depress_score_yoy_change
+  - sleep_score_rolling_mean_2y
+  - sleep_score_rolling_std_2y
+  - sleep_score_yoy_change
+  - comp_rolling_mean_2y
+  - comp_rolling_std_2y
+  - comp_yoy_change
+  target_columns:
+  - anxiety_score_next_year
+  - depress_score_next_year
+  - sleep_score_next_year
+  - suicide_t_next_year
+  - suicide_a_next_year
+  validation:
+    sample_size: 10
+    scope: sample
+lightgbm_params:
+  colsample_bytree:
+    high: 1.0
+    log: false
+    low: 0.6
+    type: float
+  focal_loss_alpha:
+    high: 0.9
+    log: false
+    low: 0.1
+    type: float
+  focal_loss_gamma:
+    high: 5.0
+    log: false
+    low: 0.5
+    type: float
+  learning_rate:
+    high: 0.3
+    log: true
+    low: 0.01
+    type: float
+  max_depth:
+    high: 12
+    log: false
+    low: 3
+    type: int
+  min_child_weight:
+    high: 10
+    log: false
+    low: 1
+    type: int
+  n_estimators:
+    high: 1000
+    log: false
+    low: 50
+    type: int
+  reg_alpha:
+    high: 10.0
+    log: true
+    low: 1e-8
+    type: float
+  reg_lambda:
+    high: 10.0
+    log: true
+    low: 1e-8
+    type: float
+  subsample:
+    high: 1.0
+    log: false
+    low: 0.6
+    type: float
+  use_focal_loss:
+    choices:
+    - true
+    - false
+    type: categorical
+logging:
+  file: logs/experiment.log
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  level: INFO
+  log_fold_details: true
+  log_splits_info: true
+mlflow:
+  experiment_description: 자살 위험 예측 모델 실험
+  experiment_name: hyperparameter_tuning
+  log_metrics: true
+  log_model: true
+  log_optimization: true
+  log_params: true
+  logging:
+    artifact_logging_level: INFO
+    log_experiment_info: true
+    log_fold_results: true
+    log_model_info: true
+    metric_logging_level: INFO
+    param_logging_level: INFO
+  nested_runs: true
+  save_artifacts: true
+  tags:
+  - suicide_prediction
+  - healthcare
+  - classification
+  - regression
+  tracking:
+    artifact_location: ./mlruns
+    experiment_name: suicide_prediction
+    nested_runs: true
+    tracking_uri: file:./mlruns
+model:
+  model_type: xgboost
+  xgboost:
+    colsample_bytree: 0.8
+    early_stopping_rounds: 10
+    focal_loss:
+      alpha: 0.25
+      gamma: 2.0
+    learning_rate: 0.1
+    max_depth: 6
+    min_child_weight: 1
+    n_estimators: 100
+    scale_pos_weight: 1.0
+    subsample: 0.8
+    use_focal_loss: false
+    verbose: 0
+output:
+  directory: results
+  save_confusion_matrix: true
+  save_feature_importance: true
+  save_model: true
+  save_precision_recall_curve: true
+  save_predictions: true
+  save_roc_curve: true
+preprocessing:
+  categorical_encoding:
+    method: ordinal
+  categorical_imputation:
+    columns:
+    - sex
+    - psychia_cate
+    strategy: most_frequent
+  feature_selection:
+    method: variance_threshold
+    threshold: 0.01
+  missing_value_strategy: median
+  numerical_imputation:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+    - age
+    strategy: mean
+  outlier_detection:
+    method: iqr
+    threshold: 1.5
+  scaling:
+    method: robust
+    with_mean: true
+    with_std: true
+  time_series_imputation:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+    - suicide_t
+    - suicide_a
+    fallback_strategy: mean
+random_forest_params:
+  max_depth:
+    high: 20
+    log: false
+    low: 3
+    type: int
+  max_features:
+    choices:
+    - sqrt
+    - log2
+    - auto
+    type: categorical
+  min_samples_leaf:
+    high: 10
+    log: false
+    low: 1
+    type: int
+  min_samples_split:
+    high: 20
+    log: false
+    low: 2
+    type: int
+  n_estimators:
+    high: 500
+    log: false
+    low: 50
+    type: int
+resampling:
+  adasyn_k_neighbors: 5
+  borderline_smote_k_neighbors: 5
+  enabled: false
+  hybrid_strategy: smote_tomek
+  method: smote
+  random_state: 42
+  smote_k_neighbors: 5
+  time_series_adapted:
+    enabled: false
+    pattern_preservation: true
+    time_weight: 0.3
+  under_sampling_strategy: random
+results:
+  create_plots: true
+  model_save_path: models/best_tuned_model.joblib
+  plots_save_path: data/tuning_results/
+  save_best_model: true
+  save_study: true
+  study_save_path: models/optuna_study.pkl
+sampler:
+  cmaes:
+    sigma0: 0.1
+    x0:
+      colsample_bytree: 0.8
+      learning_rate: 0.1
+      max_depth: 6
+      min_child_weight: 1
+      n_estimators: 100
+      reg_alpha: 0.1
+      reg_lambda: 1.0
+      subsample: 0.8
+  tpe:
+    group: false
+    multivariate: true
+    n_ei_candidates: 24
+    n_startup_trials: 10
+  type: tpe
+time_series:
+  date_column: dov
+  id_column: id
+  year_column: yov
+training:
+  early_stopping: true
+  handle_imbalance: true
+  model_save_path: models/
+  patience: 10
+  save_best_model: true
+tuning:
+  direction: maximize
+  early_stopping:
+    enabled: true
+    min_trials: 30
+    patience: 20
+  n_jobs: 1
+  n_trials: 50
+validation:
+  max_train_years: 8
+  min_train_years: 3
+  num_cv_folds: 3
+  random_state: 42
+  strategy: group_kfold
+  test_size: 0.15
+  val_ids_ratio: 0.15
+  validation_start_year: 2021
+xgboost_params:
+  colsample_bytree:
+    high: 1.0
+    log: false
+    low: 0.6
+    type: float
+  focal_loss_alpha:
+    high: 0.9
+    log: false
+    low: 0.1
+    type: float
+  focal_loss_gamma:
+    high: 5.0
+    log: false
+    low: 0.5
+    type: float
+  learning_rate:
+    high: 0.3
+    log: true
+    low: 0.01
+    type: float
+  max_depth:
+    high: 12
+    log: false
+    low: 3
+    type: int
+  min_child_weight:
+    high: 10
+    log: false
+    low: 1
+    type: int
+  n_estimators:
+    high: 1000
+    log: false
+    low: 50
+    type: int
+  reg_alpha:
+    high: 10.0
+    log: true
+    low: 1e-8
+    type: float
+  reg_lambda:
+    high: 10.0
+    log: true
+    low: 1e-8
+    type: float
+  scale_pos_weight:
+    high: 10.0
+    log: true
+    low: 0.5
+    type: float
+  subsample:
+    high: 1.0
+    log: false
+    low: 0.6
+    type: float
+  use_focal_loss:
+    choices:
+    - true
+    - false
+    type: categorical

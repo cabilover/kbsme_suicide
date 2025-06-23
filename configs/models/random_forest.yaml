@@ -1,0 +1,96 @@
+# Random Forest 모델 설정 파일
+# Random Forest 모델 전용 설정
+
+# 모델 설정
+model:
+  model_type: "random_forest"
+  
+  # Random Forest 특화 파라미터
+  random_forest:
+    # 기본 파라미터
+    n_estimators: 100
+    max_depth: 10
+    min_samples_split: 2
+    min_samples_leaf: 1
+    max_features: "sqrt"
+    
+    # 부트스트랩 설정
+    bootstrap: true
+    oob_score: true
+    max_samples: 0.8
+    
+    # 불균형 데이터 처리
+    class_weight: "balanced"
+    sample_weight: "auto"  # 자동 계산됨
+    
+    # 성능 최적화
+    n_jobs: -1  # 모든 CPU 코어 사용
+    random_state: 42
+    
+    # 과적합 방지
+    min_impurity_decrease: 0.0
+    min_weight_fraction_leaf: 0.0
+    max_leaf_nodes: null
+    
+    # 랜덤성
+    ccp_alpha: 0.0
+    
+    # 분류 특화 파라미터
+    criterion: "gini"  # 분류의 경우
+    # criterion: "squared_error"  # 회귀의 경우
+    
+    # 회귀 특화 파라미터
+    max_features_regression: "sqrt"
+    min_impurity_decrease_regression: 0.0
+    
+    # Focal Loss 설정 (Random Forest는 직접 지원하지 않지만 설정을 인식)
+    use_focal_loss: false  # Focal Loss 사용 여부 (true/false)
+    focal_loss:
+      alpha: 0.25  # 클래스 가중치 (0 < alpha < 1). 소수 클래스에 더 큰 가중치
+      gamma: 2.0   # 포커싱 파라미터 (gamma >= 0). 쉬운 샘플의 기여도를 낮춤
+
+# 전처리 설정 (Random Forest 특화)
+preprocessing:
+  # 범주형 변수 인코딩
+  categorical_encoding:
+    method: "onehot"  # One-Hot Encoding 사용
+    drop_first: true
+    sparse: false
+  
+  # 스케일링 (Random Forest는 스케일링이 필요 없지만, 일관성을 위해 포함)
+  scaling:
+    method: "none"  # Random Forest는 스케일링 불필요
+    with_mean: false
+    with_std: false
+
+# 불균형 데이터 처리 설정
+imbalanced_data:
+  resampling:
+    enabled: false  # 기본값, 실험에서 활성화
+    method: "smote"  # "smote", "borderline_smote", "adasyn", "under_sampling"
+    
+    # SMOTE 설정
+    smote:
+      k_neighbors: 5
+      sampling_strategy: "auto"
+      
+    # Borderline SMOTE 설정
+    borderline_smote:
+      k_neighbors: 5
+      sampling_strategy: "auto"
+      m_neighbors: 10
+      
+    # ADASYN 설정
+    adasyn:
+      k_neighbors: 5
+      sampling_strategy: "auto"
+      n_neighbors: 5
+      
+    # 언더샘플링 설정
+    under_sampling:
+      strategy: "random"
+      sampling_strategy: "auto"
+  
+  # Random Forest 내장 불균형 처리
+  class_weight: "balanced"
+  sample_weight: "auto"  # 자동 계산됨 

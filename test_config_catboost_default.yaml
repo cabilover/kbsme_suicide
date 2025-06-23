@@ -1,0 +1,272 @@
+data:
+  encoding: utf-8
+  file_path: data/processed_data.csv
+  na_values:
+  - ''
+  - nan
+  - NaN
+  - 'NULL'
+  - 'null'
+data_split:
+  method: stratified_kfold
+  n_splits: 5
+  random_state: 42
+  test_ids_ratio: 0.15
+  test_size: 0.2
+  val_size: 0.2
+evaluation:
+  classification_metrics:
+  - precision
+  - recall
+  - f1
+  - roc_auc
+  - balanced_accuracy
+  cv_metrics:
+  - accuracy
+  - f1
+  - auc
+  - rmse
+  - r2
+  regression_metrics:
+  - mae
+  - rmse
+  - r2
+  save_confusion_matrix: true
+  save_feature_importance: true
+  save_precision_recall_curve: true
+  save_predictions: true
+  save_roc_curve: true
+features:
+  categorical_columns:
+  - gender
+  - marital_status
+  - education_level
+  - income_level
+  - residence_type
+  - insurance_type
+  - primary_diagnosis
+  - comorbidity
+  - medication_type
+  - treatment_type
+  - follow_up_status
+  enable_lagged_features: false
+  enable_rolling_stats: false
+  exclude_columns:
+  - id
+  - patient_id
+  - visit_date
+  - visit_year
+  lag_periods:
+  - 1
+  - 2
+  - 3
+  lagged_features:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+  rolling_stats:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+    window_sizes:
+    - 2
+    - 3
+  selected_features:
+  - age
+  - sex
+  - comp
+  - anxiety_score
+  - depress_score
+  - sleep_score
+  - suicide_t
+  - suicide_a
+  - psychia_cate
+  - month
+  - day_of_week
+  - day_of_year
+  - anxiety_score_rolling_mean_2y
+  - anxiety_score_rolling_std_2y
+  - anxiety_score_yoy_change
+  - depress_score_rolling_mean_2y
+  - depress_score_rolling_std_2y
+  - depress_score_yoy_change
+  - sleep_score_rolling_mean_2y
+  - sleep_score_rolling_std_2y
+  - sleep_score_yoy_change
+  - comp_rolling_mean_2y
+  - comp_rolling_std_2y
+  - comp_yoy_change
+  target_columns:
+  - anxiety_score_next_year
+  - depress_score_next_year
+  - sleep_score_next_year
+  - suicide_t_next_year
+  - suicide_a_next_year
+  validation:
+    sample_size: 10
+    scope: sample
+logging:
+  file: logs/experiment.log
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  level: INFO
+  log_fold_details: true
+  log_splits_info: true
+mlflow:
+  experiment_description: 자살 위험 예측 모델 실험
+  experiment_name: suicide_prediction
+  log_metrics: true
+  log_model: true
+  log_params: true
+  logging:
+    artifact_logging_level: INFO
+    log_experiment_info: true
+    log_fold_results: true
+    log_model_info: true
+    metric_logging_level: INFO
+    param_logging_level: INFO
+  nested_runs: true
+  save_artifacts: true
+  tags:
+  - suicide_prediction
+  - healthcare
+  - classification
+  - regression
+  tracking:
+    artifact_location: ./mlruns
+    experiment_name: suicide_prediction
+    nested_runs: true
+    tracking_uri: file:./mlruns
+model:
+  catboost:
+    allow_const_label: false
+    allow_writing_files: false
+    auto_class_weights: Balanced
+    bagging_temperature: 1
+    best_model_min_trees: 1
+    boost_from_average: true
+    boosting_type: Plain
+    bootstrap_seed: 42
+    bootstrap_type: Bernoulli
+    border_count: 254
+    cat_features: []
+    cat_l2: 10.0
+    cat_smooth: 10.0
+    class_weights:
+    - 1
+    - 1
+    depth: 6
+    diffusion_temperature: 10000
+    early_stopping_rounds: 10
+    eval_fraction: 0
+    feature_border_type: GreedyLogSum
+    first_feature_use_penalties: 0
+    fixed_binary_splits: null
+    fold_len_multiplier: 2
+    fold_permutation_block: 1
+    gradient_iterations: 1
+    grow_policy: SymmetricTree
+    has_time: false
+    ignored_features: null
+    iterations: 100
+    l2_leaf_reg: 3
+    langevin: false
+    leaf_estimation_backtracking: AnyImprovement
+    leaf_estimation_iterations: 1
+    leaf_estimation_method: Newton
+    learning_rate: 0.1
+    max_cat_threshold: 32
+    max_leaves: 31
+    min_data_in_leaf: 1
+    min_fold_size: 1
+    model_shrink_mode: Constant
+    model_shrink_rate: 0
+    model_size_reg: 0.5
+    monotone_constraints: ''
+    mvs_reg: 0.1
+    name: experiment
+    one_hot_max_size: 10
+    penalties_coefficient: 1
+    per_float_feature_quantization: ''
+    posterior_sampling: false
+    prediction_type: Probability
+    random_seed: 42
+    random_strength: 1
+    rsm: 0.8
+    sampling_unit: Object
+    save_snapshot: false
+    scale_pos_weight: 1
+    score_function: Cosine
+    snapshot_file: null
+    snapshot_interval: 600
+    subsample: 0.8
+    thread_count: -1
+    train_dir: null
+    verbose: false
+  model_type: catboost
+output:
+  directory: results
+  save_confusion_matrix: true
+  save_feature_importance: true
+  save_model: true
+  save_precision_recall_curve: true
+  save_predictions: true
+  save_roc_curve: true
+preprocessing:
+  categorical_encoding:
+    method: ordinal
+  categorical_imputation:
+    columns:
+    - sex
+    - psychia_cate
+    strategy: most_frequent
+  feature_selection:
+    method: variance_threshold
+    threshold: 0.01
+  missing_value_strategy: median
+  numerical_imputation:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+    - age
+    strategy: mean
+  outlier_detection:
+    method: iqr
+    threshold: 1.5
+  scaling:
+    method: robust
+    with_mean: true
+    with_std: true
+  time_series_imputation:
+    columns:
+    - anxiety_score
+    - depress_score
+    - sleep_score
+    - comp
+    - suicide_t
+    - suicide_a
+    fallback_strategy: mean
+time_series:
+  date_column: dov
+  id_column: id
+  year_column: yov
+training:
+  early_stopping: true
+  handle_imbalance: true
+  model_save_path: models/
+  patience: 10
+  save_best_model: true
+validation:
+  max_train_years: 8
+  min_train_years: 3
+  num_cv_folds: 3
+  random_state: 42
+  strategy: group_kfold
+  test_size: 0.15
+  val_ids_ratio: 0.15
+  validation_start_year: 2021

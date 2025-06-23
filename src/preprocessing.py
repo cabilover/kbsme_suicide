@@ -1036,32 +1036,24 @@ def validate_preprocessing(df: pd.DataFrame, config: Dict[str, Any]) -> bool:
     return True
 
 
-def main():
-    """전처리 모듈 테스트"""
+def main(config=None):
+    """
+    전처리 모듈 테스트
+    """
     import yaml
-    
-    # 설정 파일 로드
-    with open('configs/default_config.yaml', 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
+    if config is None:
+        print("[WARNING] config 인자가 전달되지 않았습니다. 외부에서 config를 넘겨주세요.")
+        return
     # 샘플 데이터 생성 (테스트용)
     np.random.seed(42)
     n_samples = 1000
-    
-    # 시계열 데이터 시뮬레이션
-    ids = np.repeat(range(100), 10)  # 100명의 환자, 각각 10개 시점
+    ids = np.repeat(range(100), 10)
     dates = np.tile(pd.date_range('2020-01-01', periods=10, freq='M'), 100)
-    
-    # 피처 생성
     anxiety_scores = np.random.normal(50, 15, n_samples)
     depress_scores = np.random.normal(45, 12, n_samples)
     sleep_scores = np.random.normal(60, 10, n_samples)
     comp_scores = np.random.normal(70, 8, n_samples)
-    
-    # 타겟 생성 (극도 불균형)
-    targets = np.random.choice([0, 1], size=n_samples, p=[0.999, 0.001])  # 849:1 비율
-    
-    # 데이터프레임 생성
+    targets = np.random.choice([0, 1], size=n_samples, p=[0.999, 0.001])
     df = pd.DataFrame({
         'id': ids,
         'dov': dates,
@@ -1077,39 +1069,17 @@ def main():
         'suicide_a': np.random.choice([0, 1], n_samples, p=[0.99, 0.01]),
         'suicide_a_next_year': targets
     })
-    
     print("원본 데이터 형태:", df.shape)
     print("클래스 분포:", df['suicide_a_next_year'].value_counts())
-    
     # 리샘플링 테스트
     print("\n=== 리샘플링 테스트 ===")
-    
-    # SMOTE 테스트
     config['resampling']['enabled'] = True
     config['resampling']['method'] = 'smote'
-    
     X = df.drop(['suicide_a_next_year'], axis=1)
     y = df['suicide_a_next_year']
-    
     X_resampled, y_resampled = apply_resampling(X, y, config)
-    
     print("SMOTE 적용 후 데이터 형태:", X_resampled.shape)
     print("SMOTE 적용 후 클래스 분포:", y_resampled.value_counts())
-    
-    # Borderline SMOTE 테스트
-    config['resampling']['method'] = 'borderline_smote'
-    X_resampled2, y_resampled2 = apply_resampling(X, y, config)
-    
-    print("Borderline SMOTE 적용 후 데이터 형태:", X_resampled2.shape)
-    print("Borderline SMOTE 적용 후 클래스 분포:", y_resampled2.value_counts())
-    
-    # ADASYN 테스트
-    config['resampling']['method'] = 'adasyn'
-    X_resampled3, y_resampled3 = apply_resampling(X, y, config)
-    
-    print("ADASYN 적용 후 데이터 형태:", X_resampled3.shape)
-    print("ADASYN 적용 후 클래스 분포:", y_resampled3.value_counts())
-    
     print("\n리샘플링 테스트 완료!")
 
 

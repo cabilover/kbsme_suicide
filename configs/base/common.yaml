@@ -1,0 +1,120 @@
+# 공통 설정 파일
+# 데이터, 피처, 전처리 등 모든 모델과 실험에서 공통으로 사용되는 설정
+
+# 데이터 설정
+data:
+  file_path: "data/processed_data.csv"
+  encoding: "utf-8"
+  na_values: ["", "nan", "NaN", "NULL", "null"]
+
+# 피처 설정
+features:
+  # 타겟 컬럼
+  target_columns:
+    - "anxiety_score_next_year"
+    - "depress_score_next_year"
+    - "sleep_score_next_year"
+    - "suicide_t_next_year"
+    - "suicide_a_next_year"
+  
+  # 제외할 컬럼들
+  exclude_columns:
+    - "id"
+    - "patient_id"
+    - "visit_date"
+    - "visit_year"
+  
+  # 범주형 변수 처리
+  categorical_columns:
+    - "gender"
+    - "marital_status"
+    - "education_level"
+    - "income_level"
+    - "residence_type"
+    - "insurance_type"
+    - "primary_diagnosis"
+    - "comorbidity"
+    - "medication_type"
+    - "treatment_type"
+    - "follow_up_status"
+  
+  # 선택된 피처 목록
+  selected_features: [
+    # 기본 인구학적 정보
+    "age", "sex",
+    
+    # 정신 건강 점수
+    "comp", "anxiety_score", "depress_score", "sleep_score",
+    
+    # 자살 관련 (현재 시점)
+    "suicide_t", "suicide_a",
+    
+    # 분류 정보
+    "psychia_cate",
+    
+    # 시간 기반 피처
+    "month", "day_of_week", "day_of_year",
+    
+    # 과거 이력 피처 (2년 이동 통계)
+    "anxiety_score_rolling_mean_2y", "anxiety_score_rolling_std_2y", "anxiety_score_yoy_change",
+    "depress_score_rolling_mean_2y", "depress_score_rolling_std_2y", "depress_score_yoy_change",
+    "sleep_score_rolling_mean_2y", "sleep_score_rolling_std_2y", "sleep_score_yoy_change",
+    "comp_rolling_mean_2y", "comp_rolling_std_2y", "comp_yoy_change"
+  ]
+  
+  # 기존 피처 검증 설정
+  validation:
+    scope: "sample"  # "sample", "full", "none"
+    sample_size: 10  # scope가 "sample"일 때 검증할 ID 수
+  
+  # 지연 피처 설정
+  enable_lagged_features: false
+  lag_periods: [1, 2, 3]
+  lagged_features:
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+  
+  # 이동 통계 피처 설정
+  enable_rolling_stats: false
+  rolling_stats:
+    window_sizes: [2, 3]
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+
+# 전처리 설정
+preprocessing:
+  # 시계열 보간 설정
+  time_series_imputation:
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "suicide_t", "suicide_a"]
+    fallback_strategy: "mean"
+  
+  # 수치형 결측치 처리
+  numerical_imputation:
+    strategy: "mean"  # "mean", "median", "constant"
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "age"]
+  
+  # 범주형 결측치 처리
+  categorical_imputation:
+    strategy: "most_frequent"  # "most_frequent", "constant"
+    columns: ["sex", "psychia_cate"]
+  
+  # 범주형 인코딩 설정
+  categorical_encoding:
+    method: "ordinal"  # "onehot", "ordinal", "none"
+  
+  # 결측치 처리
+  missing_value_strategy: "median"
+  
+  # 이상치 처리
+  outlier_detection:
+    method: "iqr"
+    threshold: 1.5
+  
+  # 스케일링
+  scaling:
+    method: "robust"
+    with_mean: true
+    with_std: true
+  
+  # 피처 선택
+  feature_selection:
+    method: "variance_threshold"
+    threshold: 0.01 

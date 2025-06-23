@@ -1,0 +1,66 @@
+# MLflow 설정 파일
+# 실험 관리, 로깅, 추적 등 MLflow 관련 설정
+
+# MLflow 설정
+mlflow:
+  # 실험 이름
+  experiment_name: "suicide_prediction"
+  
+  # 실험 설명
+  experiment_description: "자살 위험 예측 모델 실험"
+  
+  # 태그
+  tags:
+    - "suicide_prediction"
+    - "healthcare"
+    - "classification"
+    - "regression"
+  
+  # 중첩 실행 사용
+  nested_runs: true
+  
+  # 아티팩트 저장
+  save_artifacts: true
+  
+  # 파라미터 로깅
+  log_params: true
+  
+  # 메트릭 로깅
+  log_metrics: true
+  
+  # 모델 로깅
+  log_model: true
+  
+  # 실험 추적 설정
+  tracking:
+    # 추적 서버 URI (로컬 파일 시스템 사용)
+    tracking_uri: "file:./mlruns"
+    
+    # 실험 이름
+    experiment_name: "suicide_prediction"
+    
+    # 중첩 실행 설정
+    nested_runs: true
+    
+    # 아티팩트 저장 경로
+    artifact_location: "./mlruns"
+  
+  # 로깅 설정
+  logging:
+    # 파라미터 로깅 레벨
+    param_logging_level: "INFO"
+    
+    # 메트릭 로깅 레벨
+    metric_logging_level: "INFO"
+    
+    # 아티팩트 로깅 레벨
+    artifact_logging_level: "INFO"
+    
+    # 실험 정보 로깅
+    log_experiment_info: true
+    
+    # 폴드별 결과 로깅
+    log_fold_results: true
+    
+    # 모델 정보 로깅
+    log_model_info: true 

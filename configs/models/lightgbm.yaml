@@ -1,0 +1,93 @@
+# LightGBM 모델 설정 파일
+# LightGBM 모델 전용 설정
+
+# 모델 설정
+model:
+  model_type: "lightgbm"
+  
+  # LightGBM 특화 파라미터
+  lightgbm:
+    # 기본 파라미터
+    num_leaves: 31
+    learning_rate: 0.1
+    feature_fraction: 0.9
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    min_data_in_leaf: 20
+    min_sum_hessian_in_leaf: 1e-3
+    
+    # 정규화 파라미터
+    lambda_l1: 0.1
+    lambda_l2: 0.1
+    
+    # 성능 최적화
+    num_threads: -1  # 모든 CPU 코어 사용
+    verbose: -1      # 로그 출력 최소화
+    
+    # Early Stopping
+    early_stopping_rounds: 10
+    
+    # 범주형 변수 처리
+    max_cat_threshold: 32
+    cat_smooth: 10.0
+    cat_l2: 10.0
+    
+    # 불균형 데이터 처리
+    is_unbalance: true
+    scale_pos_weight: 1.0
+    class_weight: "balanced"
+    
+    # 부스팅 파라미터
+    boosting_type: "gbdt"
+    objective: "binary"  # 분류의 경우, 회귀는 자동 설정
+    metric: "binary_logloss"  # 분류의 경우, 회귀는 자동 설정
+    
+    # 과적합 방지
+    max_depth: 6
+    min_gain_to_split: 0.0
+    min_child_samples: 20
+    
+    # 랜덤성
+    bagging_seed: 42
+    feature_fraction_seed: 42
+    drop_seed: 42
+    data_random_seed: 42
+
+    # Focal Loss 설정
+    use_focal_loss: false  # Focal Loss 사용 여부 (true/false)
+    focal_loss:
+      alpha: 0.25  # 클래스 가중치 (0 < alpha < 1). 소수 클래스에 더 큰 가중치
+      gamma: 2.0   # 포커싱 파라미터 (gamma >= 0). 쉬운 샘플의 기여도를 낮춤
+
+# 불균형 데이터 처리 설정
+imbalanced_data:
+  resampling:
+    enabled: false  # 기본값, 실험에서 활성화
+    method: "smote"  # "smote", "borderline_smote", "adasyn", "under_sampling"
+    
+    # SMOTE 설정
+    smote:
+      k_neighbors: 5
+      sampling_strategy: "auto"
+      
+    # Borderline SMOTE 설정
+    borderline_smote:
+      k_neighbors: 5
+      sampling_strategy: "auto"
+      m_neighbors: 10
+      
+    # ADASYN 설정
+    adasyn:
+      k_neighbors: 5
+      sampling_strategy: "auto"
+      n_neighbors: 5
+      
+    # 언더샘플링 설정
+    under_sampling:
+      strategy: "random"
+      sampling_strategy: "auto"
+  
+  # LightGBM 내장 불균형 처리
+  class_weight: "balanced"
+  scale_pos_weight: 1.0  # 자동 계산됨
+  is_unbalance: true 

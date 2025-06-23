@@ -30,16 +30,25 @@ kbsmc_suicide/
 │   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝 (Optuna 기반)
 │   └── reference/                    # 참고 자료
 ├── configs/
-│   ├── default_config.yaml           # 실험 설정 (일관성 확보)
-│   ├── focal_loss_config.yaml        # Focal Loss 실험 설정
-│   ├── resampling_config.yaml        # 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 설정
-│   ├── hyperparameter_tuning.yaml    # 하이퍼파라미터 튜닝 설정
-│   ├── catboost_config.yaml          # CatBoost 모델 설정 (✅ 완료)
-│   ├── lightgbm_config.yaml          # LightGBM 모델 설정 (✅ 완료)
-│   └── random_forest_config.yaml     # Random Forest 모델 설정 (✅ 완료)
+│   ├── base/                         # 기본 설정 (✅ 계층적 구조)
+│   │   ├── common.yaml               # 공통 설정
+│   │   ├── evaluation.yaml           # 평가 설정
+│   │   ├── mlflow.yaml               # MLflow 설정
+│   │   └── validation.yaml           # 검증 설정
+│   ├── models/                       # 모델별 설정 (✅ 계층적 구조)
+│   │   ├── xgboost.yaml              # XGBoost 모델 설정
+│   │   ├── catboost.yaml             # CatBoost 모델 설정
+│   │   ├── lightgbm.yaml             # LightGBM 모델 설정
+│   │   └── random_forest.yaml        # Random Forest 모델 설정
+│   ├── experiments/                  # 실험별 설정 (✅ 계층적 구조)
+│   │   ├── focal_loss.yaml           # Focal Loss 실험 설정
+│   │   ├── resampling.yaml           # 리샘플링 실험 설정
+│   │   └── hyperparameter_tuning.yaml # 하이퍼파라미터 튜닝 설정
+│   └── templates/                    # 설정 템플릿 (✅ 계층적 구조)
+│       ├── default.yaml              # 기본 템플릿
+│       └── tuning.yaml               # 튜닝 템플릿
 ├── scripts/
-│   ├── run_experiment.py             # 실험 실행 스크립트 (고급 평가 및 리샘플링 비교 포함)
-│   └── run_hyperparameter_tuning.py  # 하이퍼파라미터 튜닝 실행 스크립트 (리샘플링 비교 포함)
+│   └── run_hyperparameter_tuning.py  # 통합 실험 실행 스크립트 (✅ ConfigManager 기반 리샘플링 비교 포함)
 ├── requirements.txt                  # 필요한 패키지 목록 (XGBoost 1.7.6 고정)
 ├── projectplan                       # 프로젝트 계획서
 ├── PROJECT_PROGRESS.md              # 프로젝트 진행 상황 문서
@@ -77,105 +86,37 @@ python src/data_analysis.py
 - 피처 엔지니어링
 - 결과 저장 및 MLflow 로깅
 
-### ML 파이프라인 실험 실행
+### ConfigManager 기반 하이퍼파라미터 튜닝 실행 (권장)
 ```bash
-python scripts/run_experiment.py --config configs/default_config.yaml --data data/processed/processed_data_with_features.csv --nrows 1000
+# XGBoost 모델 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type hyperparameter_tuning
+
+# CatBoost 모델 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type catboost --experiment-type hyperparameter_tuning
+
+# LightGBM 모델 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type lightgbm --experiment-type hyperparameter_tuning
+
+# Random Forest 모델 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type random_forest --experiment-type hyperparameter_tuning
 ```
 
-이 명령어는 다음 작업을 수행합니다:
-- 데이터 분할 (ID 기반 테스트 세트 분리)
-- 교차 검증 (다양한 전략 지원)
-- 전처리 및 피처 엔지니어링
-- XGBoost 모델 학습 및 평가 (Early Stopping 지원)
-- 고급 평가 지표 계산 (Balanced Accuracy, Precision-Recall Curve 등)
-- MLflow를 통한 실험 결과 로깅
-
-### 하이퍼파라미터 튜닝 실행
+### ConfigManager 기반 리샘플링 비교 실험 실행 (✅ 최신 기능)
 ```bash
-python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparameter_tuning.yaml --nrows 1000
+# 모든 모델에 대해 리샘플링 비교 실험
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type resampling --resampling-comparison
+python scripts/run_hyperparameter_tuning.py --model-type catboost --experiment-type resampling --resampling-comparison
+python scripts/run_hyperparameter_tuning.py --model-type lightgbm --experiment-type resampling --resampling-comparison
+python scripts/run_hyperparameter_tuning.py --model-type random_forest --experiment-type resampling --resampling-comparison
+
+# 특정 리샘플링 기법만 비교
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type resampling --resampling-comparison --resampling-methods smote adasyn
 ```
 
-이 명령어는 다음 작업을 수행합니다:
-- Optuna 기반 하이퍼파라미터 최적화
-- Focal Loss 파라미터 튜닝 (alpha, gamma)
-- 교차 검증을 통한 성능 평가
-- 고급 평가 지표 계산 및 로깅
-- 최적 모델 저장 및 시각화 생성
-
-### CatBoost 모델 테스트 실행
+### 레거시 단일 파일 config 사용 (백워드 호환성)
 ```bash
-python scripts/run_hyperparameter_tuning.py --model-type catboost --nrows 1000 --tuning_config configs/hyperparameter_tuning.yaml
+python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparameter_tuning.yaml --base_config configs/default_config.yaml
 ```
-
-이 명령어는 다음 작업을 수행합니다:
-- CatBoost 모델 하이퍼파라미터 최적화
-- 범주형 변수 자동 처리 (5개 변수)
-- 수치형 변수와 통합 학습 (15개 변수)
-- 교차 검증을 통한 성능 평가
-- 최적 모델 저장 및 결과 로깅
-
-**CatBoost 테스트 결과**:
-- 정확도: 85%
-- 정밀도: 0.83, 재현율: 0.88, F1-Score: 0.85
-- AUC-ROC: 0.91
-- 교차 검증: 84% ± 2% (안정적 성능)
-
-### LightGBM 모델 테스트 실행
-```bash
-python scripts/run_hyperparameter_tuning.py --model-type lightgbm --nrows 1000 --tuning_config configs/hyperparameter_tuning.yaml
-```
-
-이 명령어는 다음 작업을 수행합니다:
-- LightGBM 모델 하이퍼파라미터 최적화
-- 범주형 변수 처리 (5개 변수)
-- 수치형 변수와 통합 학습 (15개 변수)
-- 교차 검증을 통한 성능 평가
-- 최적 모델 저장 및 결과 로깅
-
-**LightGBM 테스트 결과**:
-- 정확도: 84%
-- 정밀도: 0.82, 재현율: 0.86, F1-Score: 0.84
-- AUC-ROC: 0.90
-- 교차 검증: 84% ± 2% (안정적 성능)
-
-### Random Forest 모델 테스트 실행
-```bash
-python scripts/run_hyperparameter_tuning.py --model-type random_forest --nrows 1000 --tuning_config configs/hyperparameter_tuning.yaml
-```
-
-이 명령어는 다음 작업을 수행합니다:
-- Random Forest 모델 하이퍼파라미터 최적화
-- 범주형 변수 One-Hot Encoding 처리 (5개 변수)
-- 수치형 변수와 통합 학습 (15개 변수)
-- 교차 검증을 통한 성능 평가
-- 최적 모델 저장 및 결과 로깅
-
-**Random Forest 테스트 결과**:
-- 정확도: 83%
-- 정밀도: 0.81, 재현율: 0.85, F1-Score: 0.83
-- AUC-ROC: 0.89
-- 교차 검증: 83% ± 2% (안정적 성능)
-
-### 리샘플링 실험 실행
-```bash
-# 리샘플링 기법 비교 실험
-python scripts/run_experiment.py --resampling-comparison --nrows 1000
-
-# 특정 리샘플링 기법들만 비교
-python scripts/run_experiment.py --resampling-comparison --resampling-methods smote borderline_smote adasyn --nrows 1000
-
-# 리샘플링 하이퍼파라미터 튜닝 비교
-python scripts/run_hyperparameter_tuning.py --resampling-comparison --nrows 1000
-
-# 통합 설정 파일 사용 (기본값)
-python scripts/run_hyperparameter_tuning.py --nrows 1000
-```
-
-이 명령어들은 다음 작업을 수행합니다:
-- 다양한 리샘플링 기법 비교 (SMOTE, Borderline SMOTE, ADASYN, 언더샘플링, 하이브리드)
-- 각 리샘플링 기법별 하이퍼파라미터 최적화
-- MLflow를 통한 실험 추적 및 비교
-- 최고 성능 기법 자동 선별
 
 ## 생성되는 파일들
 
@@ -214,7 +155,7 @@ python scripts/run_hyperparameter_tuning.py --nrows 1000
 - **시계열 다양성**: 개인별 시계열 길이 1-10년
 - **데이터 품질**: 일부 이상치 및 결측치 존재
 
-### 구현된 모델
+### 구현된 모델 (✅ 4개 모델 완료)
 - **XGBoost 모델**: Focal Loss 통합, 극단적 불균형 데이터 처리 (정확도 99.87%)
 - **CatBoost 모델**: 범주형 변수 처리 강점, 균형잡힌 성능 (정확도 85%, AUC-ROC 0.91)
 - **LightGBM 모델**: 빠른 학습 속도와 높은 성능 (정확도 84%, AUC-ROC 0.90)
@@ -224,8 +165,8 @@ python scripts/run_hyperparameter_tuning.py --nrows 1000
 ### 불균형 데이터 처리 및 Focal Loss 지원
 - **Focal Loss 통합**: XGBoost 모델에 Focal Loss를 옵션으로 통합, 극단적 불균형 데이터(예: 자살 시도 849:1)에서 소수 클래스 예측 성능 개선 시도
 - **Focal Loss 파라미터 튜닝**: Optuna 기반 하이퍼파라미터 튜닝에서 `use_focal_loss`, `focal_loss_alpha`, `focal_loss_gamma` 등 Focal Loss 관련 파라미터 탐색 가능
-- **튜닝/실험 파이프라인 완전 호환**: `run_experiment.py`와 `run_hyperparameter_tuning.py` 모두에서 Focal Loss 및 관련 파라미터가 정상적으로 반영 및 실험됨
-- **설정 파일 예시**: `configs/default_config.yaml`, `configs/focal_loss_config.yaml`, `configs/hyperparameter_tuning.yaml`에서 Focal Loss 옵션 및 탐색 범위 지정 가능
+- **튜닝/실험 파이프라인 완전 호환**: `run_hyperparameter_tuning.py`에서 Focal Loss 및 관련 파라미터가 정상적으로 반영 및 실험됨
+- **설정 파일 예시**: 계층적 config 체계에서 Focal Loss 옵션 및 탐색 범위 지정 가능
 
 ### 고급 평가 지표 및 분석 기능
 - **Balanced Accuracy**: 클래스 불균형을 고려한 정확도 측정
@@ -236,19 +177,26 @@ python scripts/run_hyperparameter_tuning.py --nrows 1000
 - **클래스별 샘플 수 통계**: 양성/음성 샘플 분포 및 비율 분석
 - **MLflow 통합 로깅**: 모든 고급 지표가 MLflow에 자동 로깅되어 실험 추적 강화
 
-### 리샘플링 실험 및 하이퍼파라미터 튜닝 통합
+### ConfigManager 기반 계층적 설정 시스템 (✅ 최신 기능)
+- **계층적 설정 구조**: base, models, experiments, templates로 설정 분리
+- **자동 설정 병합**: ConfigManager가 계층적 config를 자동으로 병합
+- **모델별 자동 설정**: --model-type 인자로 모델별 설정 자동 로딩
+- **실험별 자동 설정**: --experiment-type 인자로 실험별 설정 자동 로딩
+- **백워드 호환성**: 기존 단일 파일 config도 지원
+
+### 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 (✅ 최신 기능)
+- **ConfigManager 기반 리샘플링 비교**: 각 리샘플링 기법별로 ConfigManager를 통해 config를 생성/수정하여 실험을 반복 실행
 - **리샘플링 기법 비교**: SMOTE, Borderline SMOTE, ADASYN, 언더샘플링, 하이브리드 기법 비교
 - **기법별 하이퍼파라미터 튜닝**: 각 리샘플링 기법에 대해 별도로 최적 하이퍼파라미터 탐색
-- **통합 설정 파일**: `configs/resampling_config.yaml`에서 리샘플링 실험과 하이퍼파라미터 튜닝 설정 통합 관리
-- **자동 성능 비교**: F1-Score 기준으로 최고 성능 기법 자동 선별
 - **MLflow 중첩 실행**: 각 리샘플링 기법별로 별도 MLflow run으로 실험 추적
+- **자동 성능 비교**: F1-Score 기준으로 최고 성능 기법 자동 선별
 - **사용자 인터페이스**: `--resampling-comparison`, `--resampling-methods` 인자로 쉬운 실험 제어
 
 ## 실험 관리 및 데이터 분할 전략
 
 ### 실험 관리 시스템
-- 실험 관리 및 데이터 분할 파이프라인은 `src/splits.py`와 `scripts/run_experiment.py`로 구현되어 있습니다.
-- 실험 설정은 `configs/default_config.yaml`에서 일관적으로 관리하며, 다양한 분할 전략을 한 곳에서 쉽게 전환할 수 있습니다.
+- 실험 관리 및 데이터 분할 파이프라인은 `src/splits.py`와 `scripts/run_hyperparameter_tuning.py`로 구현되어 있습니다.
+- 실험 설정은 계층적 config 체계에서 일관적으로 관리하며, 다양한 분할 전략을 한 곳에서 쉽게 전환할 수 있습니다.
 - MLflow를 활용해 실험별, 폴드별, 전략별 결과를 체계적으로 기록 및 추적합니다.
 
 ### 지원하는 데이터 분할 전략
@@ -259,14 +207,14 @@ python scripts/run_hyperparameter_tuning.py --nrows 1000
     - `group_kfold`: 순수하게 ID만 기준으로 폴드를 나누는 전략. 시간 순서는 보장하지 않음.
 
 #### 분할 전략 전환 방법
-- `configs/default_config.yaml`의 `validation.strategy` 값을 아래 중 하나로 변경하면 됩니다:
+- 계층적 config 체계의 `configs/base/validation.yaml`에서 `strategy` 값을 아래 중 하나로 변경하면 됩니다:
     - `time_series_walk_forward`
     - `time_series_group_kfold`
     - `group_kfold`
 
 #### 실험 실행 예시
 ```bash
-python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10000
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type default
 ```
 - MLflow UI에서 각 전략별, 폴드별 실험 결과와 아티팩트(폴드 요약, 테스트 세트 정보 등)를 확인할 수 있습니다.
 - 테스트 세트는 오직 최종 모델 평가 시에만 사용되며, 교차 검증 및 모델 개발 과정에서는 사용하지 않습니다.
@@ -317,7 +265,8 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
   - CatBoost: 85% 정확도, 0.91 AUC-ROC (최고 성능)
   - LightGBM: 84% 정확도, 0.90 AUC-ROC (우수한 성능)
   - Random Forest: 83% 정확도, 0.89 AUC-ROC (안정적 성능)
-- **리샘플링 실험 통합**: 다양한 리샘플링 기법 비교 및 하이퍼파라미터 튜닝 통합 완성
+- **ConfigManager 기반 리샘플링 비교 실험**: 계층적 config 시스템을 활용한 리샘플링 기법 비교 및 하이퍼파라미터 튜닝 통합 완성
+- **MLflow 중첩 실행 문제 해결**: 리샘플링 비교 실험에서 MLflow run 충돌 방지
 
 ### 환경 호환성 및 실험 관리 시스템 완성
 - **XGBoost 버전 충돌 해결**: conda와 pip 간 버전 충돌 문제 완전 해결
@@ -341,15 +290,17 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 ## 다음 단계
 현재 Phase 5-4 (고급 모델 개발 및 확장) 진행 중 ✅
 - **완료**: CatBoost, LightGBM, Random Forest 모델 구현 및 테스트 (4개 모델 완료)
+- **완료**: ConfigManager 기반 리샘플링 비교 실험 구현 및 모든 모델 테스트 완료
 - **진행 중**: 앙상블 모델 개발 (Stacking, Blending, Voting)
 - **예정**: 피처 엔지니어링 고도화, 모델 해석 및 설명 가능성 확보
 
 ## 참고 문서
 - `PROJECT_PROGRESS.md`: 상세한 진행 상황 및 분석 결과
 - `projectplan`: 전체 프로젝트 계획서
+- `NEXT_PHASE_PLAN.md`: 다음 단계 상세 계획
 
 ## 기술 스택
 - **Python**: 3.10.18
-- **주요 라이브러리**: pandas, numpy<2, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6, optuna
+- **주요 라이브러리**: pandas, numpy<2, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6, catboost, lightgbm, optuna
 - **환경 관리**: conda
 - **코드 품질**: PEP 8 준수, 모듈화, 문서화, 안정성 확보 

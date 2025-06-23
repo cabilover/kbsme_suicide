@@ -1,0 +1,46 @@
+# 평가 설정 파일
+# 평가 지표, 결과 저장, 로깅 등 평가 관련 설정
+
+# 평가 설정
+evaluation:
+  # 회귀 메트릭
+  regression_metrics: ["mae", "rmse", "r2"]
+  
+  # 분류 메트릭
+  classification_metrics: ["precision", "recall", "f1", "roc_auc", "balanced_accuracy"]
+  
+  # 교차 검증 메트릭
+  cv_metrics: ["accuracy", "f1", "auc", "rmse", "r2"]
+  
+  # 결과 저장 설정
+  save_predictions: true
+  save_feature_importance: true
+  save_confusion_matrix: true
+  save_roc_curve: true
+  save_precision_recall_curve: true
+
+# 학습 설정
+training:
+  early_stopping: true
+  patience: 10
+  handle_imbalance: true
+  save_best_model: true
+  model_save_path: "models/"
+
+# 로깅 설정
+logging:
+  log_splits_info: true
+  log_fold_details: true
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/experiment.log"
+
+# 출력 설정
+output:
+  directory: "results"
+  save_model: true
+  save_predictions: true
+  save_feature_importance: true
+  save_confusion_matrix: true
+  save_roc_curve: true
+  save_precision_recall_curve: true 

@@ -1,0 +1,32 @@
+# 기본 실험 설정 템플릿
+# 새로운 실험을 시작할 때 참고할 기본 템플릿
+
+# 실험 설정
+experiment:
+  name: "default_experiment"
+  description: "기본 실험 설정"
+  tags:
+    - "default"
+    - "baseline"
+
+# 기본 설정 오버라이드 (필요시)
+overrides:
+  # 모델 설정 오버라이드 예시
+  # model:
+  #   xgboost:
+  #     n_estimators: 200
+  #     learning_rate: 0.05
+  
+  # 피처 설정 오버라이드 예시
+  # features:
+  #   target_columns: ["suicide_a_next_year"]
+  
+  # 검증 설정 오버라이드 예시
+  # validation:
+  #   num_cv_folds: 5
+  #   strategy: "time_series_walk_forward"
+
+# 실험 특화 설정 (필요시)
+experiment_specific:
+  # 실험별 특별한 설정들을 여기에 추가
+  pass 
