@@ -171,6 +171,9 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **극단적 불균형 데이터**: 자살 시도 0.12%로 인해 F1-score 등 주요 분류 성능은 0.0에 수렴(모델 구조/파이프라인 문제 아님)
 - **파이프라인 구조 안정화**: 실험 결과, 파이프라인/모델 구조/MLflow 연동/결과 저장 등 모든 시스템이 안정적으로 동작
 
+### 모델별 병렬처리 최적화
+- **XGBoost(n_jobs=28), LightGBM(num_threads=28), CatBoost(thread_count=28), Random Forest(n_jobs=28)로 모든 모델의 병렬처리 코어 수를 통일하여 실험의 일관성과 성능을 최적화함
+
 ## 실험 관리 및 데이터 분할 전략
 
 ### 실험 관리 시스템
@@ -251,6 +254,9 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
 - **실험 파라미터 추적 시스템 고도화**: config에서 모든 XGBoost 파라미터가 MLflow에 상세 로깅
 - **MLflow UI 안정화**: 모든 config 파라미터가 웹 UI에서 확인 가능
 - **파라미터 적용 검증**: 실제 모델에 적용되는 파라미터와 config 파라미터 일치성 확인
+
+### 병렬처리 일관성
+- **모든 모델의 병렬처리 파라미터를 28로 통일하여 실험 환경의 일관성과 시스템 자원 활용을 극대화
 
 ### 성능 지표 (최신 실험 결과)
 - **교차 검증 성공**: 5개 폴드에서 모두 정상 학습 완료
