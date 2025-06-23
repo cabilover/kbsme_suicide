@@ -13,6 +13,7 @@ from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 from sklearn.base import BaseEstimator
 import warnings
 from src.utils import find_column_with_remainder
+from src.models.loss_functions import FocalLoss, validate_focal_loss_parameters
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,7 @@ class XGBoostModel(BaseEstimator):
     XGBoost 기반 다중 출력 모델
     
     회귀와 분류 문제를 모두 지원하며, 각 타겟별로 별도의 모델을 학습합니다.
+    Focal Loss를 통한 불균형 데이터 처리도 지원합니다.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -40,6 +42,21 @@ class XGBoostModel(BaseEstimator):
         self.classification_targets = []
         self.is_fitted = False
         
+        # Focal Loss 설정 확인
+        self.use_focal_loss = config.get('model', {}).get('xgboost', {}).get('use_focal_loss', False)
+        if self.use_focal_loss:
+            focal_config = config.get('model', {}).get('xgboost', {}).get('focal_loss', {})
+            self.focal_alpha = focal_config.get('alpha', 0.25)
+            self.focal_gamma = focal_config.get('gamma', 2.0)
+            
+            # Focal Loss 파라미터 검증
+            if not validate_focal_loss_parameters(self.focal_alpha, self.focal_gamma):
+                logger.warning("Focal Loss 파라미터가 유효하지 않습니다. 기본값을 사용합니다.")
+                self.focal_alpha = 0.25
+                self.focal_gamma = 2.0
+            
+            logger.info(f"Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
+        
         # 타겟 타입 분류
         self._classify_targets()
         
@@ -49,6 +66,7 @@ class XGBoostModel(BaseEstimator):
         logger.info(f"XGBoost 모델 초기화 완료")
         logger.info(f"  - 회귀 타겟: {self.regression_targets}")
         logger.info(f"  - 분류 타겟: {self.classification_targets}")
+        logger.info(f"  - Focal Loss 사용: {self.use_focal_loss}")
     
     def _classify_targets(self):
         """타겟을 회귀와 분류로 분류합니다."""
@@ -72,18 +90,43 @@ class XGBoostModel(BaseEstimator):
         """
         params = self.model_params.copy()
         
-        # 분류 문제인 경우 scale_pos_weight 설정
+        # 분류 문제인 경우
         if target in self.classification_targets:
-            # 불균형 비율에 따른 scale_pos_weight 계산
-            # 실제로는 fit 시점에 계산해야 하지만, 여기서는 기본값 사용
-            params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
-            params['objective'] = 'binary:logistic'
-            params['eval_metric'] = 'logloss'
+            # Focal Loss 사용 여부에 따른 파라미터 설정
+            if self.use_focal_loss:
+                # Focal Loss 사용 시: 기본 objective 유지, Focal Loss는 별도 처리
+                params['objective'] = 'binary:logistic'
+                params['eval_metric'] = 'logloss'
+                # Focal Loss 관련 파라미터는 별도로 관리
+                params['focal_loss_enabled'] = True
+                params['focal_alpha'] = self.focal_alpha
+                params['focal_gamma'] = self.focal_gamma
+                logger.info(f"  - Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
+            else:
+                # 기존 방식: scale_pos_weight 사용
+                params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
+                params['objective'] = 'binary:logistic'
+                params['eval_metric'] = 'logloss'
         else:
+            # 회귀 문제
             params['objective'] = 'reg:squarederror'
             params['eval_metric'] = 'rmse'
         
         return params
+    
+    def _calculate_focal_loss_metric(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> float:
+        """
+        Focal Loss를 사용한 평가 지표를 계산합니다.
+        
+        Args:
+            y_true: 실제 값
+            y_pred_proba: 예측 확률
+            
+        Returns:
+            Focal Loss 값
+        """
+        focal_loss = FocalLoss(alpha=self.focal_alpha, gamma=self.focal_gamma)
+        return focal_loss(y_true, y_pred_proba)
     
     def fit(self, X: pd.DataFrame, y: pd.DataFrame, 
             X_val: pd.DataFrame = None, y_val: pd.DataFrame = None) -> 'XGBoostModel':
@@ -142,11 +185,16 @@ class XGBoostModel(BaseEstimator):
             # 모델 파라미터 준비
             params = self._get_model_params(original_target)
             
-            # 분류 문제인 경우 scale_pos_weight 계산
+            # 분류 문제인 경우 불균형 처리
             if original_target in self.classification_targets:
-                pos_weight = self._calculate_scale_pos_weight(y_target)
-                params['scale_pos_weight'] = pos_weight
-                logger.info(f"  - scale_pos_weight: {pos_weight:.2f}")
+                if self.use_focal_loss:
+                    # Focal Loss 사용 시: scale_pos_weight는 사용하지 않음
+                    logger.info(f"  - Focal Loss 사용으로 scale_pos_weight 비활성화")
+                else:
+                    # 기존 방식: scale_pos_weight 계산
+                    pos_weight = self._calculate_scale_pos_weight(y_target)
+                    params['scale_pos_weight'] = pos_weight
+                    logger.info(f"  - scale_pos_weight: {pos_weight:.2f}")
             
             # 실제 적용되는 파라미터 로깅
             logger.info(f"=== {original_target} 모델 파라미터 ===")
@@ -161,6 +209,12 @@ class XGBoostModel(BaseEstimator):
                 fit_params['early_stopping_rounds'] = model_params.pop('early_stopping_rounds')
             if 'verbose' in model_params:
                 fit_params['verbose'] = model_params.pop('verbose')
+            
+            # Focal Loss 관련 파라미터 제거 (XGBoost에서 지원하지 않음)
+            focal_loss_params = ['focal_loss_enabled', 'focal_alpha', 'focal_gamma']
+            for param in focal_loss_params:
+                if param in model_params:
+                    model_params.pop(param)
             
             # 허용된 파라미터만 필터링하여 모델 생성
             allowed_reg_keys = xgb.XGBRegressor().get_params().keys()

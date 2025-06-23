@@ -110,6 +110,25 @@ xgboost_params:
     low: 0.5
     high: 10.0
     log: true
+  
+  # Focal Loss 사용 여부 (categorical)
+  use_focal_loss:
+    type: "categorical"
+    choices: [true, false]
+  
+  # Focal Loss Alpha 파라미터 (클래스 가중치)
+  focal_loss_alpha:
+    type: "float"
+    low: 0.1
+    high: 0.9
+    log: false
+  
+  # Focal Loss Gamma 파라미터 (포커싱 파라미터)
+  focal_loss_gamma:
+    type: "float"
+    low: 0.5
+    high: 5.0
+    log: false
 
 # 평가 지표 설정
 evaluation:

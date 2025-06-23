@@ -155,113 +155,154 @@ class HyperparameterTuner:
         
         for param_name, param_config in xgboost_params.items():
             param_type = param_config['type']
-            # YAML에서 파싱된 값들을 명시적으로 숫자 타입으로 변환
-            low = float(param_config['low']) if param_type == "float" else int(param_config['low'])
-            high = float(param_config['high']) if param_type == "float" else int(param_config['high'])
-            log = param_config.get('log', False)
             
-            if param_type == "int":
-                params[param_name] = trial.suggest_int(param_name, low, high, log=log)
-            elif param_type == "float":
-                params[param_name] = trial.suggest_float(param_name, low, high, log=log)
-            elif param_type == "categorical":
+            if param_type == "categorical":
                 params[param_name] = trial.suggest_categorical(param_name, param_config['choices'])
+            else:
+                # YAML에서 파싱된 값들을 명시적으로 숫자 타입으로 변환
+                low = float(param_config['low']) if param_type == "float" else int(param_config['low'])
+                high = float(param_config['high']) if param_type == "float" else int(param_config['high'])
+                log = param_config.get('log', False)
+                
+                if param_type == "int":
+                    params[param_name] = trial.suggest_int(param_name, low, high, log=log)
+                elif param_type == "float":
+                    params[param_name] = trial.suggest_float(param_name, low, high, log=log)
         
         return params
     
     def _objective(self, trial: optuna.Trial) -> float:
         """
-        Optuna 목적 함수
+        Optuna objective 함수
         
-        주어진 하이퍼파라미터로 모델을 학습하고 성능을 평가합니다.
-        """
-        # 하이퍼파라미터 제안
-        params = self._suggest_parameters(trial)
-        
-        # MLflow 중첩 실행 시작
-        with mlflow.start_run(nested=True):
-            # 파라미터 로깅
-            mlflow.log_params(params)
-            mlflow.log_param("trial_number", trial.number)
+        Args:
+            trial: Optuna trial 객체
             
-            try:
-                # 데이터 로드 및 분할
-                df = pd.read_csv(self.data_path)
-                
-                # 테스트 세트 분리
-                train_val_df, test_df, _ = split_test_set(df, self.config)
-                
-                # 교차 검증 분할
-                cv_splits = get_cv_splits(train_val_df, self.config)
-                
-                # 교차 검증으로 성능 평가
-                cv_scores = []
-                
-                for fold_idx, (train_fold_df, val_fold_df, fold_info) in enumerate(cv_splits):
-                    train_df = train_fold_df
-                    val_df = val_fold_df
-                    # 전처리 (훈련 데이터로만 fit)
-                    from src.preprocessing import fit_preprocessing_pipeline
-                    preprocessor, _ = fit_preprocessing_pipeline(train_df, self.config)
-                    
-                    train_processed = transform_data(train_df, preprocessor, self.config)
-                    val_processed = transform_data(val_df, preprocessor, self.config)
-                    
-                    # 피처 엔지니어링
-                    from src.feature_engineering import fit_feature_engineering
-                    feature_info = fit_feature_engineering(train_processed, self.config)
-                    
-                    train_engineered = transform_features(train_processed, feature_info, self.config)
-                    val_engineered = transform_features(val_processed, feature_info, self.config)
-                    
-                    # 피처와 타겟 분리
-                    feature_columns = get_feature_columns(train_engineered, self.config)
-                    target_columns = get_target_columns_from_data(train_engineered, self.config)
-                    
-                    X_train = train_engineered[feature_columns]
-                    y_train = train_engineered[target_columns]
-                    X_val = val_engineered[feature_columns]
-                    y_val = val_engineered[target_columns]
-                    
-                    # 모델 학습
-                    model_config = self.config.copy()
-                    model_config['model']['xgboost'].update(params)
-                    
-                    model = XGBoostModel(model_config)
-                    model.fit(X_train, y_train, X_val, y_val)
-                    
-                    # 예측 및 평가
-                    val_predictions = model.predict(X_val)
-                    val_proba = model.predict_proba(X_val) if hasattr(model, 'predict_proba') else None
-                    
-                    metrics = calculate_all_metrics(y_val, val_predictions, val_proba, self.config)
-                    
-                    # 주요 지표 추출
-                    primary_metric = self.tuning_config['evaluation']['primary_metric']
-                    if primary_metric in metrics:
-                        cv_scores.append(metrics[primary_metric])
-                    else:
-                        logger.warning(f"주요 지표 {primary_metric}을 찾을 수 없습니다. f1_score를 사용합니다.")
-                        cv_scores.append(metrics.get('f1_score', 0.0))
-                
-                # 평균 성능 계산
-                mean_score = np.mean(cv_scores)
-                
-                # MLflow에 결과 로깅
-                mlflow.log_metric(f"cv_{primary_metric}_mean", mean_score)
-                mlflow.log_metric(f"cv_{primary_metric}_std", np.std(cv_scores))
-                
-                for fold_idx, score in enumerate(cv_scores):
-                    mlflow.log_metric(f"fold_{fold_idx+1}_{primary_metric}", score)
-                
-                logger.info(f"Trial {trial.number}: {primary_metric} = {mean_score:.4f} ± {np.std(cv_scores):.4f}")
-                
-                return mean_score
-                
-            except Exception as e:
-                logger.error(f"Trial {trial.number} 실패: {str(e)}")
-                mlflow.log_param("error", str(e))
+        Returns:
+            평가 점수
+        """
+        try:
+            # 하이퍼파라미터 제안
+            params = self._suggest_parameters(trial)
+            
+            # MLflow에 파라미터 로깅
+            mlflow.log_params(params)
+            
+            # 설정 업데이트
+            trial_config = self.config.copy()
+            
+            # Focal Loss 파라미터 처리
+            focal_loss_params = {}
+            params_copy = params.copy()
+            
+            if 'use_focal_loss' in params_copy:
+                focal_loss_params['use_focal_loss'] = params_copy.pop('use_focal_loss')
+            if 'focal_loss_alpha' in params_copy:
+                focal_loss_params['focal_loss'] = {'alpha': params_copy.pop('focal_loss_alpha')}
+            if 'focal_loss_gamma' in params_copy:
+                if 'focal_loss' not in focal_loss_params:
+                    focal_loss_params['focal_loss'] = {}
+                focal_loss_params['focal_loss']['gamma'] = params_copy.pop('focal_loss_gamma')
+            
+            # XGBoost 파라미터 업데이트
+            trial_config['model']['xgboost'].update(params_copy)
+            
+            # Focal Loss 파라미터가 있으면 업데이트
+            if focal_loss_params:
+                trial_config['model']['xgboost'].update(focal_loss_params)
+            
+            # 데이터 로드
+            df = pd.read_csv(self.data_path)
+            
+            # 테스트 세트 분리
+            train_val_df, test_df, _ = split_test_set(df, self.config)
+            
+            # 교차 검증 수행
+            from src.training import run_cross_validation
+            cv_results = run_cross_validation(train_val_df, trial_config)
+            
+            if not cv_results or not cv_results.get('fold_results'):
+                logger.warning(f"Trial {trial.number}: 교차 검증 실패")
                 return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
+            
+            # 고급 평가 분석
+            from src.evaluation import (
+                analyze_fold_performance_distribution, analyze_fold_variability,
+                calculate_confidence_intervals, create_comprehensive_evaluation_report
+            )
+            
+            fold_results = cv_results['fold_results']
+            
+            # 폴드별 성능 분포 분석
+            performance_distribution = analyze_fold_performance_distribution(fold_results)
+            
+            # 폴드 간 변동성 분석
+            variability = analyze_fold_variability(fold_results)
+            
+            # 주요 지표 추출 및 고급 메트릭 로깅
+            primary_metric = self.tuning_config['evaluation']['primary_metric']
+            cv_scores = []
+            
+            for fold_idx, fold_result in enumerate(fold_results):
+                metrics = fold_result.get('metrics', {})
+                
+                # 기본 지표 추출
+                if primary_metric in metrics:
+                    cv_scores.append(metrics[primary_metric])
+                else:
+                    logger.warning(f"주요 지표 {primary_metric}을 찾을 수 없습니다. f1_score를 사용합니다.")
+                    cv_scores.append(metrics.get('f1_score', 0.0))
+                
+                # 각 폴드의 고급 지표들 로깅
+                for target, target_metrics in metrics.items():
+                    for metric_name, value in target_metrics.items():
+                        if isinstance(value, (int, float)):
+                            mlflow.log_metric(f"trial_{trial.number}_fold_{fold_idx+1}_{target}_{metric_name}", value)
+            
+            # 평균 성능 계산
+            mean_score = np.mean(cv_scores)
+            std_score = np.std(cv_scores)
+            
+            # 기본 메트릭 로깅
+            mlflow.log_metric(f"trial_{trial.number}_cv_{primary_metric}_mean", mean_score)
+            mlflow.log_metric(f"trial_{trial.number}_cv_{primary_metric}_std", std_score)
+            
+            # 고급 분석 결과 로깅
+            if performance_distribution:
+                for target, metrics in performance_distribution.items():
+                    for metric, stats in metrics.items():
+                        mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_mean", stats['mean'])
+                        mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_std", stats['std'])
+                        mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_min", stats['min'])
+                        mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_max", stats['max'])
+            
+            # 변동성 메트릭 로깅
+            if variability:
+                for target, metrics in variability.items():
+                    for metric, var_info in metrics.items():
+                        mlflow.log_metric(f"trial_{trial.number}_fold_variability_{target}_{metric}_cv", var_info['coefficient_of_variation'])
+            
+            # 신뢰구간 계산 및 로깅
+            for target in fold_results[0].get('metrics', {}).keys():
+                for metric in ['precision', 'recall', 'f1', 'accuracy', 'balanced_accuracy']:
+                    if metric in fold_results[0]['metrics'][target]:
+                        values = [fold['metrics'][target].get(metric, 0) for fold in fold_results]
+                        values = [v for v in values if v is not None]
+                        
+                        if len(values) > 1:
+                            ci = calculate_confidence_intervals(values, 0.95)
+                            mlflow.log_metric(f"trial_{trial.number}_ci_{target}_{metric}_mean", ci['mean'])
+                            mlflow.log_metric(f"trial_{trial.number}_ci_{target}_{metric}_lower", ci['lower'])
+                            mlflow.log_metric(f"trial_{trial.number}_ci_{target}_{metric}_upper", ci['upper'])
+            
+            logger.info(f"Trial {trial.number}: {primary_metric} = {mean_score:.4f} ± {std_score:.4f}")
+            
+            return mean_score
+            
+        except Exception as e:
+            logger.error(f"Trial {trial.number} 실패: {str(e)}")
+            mlflow.log_param("error", str(e))
+            return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
     
     def optimize(self) -> Tuple[Dict[str, Any], float]:
         """
@@ -346,7 +387,26 @@ class HyperparameterTuner:
         
         # 최적 파라미터로 모델 재학습
         model_config = self.config.copy()
-        model_config['model']['xgboost'].update(self.best_params)
+        
+        # Focal Loss 파라미터 처리
+        focal_loss_params = {}
+        best_params_copy = self.best_params.copy()
+        
+        if 'use_focal_loss' in best_params_copy:
+            focal_loss_params['use_focal_loss'] = best_params_copy.pop('use_focal_loss')
+        if 'focal_loss_alpha' in best_params_copy:
+            focal_loss_params['focal_loss'] = {'alpha': best_params_copy.pop('focal_loss_alpha')}
+        if 'focal_loss_gamma' in best_params_copy:
+            if 'focal_loss' not in focal_loss_params:
+                focal_loss_params['focal_loss'] = {}
+            focal_loss_params['focal_loss']['gamma'] = best_params_copy.pop('focal_loss_gamma')
+        
+        # XGBoost 파라미터 업데이트
+        model_config['model']['xgboost'].update(best_params_copy)
+        
+        # Focal Loss 파라미터가 있으면 업데이트
+        if focal_loss_params:
+            model_config['model']['xgboost'].update(focal_loss_params)
         
         # 전체 데이터로 최종 모델 학습
         df = pd.read_csv(self.data_path)
@@ -395,20 +455,59 @@ class HyperparameterTuner:
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
         
         # 최적화 히스토리
-        optuna.visualization.matplotlib.plot_optimization_history(self.study, ax=axes[0, 0])
+        try:
+            optuna.visualization.matplotlib.plot_optimization_history(self.study, ax=axes[0, 0])
+        except TypeError:
+            # 최신 버전에서는 ax 파라미터를 지원하지 않을 수 있음
+            optuna.visualization.matplotlib.plot_optimization_history(self.study)
+            plt.savefig(f"{plots_save_path}/optimization_history.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # 다른 플롯들도 개별적으로 생성
+            try:
+                optuna.visualization.matplotlib.plot_param_importances(self.study)
+                plt.savefig(f"{plots_save_path}/param_importances.png", dpi=300, bbox_inches='tight')
+                plt.close()
+            except Exception as e:
+                logger.warning(f"파라미터 중요도 플롯 생성 실패: {e}")
+            
+            try:
+                optuna.visualization.matplotlib.plot_parallel_coordinate(self.study)
+                plt.savefig(f"{plots_save_path}/parallel_coordinate.png", dpi=300, bbox_inches='tight')
+                plt.close()
+            except Exception as e:
+                logger.warning(f"병렬 좌표 플롯 생성 실패: {e}")
+            
+            return
+        
         axes[0, 0].set_title("Optimization History")
         
         # 파라미터 중요도
-        optuna.visualization.matplotlib.plot_param_importances(self.study, ax=axes[0, 1])
-        axes[0, 1].set_title("Parameter Importances")
+        try:
+            optuna.visualization.matplotlib.plot_param_importances(self.study, ax=axes[0, 1])
+            axes[0, 1].set_title("Parameter Importances")
+        except Exception as e:
+            logger.warning(f"파라미터 중요도 플롯 생성 실패: {e}")
+            axes[0, 1].text(0.5, 0.5, "Parameter Importances\n(Generation Failed)", 
+                           ha='center', va='center', transform=axes[0, 1].transAxes)
         
         # 파라미터 관계
-        optuna.visualization.matplotlib.plot_parallel_coordinate(self.study, ax=axes[1, 0])
-        axes[1, 0].set_title("Parallel Coordinate Plot")
+        try:
+            optuna.visualization.matplotlib.plot_parallel_coordinate(self.study, ax=axes[1, 0])
+            axes[1, 0].set_title("Parallel Coordinate Plot")
+        except Exception as e:
+            logger.warning(f"병렬 좌표 플롯 생성 실패: {e}")
+            axes[1, 0].text(0.5, 0.5, "Parallel Coordinate Plot\n(Generation Failed)", 
+                           ha='center', va='center', transform=axes[1, 0].transAxes)
         
         # 파라미터 분포
-        optuna.visualization.matplotlib.plot_param_importances(self.study, ax=axes[1, 1])
-        axes[1, 1].set_title("Parameter Importances (Detailed)")
+        try:
+            optuna.visualization.matplotlib.plot_param_importances(self.study, ax=axes[1, 1])
+            axes[1, 1].set_title("Parameter Importances (Detailed)")
+        except Exception as e:
+            logger.warning(f"상세 파라미터 중요도 플롯 생성 실패: {e}")
+            axes[1, 1].text(0.5, 0.5, "Parameter Importances (Detailed)\n(Generation Failed)", 
+                           ha='center', va='center', transform=axes[1, 1].transAxes)
         
         plt.tight_layout()
         plt.savefig(f"{plots_save_path}/optimization_plots.png", dpi=300, bbox_inches='tight')

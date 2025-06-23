@@ -8,7 +8,10 @@ data_split:
 
 # 검증 전략 설정
 validation:
-  strategy: "group_kfold"  # 주요 검증 전략: "time_series_walk_forward", "time_series_group_kfold", "group_kfold"
+  strategy: "group_kfold"  # "time_series_walk_forward", "time_series_group_kfold", "group_kfold"
+  num_cv_folds: 3  # 디버깅용으로 3폴드로 변경
+  test_size: 0.15  # 테스트 세트 비율
+  random_state: 42
   
   # --- 모든 전략에 공통 적용될 수 있는 파라미터 ---
   val_ids_ratio: 0.15                  # 각 폴드 내에서 검증에 사용할 ID 비율 (훈련 ID 풀에서 분할)
@@ -19,7 +22,6 @@ validation:
   max_train_years: 8                   # 최대 훈련 연도 수 (Walk-Forward 시)
 
   # --- "time_series_group_kfold" 또는 "group_kfold" 전략 전용 파라미터 ---
-  num_cv_folds: 5                      # 교차 검증 폴드 수 (K-Fold 계열 전략 사용 시)
   # group_kfold_by: "id"               # GroupKFold를 적용할 그룹 컬럼 (이미 id로 고정되어 있지만 명시적으로)
                                      # (참고: time_series_group_kfold는 시간과 ID를 모두 고려해야 하므로 구현이 복잡)
 
@@ -52,6 +54,33 @@ preprocessing:
     # onehot: One-Hot Encoding (XGBoost에 적합)
     # ordinal: Ordinal Encoding (순서가 있는 범주형에 적합)
     # none: 인코딩 없음
+
+# 리샘플링 설정 (불균형 데이터 처리)
+resampling:
+  enabled: false  # 리샘플링 활성화 여부
+  method: "smote"  # "smote", "borderline_smote", "adasyn", "under_sampling", "hybrid"
+  random_state: 42  # 재현성을 위한 시드
+  
+  # SMOTE 설정
+  smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # Borderline SMOTE 설정
+  borderline_smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # ADASYN 설정
+  adasyn_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # 언더샘플링 설정
+  under_sampling_strategy: "random"  # "random", "tomek", "enn"
+  
+  # 하이브리드 샘플링 설정
+  hybrid_strategy: "smote_tomek"  # "smote_tomek", "smote_enn"
+  
+  # 시계열 특화 설정
+  time_series_adapted:
+    enabled: false  # 시계열 특성을 고려한 리샘플링 활성화
+    time_weight: 0.3  # 시간적 유사성 가중치 (0~1)
+    pattern_preservation: true  # 시계열 패턴 보존 여부
 
 # 피처 엔지니어링 설정
 features:
@@ -115,6 +144,12 @@ model:
     scale_pos_weight: 1.0  # 분류 문제에서 자동으로 계산됨
     early_stopping_rounds: 10
     verbose: 0
+    
+    # Focal Loss 설정
+    use_focal_loss: false  # Focal Loss 사용 여부 (true/false)
+    focal_loss:
+      alpha: 0.25  # 클래스 가중치 (0 < alpha < 1). 소수 클래스에 더 큰 가중치
+      gamma: 2.0   # 포커싱 파라미터 (gamma >= 0). 쉬운 샘플의 기여도를 낮춤
 
 # 학습 설정
 training:
@@ -134,12 +169,32 @@ evaluation:
   # 회귀 지표
   regression_metrics: ["mae", "rmse", "r2"]
   
-  # 분류 지표
-  classification_metrics: ["precision", "recall", "f1", "roc_auc"]
+  # 분류 지표 (기본)
+  classification_metrics: ["precision", "recall", "f1", "accuracy", "balanced_accuracy", "roc_auc", "pr_auc"]
+  
+  # 고급 평가 지표 설정
+  advanced_metrics:
+    enable_precision_recall_curve: true
+    enable_roc_curve: true
+    enable_f1_threshold_optimization: true
+    enable_fold_analysis: true
+    
+    # F1 임계값 최적화 설정
+    f1_threshold_optimization:
+      threshold_range: [0.1, 0.9]  # 최소, 최대 임계값
+      step_size: 0.05              # 임계값 간격
+    
+    # 폴드 분석 설정
+    fold_analysis:
+      calculate_confidence_intervals: true
+      confidence_level: 0.95
+      analyze_variability: true
   
   # 결과 저장 설정
   save_predictions: true
   save_feature_importance: true
+  save_plots: true
+  plots_save_path: "evaluation_plots/"
 
 # 로깅 설정
 logging:

@@ -1,6 +1,18 @@
 1. 프로젝트 개요
 
 본 프로젝트는 개인별 연간 정신 건강 지표 데이터(≈150만 행)를 활용하여, 각 개인의 **다음 해 불안 점수(anxiety_score), 우울 점수(depress_score), 수면 점수(sleep_score), 자살 사고 여부(suicide_t), 자살 시도 여부(suicide_a)**를 예측하는 것을 목표로 합니다. 시계열 데이터의 특성을 고려하여 과거 데이터를 기반으로 미래를 예측하며, 모델의 성능 향상과 더불어 체계적인 실험 관리 시스템 구축에 주안점을 둡니다.
+
+## 현재 프로젝트 상태: Phase 5-3 완료 ✅
+
+### ✅ 완료된 주요 기능들
+- **데이터 분석 및 전처리**: 1,569,071행 × 15열 데이터 분석 완료
+- **안정적인 ML 파이프라인**: XGBoost 1.7.6 기반 다중 출력 모델
+- **Focal Loss 통합**: 극단적 불균형 데이터(849:1) 처리
+- **고급 평가 기능**: Balanced Accuracy, Precision-Recall Curve 등
+- **리샘플링 실험 통합**: SMOTE, Borderline SMOTE, ADASYN 등 비교
+- **하이퍼파라미터 튜닝**: Optuna 기반 최적화 파이프라인
+- **MLflow 실험 관리**: 완전한 실험 추적 및 결과 관리
+
 2. 데이터 이해 및 준비
 2.1. 데이터셋 컬럼 설명
 
@@ -34,26 +46,33 @@ psychia_cate: 자체 분류 (1-7, 6과 7은 고위험군)
         누적/이동 평균: 특정 기간 동안의 지표 변화 추세를 나타내는 이동 평균 또는 누적 합계 피처들을 확인하고 필요시 추가합니다.
         시계열 특성 피처: 이전 연도 대비 현재 연도의 변화율, 성장률 등 이미 생성된 피처들을 검토합니다.
 
+### ✅ 완료된 데이터 분석 결과
+- **데이터 크기**: 1,569,071 행 × 15 열
+- **개인 수**: 269,339명
+- **기간**: 2015-2024 (10년)
+- **시계열 길이**: 평균 5.79년/개인
+- **타겟 불균형**: 자살 시도 0.12% (849:1)
+- **결측치 처리**: 시계열 보간 및 통계적 대체 완료
+- **피처 엔지니어링**: 시간 기반 + 과거 이력 피처 생성 완료
+
 33. 모델링 전략
 
 본 프로젝트는 다중 출력 회귀 및 분류 문제로 볼 수 있습니다. 각 target 변수별 특성을 고려하여 모델을 선택하거나 다중 출력 모델을 고려합니다.
 
-그러나, 초기 개발 단계에서는 복잡성을 관리하고 견고한 기본 파이프라인을 구축하기 위해 예측 문제를 다음과 같이 단순화하여 접근합니다.
-3.1. 초기 예측 목표 (단일 출력 이진 분류)
+### ✅ 현재 구현된 모델링 전략
+3.1. 다중 출력 모델 (✅ 구현 완료)
 
-    분류: suicide_a_next_year (이진 분류)
+    회귀: anxiety_score_next_year, depress_score_next_year, sleep_score_next_year
+    분류: suicide_t_next_year, suicide_a_next_year (이진 분류)
 
-3.2. 모델 후보군
+3.2. 모델 후보군 (✅ 구현 완료)
 
     앙상블 모델 (Feature Engineering 기반):
-        XGBoost, LightGBM, CatBoost: 피처 엔지니어링을 통해 생성된 다양한 특징들을 활용하여 예측. 높은 성능과 해석 용이성을 제공합니다. 초기 개발에서는 XGBoost를 기준 모델로 사용합니다.
-        Random Forest, Gradient Boosting: 기준 모델로 활용 가능합니다.
-    시계열 기반 모델 (향후 확장 고려):
-        LSTM/GRU: 개인별 시계열 데이터를 시퀀스로 학습하여 다음 스텝을 예측. 데이터 양이 많으므로 분산 학습을 고려합니다.
-        Transformer: Self-Attention 메커니즘을 활용하여 시계열 내 장기 의존성 학습.
-    다중 출력 모델 (향후 확장 고려): 각 target을 개별적으로 예측하는 것이 아니라, 하나의 모델이 여러 target을 동시에 예측하도록 설계. (예: Multi-task Learning with Neural Networks)
-
-3.3. 검증 전략
+        XGBoost: 다중 출력 회귀/분류 지원, Focal Loss 통합, Early Stopping 지원
+        Focal Loss: 극단적 불균형 데이터 처리를 위한 손실 함수 통합
+        불균형 처리: scale_pos_weight 자동 계산, 클래스 가중치 조정
+    
+3.3. 검증 전략 (✅ 구현 완료)
 
 효과적인 모델 검증을 위해 시간 기반 분할과 참여자 기반 분할을 결합한 전략을 사용합니다. 이는 모델이 새로운 시간 시점의 데이터뿐만 아니라, 처음 접하는 새로운 개인에 대해서도 일반화 성능을 가지는지 평가하는 데 필수적입니다.
 
@@ -68,8 +87,13 @@ psychia_cate: 자체 분류 (1-7, 6과 7은 고위험군)
         결합 전략: 시계열 교차 검증의 각 폴드 내에서, 해당 폴드의 훈련 기간에 해당하는 데이터 중 특정 id 집합을 훈련에 사용하고, 나머지 id 집합의 다음 연도 데이터를 검증에 사용합니다. 이렇게 하면 시간적 순서와 개인의 독립성을 모두 고려할 수 있습니다. (예: GroupKFold 또는 TimeSeriesSplit과 GroupShuffleSplit의 조합)
     Early Stopping: 과적합 방지를 위해 검증 세트의 성능이 일정 기간 동안 개선되지 않으면 학습을 조기 종료합니다.
 
-3.4. 성능 지표 (Metrics)
-    초기 개발 단계에서는 suicide_a_next_year 단일 타겟에 대한 이진 분류 지표에 집중합니다.
+### ✅ 지원하는 검증 전략
+- **time_series_walk_forward**: 연도별 누적 학습, 미래 검증
+- **time_series_group_kfold**: ID와 시간 순서 고려 K-Fold
+- **group_kfold**: 순수 ID 기반 K-Fold
+
+3.4. 성능 지표 (Metrics) (✅ 구현 완료)
+    다중 출력 모델에 대한 종합적인 평가 지표를 제공합니다.
 
     회귀 (anxiety_score_next_year, depress_score_next_year, sleep_score_next_year):
         MAE (Mean Absolute Error): 실제 값과 예측 값의 절대 오차 평균. 해석이 용이하고 이상치에 덜 민감합니다.
@@ -79,15 +103,23 @@ psychia_cate: 자체 분류 (1-7, 6과 7은 고위험군)
         Precision, Recall, F1-Score: 특히 자살 관련 지표는 불균형 데이터일 가능성이 높으므로, 이 지표들이 중요합니다.
         ROC-AUC: 분류 모델의 전반적인 성능을 평가합니다.
         Confusion Matrix: 오분류된 샘플들을 자세히 분석.
+    고급 평가 지표 (✅ 구현 완료):
+        Balanced Accuracy: 클래스 불균형을 고려한 정확도
+        Precision-Recall Curve: 불균형 데이터에 특화된 성능 평가
+        ROC-AUC vs PR-AUC 비교: 균형/불균형 데이터에서의 성능 차이
+        F1-Score 임계값 최적화: 최적 분류 임계값 자동 탐색
+        폴드별 성능 변동성 분석: 교차 검증 안정성 평가
 
 4. 시스템 아키텍처 및 실험 관리
 
 시스템적인 관리를 위해 MLflow 또는 유사한 도구를 활용하여 실험 과정을 관리하고, 실행 파일($main.py$ 또는 $run_experiment.py$)을 통해 모든 파라미터를 제어하도록 설계합니다.
-4.1. 프로젝트 디렉토리 구조
+
+### ✅ 현재 구현된 시스템 아키텍처
+4.1. 프로젝트 디렉토리 구조 (✅ 구현 완료)
 
 project_root/
 ├── data/
-│   ├── raw/                 # 원본 데이터를 보관 (data.csv 원본 위치)
+│   ├── sourcedata/                 # 원본 데이터를 보관 (data.csv 원본 위치)
 │   │   └── data.csv
 │   ├── sourcedata_analysis/ # 초기 데이터 분석(EDA) 결과물 저장
 │   │   ├── figures/         # EDA에서 생성된 모든 시각화 파일 (PNG/JPG)
@@ -106,35 +138,37 @@ project_root/
 │   │       ├── outlier_analysis.csv
 │   │       ├── time_series_length_stats.csv
 │   │       ├── target_variable_analysis.csv
-│   │       └── processed_data_with_features.csv # EDA 최종 결과물, 파이프라인의 입력 아님
-│   └── processed/           # 모델 학습을 위해 전처리된 최종 데이터 (선택 사항: 캐싱용)
-│       └── # 여기에 최종 전처리된 데이터셋을 저장할 수 있음 (선택적)
+│   │       └── processed_data_with_features.csv # EDA 최종 결과물
+│   └── processed/           # 모델 학습을 위해 전처리된 최종 데이터
+│       └── processed_data_with_features.csv
 │
-├── notebooks/               # 탐색적 데이터 분석(EDA), 모델 실험 노트북 (ex: EDA.ipynb)
 ├── src/                     # 핵심 소스 코드 (파이프라인 모듈)
 │   ├── __init__.py          # Python 패키지임을 알림
-│   ├── data_loader.py       # 원본 데이터 로딩 (사전 처리된 데이터 포함)
-│   ├── splits.py            # 데이터 분할 전략 (시간 기반 & ID 기반 교차 검증 폴드 생성)
-│   ├── preprocessing.py     # 데이터 클리닝, 결측치 처리, 스케일링, 인코딩 등 전처리 파이프라인 정의
-│   ├── feature_engineering.py # 추가적인 피처 생성 로직 및 기존 피처 유효성 검증
+│   ├── data_analysis.py     # 원본 데이터 로딩 및 분석 (✅ 구현 완료)
+│   ├── splits.py            # 데이터 분할 전략 (시간 기반 & ID 기반 교차 검증 폴드 생성) (✅ 구현 완료)
+│   ├── preprocessing.py     # 데이터 클리닝, 결측치 처리, 스케일링, 인코딩 등 전처리 파이프라인 정의 (✅ 구현 완료)
+│   ├── feature_engineering.py # 추가적인 피처 생성 로직 및 기존 피처 유효성 검증 (✅ 구현 완료)
 │   ├── models/              # 모델 정의 (각 모델별 Python 파일)
 │   │   ├── __init__.py
-│   │   ├── base_model.py    # 공통 인터페이스 또는 추상 클래스 (옵션)
-│   │   ├── lstm_model.py    # LSTM 모델 구현
-│   │   └── xgboost_model.py # XGBoost 모델 구현
-│   ├── training.py          # 모델 학습 및 검증 루프, Early Stopping, 불균형 처리 전략 구현
-│   ├── evaluation.py        # 모델 평가 지표 계산 (회귀, 분류 지표 포함)
-│   └── utils.py             # 공통 유틸리티 함수 (시드 설정, 로깅 설정 등)
+│   │   ├── xgboost_model.py # XGBoost 모델 구현 (✅ 구현 완료)
+│   │   └── loss_functions.py # 손실 함수 모듈 (Focal Loss 포함) (✅ 구현 완료)
+│   ├── training.py          # 모델 학습 및 검증 루프, Early Stopping, 불균형 처리 전략 구현 (✅ 구현 완료)
+│   ├── evaluation.py        # 모델 평가 지표 계산 (회귀, 분류 지표 포함) (✅ 구현 완료)
+│   ├── hyperparameter_tuning.py # Optuna 기반 하이퍼파라미터 튜닝 (✅ 구현 완료)
+│   └── utils.py             # 공통 유틸리티 함수 (시드 설정, 로깅 설정 등) (✅ 구현 완료)
 │
 ├── configs/                 # 실험 설정 파일 (하이퍼파라미터, 변수, 검증방법, 메트릭 등 정의)
-│   ├── default_config.yaml
-│   ├── lstm_experiment.yaml
-│   └── xgboost_experiment.yaml
+│   ├── default_config.yaml  # 기본 실험 설정 (✅ 구현 완료)
+│   ├── focal_loss_config.yaml # Focal Loss 실험 설정 (✅ 구현 완료)
+│   ├── resampling_config.yaml # 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 설정 (✅ 구현 완료)
+│   └── hyperparameter_tuning.yaml # 하이퍼파라미터 튜닝 설정 (✅ 구현 완료)
 │
 ├── scripts/
-│   └── run_experiment.py    # 전체 ML 파이프라인 실행 스크립트 (CLI 인터페이스)
+│   ├── run_experiment.py    # 전체 ML 파이프라인 실행 스크립트 (CLI 인터페이스) (✅ 구현 완료)
+│   └── run_hyperparameter_tuning.py # 하이퍼파라미터 튜닝 실행 스크립트 (✅ 구현 완료)
 │
 ├── mlruns/                  # MLflow 로깅 데이터 (자동 생성되는 디렉토리)
+├── models/                  # 학습된 모델 저장 디렉토리
 ├── tests/                   # 단위 테스트 및 통합 테스트
 │   ├── test_data_loader.py
 │   ├── test_splits.py
@@ -143,79 +177,117 @@ project_root/
 │
 ├── requirements.txt         # 프로젝트 종속성 (pip install -r requirements.txt)
 ├── README.md                # 프로젝트 설명 및 사용법
+├── PROJECT_PROGRESS.md      # 프로젝트 진행 상황 문서
+└── NEXT_PHASE_PLAN.md       # 다음 단계 계획
 
-44.2. 실행 파일 (run_experiment.py) 설계
+44.2. 실행 파일 (run_experiment.py) 설계 (✅ 구현 완료)
 
 run_experiment.py는 클린 코드 및 재현성을 최우선으로 고려하며, argparse를 통해 커맨드 라인 인자를 받아 실험 파라미터를 제어합니다.
 
     Config 중심의 변수 관리:
-        타겟 컬럼 명시: default_config.yaml의 features.target_columns에 ["suicide_a_next_year"]만 명시합니다.
+        타겟 컬럼 명시: default_config.yaml의 features.target_columns에 모든 타겟 변수 명시
         피처 컬럼 명시: default_config.yaml의 features.selected_features에 모델 학습에 사용할 피처 목록을 명시합니다. src/feature_engineering.py의 get_feature_columns 함수는 이 selected_features 목록을 기반으로 실제 사용할 피처를 필터링하도록 수정합니다. 이렇게 하면 코드 수정 없이 config 파일만으로 입력 피처를 제어할 수 있습니다.
     데이터 전처리 파이프라인: 학습/검증/테스트 데이터셋 분리 후 각 데이터셋의 통계량을 기반으로 동작하도록 엄격하게 설계합니다.
     MLflow 로깅: 모든 파라미터와 결과를 MLflow에 상세히 기록합니다.
+    리샘플링 실험 지원: --resampling-comparison 인자로 다양한 리샘플링 기법 비교 가능
     
-4.3. 설정 파일 (configs/*.yaml) 예시
+4.3. 설정 파일 (configs/*.yaml) 예시 (✅ 구현 완료)
 
 YAML 파일은 모든 하이퍼파라미터, 전처리 전략, 피처 엔지니어링 전략, 모델 파라미터, 불균형 처리 옵션, 검증 방법, 성능 지표 등을 유연하게 정의하고 관리하는 데 사용됩니다.
-4.4. 로깅 및 추적 (MLflow 활용)
+
+### ✅ 구현된 설정 파일들
+- **default_config.yaml**: 기본 실험 설정, 데이터 분할, 전처리, 모델 파라미터
+- **focal_loss_config.yaml**: Focal Loss 실험 설정
+- **resampling_config.yaml**: 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 설정
+- **hyperparameter_tuning.yaml**: Optuna 기반 하이퍼파라미터 튜닝 설정
+
+4.4. 로깅 및 추적 (MLflow 활용) (✅ 구현 완료)
 
     MLflow Tracking: mlflow.start_run(), mlflow.log_param(), mlflow.log_metric(), mlflow.log_artifact() 등을 사용하여 실험의 모든 과정(하이퍼파라미터, 데이터 경로, 모델 구조, 성능 지표, 학습된 모델)을 자동으로 기록합니다.
     MLflow UI: mlflow ui 명령어를 통해 웹 인터페이스로 접속하여 과거 실험 결과를 시각적으로 비교하고 관리합니다.
     코드 버전 관리: Git과 연동하여 커밋 해시 등을 MLflow에 함께 기록하여 어떤 코드 버전으로 실험이 진행되었는지 추적합니다.
+    중첩 실행: 리샘플링 실험에서 각 기법별로 별도 MLflow run으로 실험 추적
 
 5. 잠재적 도전과제 및 해결 전략
 
 아래 항목들에 대해서 추가적인 수정이 가능하도록 유연한 설계가 필요합니다.
 
     데이터 불균형: suicide_t_next_year, suicide_a_next_year와 같은 희귀 이벤트 예측 시 데이터 불균형 문제가 발생할 수 있습니다.
-        해결 전략 (유연한 설계):
+        해결 전략 (✅ 구현 완료):
             데이터 레벨:
-                오버샘플링: SMOTE, ADASYN 등을 활용하여 소수 클래스 데이터를 합성하여 증강. (주의: 시계열 데이터에서는 id별로 독립적으로 샘플링하거나 시계열 특성을 고려한 변형된 SMOTE가 필요할 수 있음)
+                오버샘플링: SMOTE, Borderline SMOTE, ADASYN 등을 활용하여 소수 클래스 데이터를 합성하여 증강. (주의: 시계열 데이터에서는 id별로 독립적으로 샘플링하거나 시계열 특성을 고려한 변형된 SMOTE가 필요할 수 있음)
                 언더샘플링: Majority 클래스 데이터를 무작위 또는 특정 기준으로 감소시켜 균형 맞추기.
-                configs/*.yaml에서 resampling_strategy 및 관련 파라미터를 설정하여 쉽게 전환 가능하도록 합니다.
+                configs/resampling_config.yaml에서 resampling_strategy 및 관련 파라미터를 설정하여 쉽게 전환 가능하도록 합니다.
             알고리즘 레벨:
                 클래스 가중치(Class Weighting): 손실 함수 계산 시 각 클래스에 다른 가중치를 부여하여 소수 클래스 오류에 더 큰 페널티를 부과. (예: scikit-learn의 class_weight, PyTorch/TensorFlow의 weight 파라미터)
-                Focal Loss: 쉬운 샘플의 기여도를 낮추고 어려운 샘플(오분류되기 쉬운 소수 클래스)에 집중하여 학습하도록 유도하는 손실 함수 사용.
-                configs/*.yaml에서 class_weighting_enabled, focal_loss_enabled 및 관련 하이퍼파라미터를 설정하여 적용 여부와 파라미터 조정을 용이하게 합니다.
-            평가 지표: Accuracy 대신 Precision, Recall, F1-Score, ROC-AUC 등 불균형 데이터에 적합한 지표를 주력으로 사용.
+                Focal Loss: 쉬운 샘플의 기여도를 낮추고 어려운 샘플(오분류되기 쉬운 소수 클래스)에 집중하여 학습하도록 유도하는 손실 함수 사용. (✅ 구현 완료)
+                configs/default_config.yaml에서 class_weighting_enabled, focal_loss_enabled 및 관련 하이퍼파라미터를 설정하여 적용 여부와 파라미터 조정을 용이하게 합니다.
+            평가 지표: Accuracy 대신 Precision, Recall, F1-Score, ROC-AUC, Balanced Accuracy 등 불균형 데이터에 적합한 지표를 주력으로 사용. (✅ 구현 완료)
     개인별 시계열 길이 상이: 각 id마다 데이터의 yov 범위가 다를 수 있어 시계열 모델 학습 시 패딩/마스킹 전략이 필요할 수 있습니다.
-        해결 전략 (유연한 설계):
-            패딩(Padding): 시퀀스 길이가 짧은 id의 데이터는 특정 값(예: 0 또는 평균 값)으로 채워 모든 시퀀스의 길이를 통일합니다. 패딩 전략(앞에 채울지, 뒤에 채울지)을 결정합니다.
-            마스킹(Masking): 패딩된 부분이 모델 학습에 영향을 주지 않도록 마스킹 메커니즘을 적용합니다. 특히 LSTM/GRU와 같은 RNN 계열 모델에서는 PackedSequence를 사용하거나, Transformer 모델에서는 Attention Mask를 사용하여 패딩된 토큰이 계산에 포함되지 않도록 합니다.
-            configs/*.yaml에서 padding_strategy, padding_value, max_sequence_length 등을 설정하여 패딩 방식을 유연하게 조정합니다.
-            데이터셋 구성: 시퀀스 데이터를 생성할 때, 각 id의 시퀀스를 독립적으로 구성하고, 시퀀스 길이가 너무 짧은 id는 분석에서 제외하는 방안도 configs에서 설정 가능하도록 합니다.
+        해결 전략 (✅ 구현 완료):
+            피처 기반 접근: 시계열 길이 차이를 피처 엔지니어링으로 해결. 각 id별 과거 이력 피처를 생성하여 시계열 길이 차이를 흡수.
+            통계적 피처: 이동평균, 이동표준편차, 변화량 등으로 시계열 특성을 피처로 변환.
+            configs/default_config.yaml에서 rolling_window_size, min_periods 등을 설정하여 피처 생성 방식을 유연하게 조정합니다.
     정보 유실: 과거 데이터를 활용한 피처 엔지니어링 시, 초기 연도 데이터는 충분한 과거 정보를 가지지 못해 데이터 손실이 발생할 수 있습니다.
-        해결 전략 (유연한 설계): configs/*.yaml에서 min_periods와 같은 파라미터를 조절하여 피처 생성 시 필요한 최소 데이터 기간을 제어하고, 이로 인한 데이터 손실을 감수할지 또는 다른 피처 전략을 사용할지 결정할 수 있도록 합니다.
+        해결 전략 (✅ 구현 완료): configs/default_config.yaml에서 min_periods와 같은 파라미터를 조절하여 피처 생성 시 필요한 최소 데이터 기간을 제어하고, 이로 인한 데이터 손실을 감수할지 또는 다른 피처 전략을 사용할지 결정할 수 있도록 합니다.
     도메인 지식 부족: comp, suicide_c, suicide_y, psychia_cate 등 특정 컬럼의 의미를 정확히 파악해야 효과적인 피처 엔지니어링 및 해석이 가능합니다.
-        해결 전략 (유연한 설계): configs/*.yaml에서 특정 컬럼의 사용 여부를 토글하거나, 다른 전처리 방식을 지정할 수 있도록 파라미터화하여 도메인 전문가와의 협의에 따라 유연하게 변경할 수 있도록 합니다.
+        해결 전략 (✅ 구현 완료): configs/default_config.yaml에서 특정 컬럼의 사용 여부를 토글하거나, 다른 전처리 방식을 지정할 수 있도록 파라미터화하여 도메인 전문가와의 협의에 따라 유연하게 변경할 수 있도록 합니다.
 
 6. 단계별 프로젝트 진행 계획
 
-    데이터 분석 및 초기 준비 (5-1) :
-        원본 데이터 이해 및 탐색적 데이터 분석(EDA).
-        기존 _next_year 타겟 변수 및 피처 (rolling, yoy_change 등)들의 생성 방식 및 데이터 유출 여부 재검토.
-        결측치, 이상치 처리 전략 수립 및 구현.
-        데이터 불균형 분석: suicide_t, suicide_a의 클래스 분포 확인 및 불균형 정도 정량화.
-        개인별 시계열 길이 분석: 각 id별 yov 데이터의 최소/최대 길이, 분포 확인.
-        전처리된 데이터를 저장하고 MLflow에 기록.
-    기준 모델(Baseline Model) 구축 및 핵심 파이프라인 개발 (5-2) :
-        간단한 통계 모델 (예: 이전 연도 값으로 예측) 또는 전통적인 머신러닝 모델 (예: XGBoost)을 사용하여 초기 성능 측정.
-        실험 관리 시스템(run_experiment.py, configs/)의 기본적인 틀 구현 및 MLflow 연동.
-        src/splits.py 모듈을 통한 ID 기반 및 시계열 기반 데이터 분할 로직 구현 및 엄격한 테스트.
-        src/preprocessing.py 및 src/feature_engineering.py 모듈을 통한 데이터 클리닝 및 피처 엔지니어링 파이프라인 구현. 이때 각 폴드의 훈련 세트에서만 fit되고, 검증/테스트 세트에 transform되도록 data leakage 방지 원칙을 철저히 적용.
-        데이터 불균형 처리 전략 시험 (초기): Class Weighting 또는 간단한 Resampling 기법 적용하여 초기 분류 성능 변화 확인. configs를 통해 제어.
-        시계열 패딩/마스킹 전략 시험 (초기): 시계열 모델에 데이터를 주입하는 기본적인 파이프라인 구축 시 패딩/마스킹 구현 및 테스트. configs를 통해 제어.
-    고급 모델 개발 및 성능 개선 (5-3, 5-4, 5-5) :
-        LSTM/Transformer 등 시계열 특화 모델 도입 및 학습 파이프라인 구축.
-        다양한 피처 엔지니어링 시도 및 효과 검증.
-        하이퍼파라미터 튜닝 (Grid Search, Random Search, Optuna 등) 및 최적 모델 탐색.
-        각 Target 변수에 대한 예측 성능 개선 집중.
-        데이터 불균형 고급 전략 적용: 오버샘플링(SMOTE), 언더샘플링, 손실 함수 조정(Focal Loss) 등. configs를 통해 전략을 쉽게 전환하며 실험.
-        개인별 시계열 길이 처리 강화: 모델 입력에 대한 패딩(Padding) 및 마스킹(Masking) 전략 고도화. 시퀀스 길이를 동적으로 처리하는 모델 구조 검토. configs를 통해 패딩/마스킹 파라미터 유연하게 조정.
-    모델 평가 및 해석 (5-6) :
-        최종 모델의 성능을 다양한 지표로 심층 분석. 특히 불균형 데이터셋에서의 분류 성능 지표(Precision, Recall, F1-Score, ROC-AUC)에 집중하여 평가.
-        모델 해석 (Feature Importance, SHAP/LIME 등)을 통해 예측에 기여하는 주요 요인 파악.
-        비즈니스 관점에서의 모델 활용 방안 및 한계점 논의.
-    문서화 및 보고 (5-7) :
-        프로젝트 결과 보고서 작성.
-        코드 및 실험 관리 시스템 사용법 문서화.
+### ✅ 완료된 단계들
+
+    데이터 분석 및 초기 준비 (Phase 5-1) ✅ 완료:
+        원본 데이터 이해 및 탐색적 데이터 분석(EDA) 완료.
+        기존 _next_year 타겟 변수 및 피처 (rolling, yoy_change 등)들의 생성 방식 및 데이터 유출 여부 재검토 완료.
+        결측치, 이상치 처리 전략 수립 및 구현 완료.
+        데이터 불균형 분석: suicide_t, suicide_a의 클래스 분포 확인 및 불균형 정도 정량화 완료.
+        개인별 시계열 길이 분석: 각 id별 yov 데이터의 최소/최대 길이, 분포 확인 완료.
+        전처리된 데이터를 저장하고 MLflow에 기록 완료.
+    기준 모델(Baseline Model) 구축 및 핵심 파이프라인 개발 (Phase 5-2) ✅ 완료:
+        XGBoost 기반 다중 출력 모델을 사용하여 초기 성능 측정 완료.
+        실험 관리 시스템(run_experiment.py, configs/)의 기본적인 틀 구현 및 MLflow 연동 완료.
+        src/splits.py 모듈을 통한 ID 기반 및 시계열 기반 데이터 분할 로직 구현 및 엄격한 테스트 완료.
+        src/preprocessing.py 및 src/feature_engineering.py 모듈을 통한 데이터 클리닝 및 피처 엔지니어링 파이프라인 구현 완료. 이때 각 폴드의 훈련 세트에서만 fit되고, 검증/테스트 세트에 transform되도록 data leakage 방지 원칙을 철저히 적용.
+        데이터 불균형 처리 전략 시험: Class Weighting, Focal Loss 적용하여 초기 분류 성능 변화 확인 완료. configs를 통해 제어.
+        환경 호환성 문제 해결: XGBoost 1.7.6 버전 고정, NumPy 호환성 문제 해결 완료.
+    불균형 데이터 처리 및 고급 평가 기능 통합 (Phase 5-3) ✅ 완료:
+        Focal Loss 통합: 극단적 불균형 데이터 처리를 위한 Focal Loss 완전 통합 완료.
+        고급 평가 기능: Balanced Accuracy, Precision-Recall Curve, 최적 임계값 탐색 등 구현 완료.
+        리샘플링 실험 통합: 다양한 리샘플링 기법 비교 및 하이퍼파라미터 튜닝 통합 완료.
+        하이퍼파라미터 튜닝: Optuna 기반 튜닝에서 Focal Loss 파라미터 탐색 가능 완료.
+        MLflow 통합 강화: 모든 고급 평가 지표가 MLflow에 자동 로깅되어 실험 추적 완성.
+
+### 🚀 다음 단계: Phase 5-4 (고급 모델 개발 및 성능 최적화)
+
+    고급 모델 개발 및 확장:
+        앙상블 모델: Stacking, Blending, Voting 등 다중 모델 조합
+        기존 모델 확장: LightGBM, Random Forest, CatBoost 등 추가
+    피처 엔지니어링 고도화:
+        시계열 피처 확장: 계절성 패턴, 추세, 변동성 피처
+        도메인 특화 피처: 의료 지식 기반 피처, 상호작용 피처
+        피처 선택 및 차원 축소: SHAP 기반 중요도 분석, RFE 등
+    하이퍼파라미터 튜닝 최적화:
+        고급 최적화 기법: Bayesian Optimization, Population-based Training
+        모델별 튜닝 전략: 시계열 모델, 앙상블 모델 전용 튜닝
+        자동화된 튜닝 파이프라인: AutoML 통합, 실험 자동화
+    모델 해석 및 설명 가능성:
+        SHAP 분석 고도화: 개별 예측 해석, 피처 상호작용 분석
+        모델 해석 도구: LIME, Partial Dependence Plot 등
+        의료 현장 적용: 위험도 분류 시스템, 개입 시점 제안
+    실험 관리 및 배포 준비:
+        실험 관리 시스템 고도화: 실험 버전 관리, 모델 아카이브
+        배포 준비: 모델 서빙, 배치/실시간 예측
+        품질 관리: 모델 검증, A/B 테스트, 성능 드리프트 감지
+
+### 🎯 Phase 5-4 목표
+- **성능 개선**: F1-Score 0.0 → 0.3 이상 목표
+- **재현율 향상**: 소수 클래스 예측 성능 크게 개선
+- **모델 다양성**: 5개 이상의 고급 모델 구현
+- **해석 가능성**: SHAP 분석을 통한 모델 해석 완성
+- **실험 자동화**: 자동화된 실험 파이프라인 구축
+
+---
+
+**최종 업데이트**: 2025년 06월 23일  
+**현재 상태**: Phase 5-3 완료 ✅ → Phase 5-4 준비 중

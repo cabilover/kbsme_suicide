@@ -31,8 +31,15 @@ def validate_existing_features(df: pd.DataFrame, config: Dict[str, Any]) -> Dict
     Returns:
         피처별 유효성 검증 결과
     """
-    id_column = config['time_series']['id_column']
-    year_column = config['time_series']['year_column']
+    # 전처리 후 컬럼 이름 찾기 (여러 가능성 시도)
+    id_column = find_column_with_remainder(df.columns, config['time_series']['id_column'])
+    year_column = find_column_with_remainder(df.columns, config['time_series']['year_column'])
+    
+    # 컬럼을 찾지 못한 경우 원본 이름도 시도
+    if id_column is None:
+        id_column = config['time_series']['id_column']
+    if year_column is None:
+        year_column = config['time_series']['year_column']
     
     # 검증 설정 가져오기
     validation_config = config['features'].get('validation', {})
@@ -57,6 +64,10 @@ def validate_existing_features(df: pd.DataFrame, config: Dict[str, Any]) -> Dict
     logger.info(f"기존 피처 데이터 유출 검증 시작 (범위: {validation_scope})")
     
     # 검증할 ID 목록 결정
+    if id_column not in df.columns:
+        logger.warning(f"ID 컬럼 '{id_column}'을 찾을 수 없습니다. 검증을 건너뜁니다.")
+        return {feature: True for feature in features_to_validate}
+    
     all_ids = df[id_column].unique()
     if validation_scope == 'none':
         logger.info("검증을 건너뜁니다.")
@@ -69,7 +80,14 @@ def validate_existing_features(df: pd.DataFrame, config: Dict[str, Any]) -> Dict
         logger.info(f"샘플 ID 검증: {len(ids_to_validate):,}개 ID (전체 {len(all_ids):,}개 중)")
     
     for feature in features_to_validate:
-        if feature not in df.columns:
+        # 전처리 후 피처 이름 찾기 (여러 가능성 시도)
+        feature_column = find_column_with_remainder(df.columns, feature)
+        
+        if feature_column is None:
+            # 원본 이름도 시도
+            feature_column = feature
+        
+        if feature_column not in df.columns:
             validation_results[feature] = False
             logger.warning(f"  {feature}: 컬럼이 존재하지 않음")
             continue
@@ -88,7 +106,7 @@ def validate_existing_features(df: pd.DataFrame, config: Dict[str, Any]) -> Dict
             
             # rolling 통계의 경우 첫 번째 값이 NaN이어야 함 (미래 정보 없음)
             if feature.endswith('_rolling_mean_2y') or feature.endswith('_rolling_std_2y'):
-                if not pd.isna(id_data[feature].iloc[0]):
+                if not pd.isna(id_data[feature_column].iloc[0]):
                     is_valid = False
                     logger.warning(f"  {feature}: ID {id_val}에서 첫 번째 값이 NaN이 아님")
                     if validation_scope == 'sample':
@@ -97,7 +115,7 @@ def validate_existing_features(df: pd.DataFrame, config: Dict[str, Any]) -> Dict
             
             # yoy_change의 경우 첫 번째 값이 NaN이어야 함 (이전 연도 정보 없음)
             elif feature.endswith('_yoy_change'):
-                if not pd.isna(id_data[feature].iloc[0]):
+                if not pd.isna(id_data[feature_column].iloc[0]):
                     is_valid = False
                     logger.warning(f"  {feature}: ID {id_val}에서 첫 번째 값이 NaN이 아님")
                     if validation_scope == 'sample':

@@ -11,7 +11,9 @@ import logging
 from sklearn.metrics import (
     mean_absolute_error, mean_squared_error, r2_score,
     precision_score, recall_score, f1_score, roc_auc_score,
-    confusion_matrix, classification_report
+    confusion_matrix, classification_report,
+    precision_recall_curve, average_precision_score,
+    balanced_accuracy_score, roc_curve
 )
 import warnings
 from pathlib import Path
@@ -86,6 +88,7 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
         
         # 추가 지표
         accuracy = (y_true == y_pred).mean()
+        balanced_acc = balanced_accuracy_score(y_true, y_pred)
         
         # 클래스별 샘플 수
         class_counts = y_true.value_counts()
@@ -98,6 +101,7 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
             'recall': recall,
             'f1': f1,
             'accuracy': accuracy,
+            'balanced_accuracy': balanced_acc,
             'positive_samples': positive_samples,
             'negative_samples': negative_samples,
             'total_samples': total_samples,
@@ -106,8 +110,283 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
         
         if roc_auc is not None:
             metrics['roc_auc'] = roc_auc
+        
+        # PR-AUC 계산 (확률이 제공된 경우)
+        if y_pred_proba is not None:
+            try:
+                pr_auc = average_precision_score(y_true, y_pred_proba)
+                metrics['pr_auc'] = pr_auc
+            except:
+                metrics['pr_auc'] = None
     
     return metrics
+
+
+def calculate_precision_recall_curve(y_true: pd.Series, y_pred_proba: np.ndarray) -> Dict[str, Any]:
+    """
+    Precision-Recall Curve 계산
+    
+    Args:
+        y_true: 실제 값
+        y_pred_proba: 예측 확률 (양성 클래스)
+        
+    Returns:
+        PR curve 데이터와 AUC
+    """
+    precision, recall, thresholds = precision_recall_curve(y_true, y_pred_proba)
+    pr_auc = average_precision_score(y_true, y_pred_proba)
+    
+    return {
+        'precision': precision,
+        'recall': recall, 
+        'thresholds': thresholds,
+        'pr_auc': pr_auc
+    }
+
+
+def calculate_balanced_accuracy(y_true: pd.Series, y_pred: pd.Series) -> float:
+    """
+    Balanced Accuracy 계산
+    
+    Args:
+        y_true: 실제 값
+        y_pred: 예측 값
+        
+    Returns:
+        Balanced Accuracy 값
+    """
+    return balanced_accuracy_score(y_true, y_pred)
+
+
+def compare_roc_vs_pr_auc(y_true: pd.Series, y_pred_proba: np.ndarray) -> Dict[str, float]:
+    """
+    ROC-AUC vs PR-AUC 비교
+    
+    Args:
+        y_true: 실제 값
+        y_pred_proba: 예측 확률
+        
+    Returns:
+        ROC-AUC와 PR-AUC 값
+    """
+    # ROC-AUC 계산
+    fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
+    roc_auc = np.trapz(tpr, fpr)
+    
+    # PR-AUC 계산
+    pr_auc = average_precision_score(y_true, y_pred_proba)
+    
+    return {
+        'roc_auc': roc_auc,
+        'pr_auc': pr_auc
+    }
+
+
+def optimize_f1_threshold(y_true: pd.Series, y_pred_proba: np.ndarray, 
+                         thresholds: np.ndarray = None) -> Dict[str, Any]:
+    """
+    F1-Score 최적화를 위한 임계값 찾기
+    
+    Args:
+        y_true: 실제 값
+        y_pred_proba: 예측 확률
+        thresholds: 테스트할 임계값들 (None이면 자동 생성)
+        
+    Returns:
+        최적 임계값과 해당 F1-score
+    """
+    if thresholds is None:
+        thresholds = np.arange(0.1, 0.9, 0.05)
+    
+    best_f1 = 0
+    best_threshold = 0.5
+    threshold_results = []
+    
+    for threshold in thresholds:
+        y_pred = (y_pred_proba >= threshold).astype(int)
+        f1 = f1_score(y_true, y_pred, zero_division=0)
+        threshold_results.append({
+            'threshold': threshold,
+            'f1_score': f1
+        })
+        
+        if f1 > best_f1:
+            best_f1 = f1
+            best_threshold = threshold
+    
+    return {
+        'best_threshold': best_threshold,
+        'best_f1_score': best_f1,
+        'all_results': threshold_results
+    }
+
+
+def create_precision_recall_plot(y_true: pd.Series, y_pred_proba: np.ndarray, 
+                                target_name: str, save_path: str = None):
+    """
+    Precision-Recall Curve 시각화
+    
+    Args:
+        y_true: 실제 값
+        y_pred_proba: 예측 확률
+        target_name: 타겟 이름
+        save_path: 저장 경로
+    """
+    try:
+        import matplotlib.pyplot as plt
+        
+        precision, recall, _ = precision_recall_curve(y_true, y_pred_proba)
+        pr_auc = average_precision_score(y_true, y_pred_proba)
+        
+        plt.figure(figsize=(8, 6))
+        plt.plot(recall, precision, label=f'PR Curve (AUC = {pr_auc:.3f})')
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title(f'Precision-Recall Curve - {target_name}')
+        plt.legend()
+        plt.grid(True)
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            logger.info(f"PR Curve 저장 완료: {save_path}")
+        
+        plt.show()
+        
+    except ImportError:
+        logger.warning("matplotlib이 설치되지 않아 PR curve를 시각화할 수 없습니다.")
+
+
+def create_roc_curve_plot(y_true: pd.Series, y_pred_proba: np.ndarray, 
+                         target_name: str, save_path: str = None):
+    """
+    ROC Curve 시각화
+    
+    Args:
+        y_true: 실제 값
+        y_pred_proba: 예측 확률
+        target_name: 타겟 이름
+        save_path: 저장 경로
+    """
+    try:
+        import matplotlib.pyplot as plt
+        
+        fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
+        roc_auc = roc_auc_score(y_true, y_pred_proba)
+        
+        plt.figure(figsize=(8, 6))
+        plt.plot(fpr, tpr, label=f'ROC Curve (AUC = {roc_auc:.3f})')
+        plt.plot([0, 1], [0, 1], 'k--', label='Random')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title(f'ROC Curve - {target_name}')
+        plt.legend()
+        plt.grid(True)
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            logger.info(f"ROC Curve 저장 완료: {save_path}")
+        
+        plt.show()
+        
+    except ImportError:
+        logger.warning("matplotlib이 설치되지 않아 ROC curve를 시각화할 수 없습니다.")
+
+
+def analyze_fold_performance_distribution(fold_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    폴드별 성능 지표 분포 분석
+    
+    Args:
+        fold_results: 폴드별 결과 리스트
+        
+    Returns:
+        성능 지표 통계 정보
+    """
+    analysis = {}
+    
+    for target in fold_results[0].get('metrics', {}).keys():
+        target_analysis = {}
+        
+        for metric in ['precision', 'recall', 'f1', 'accuracy', 'balanced_accuracy', 'roc_auc', 'pr_auc']:
+            if metric in fold_results[0]['metrics'][target]:
+                values = [fold['metrics'][target].get(metric, 0) for fold in fold_results]
+                values = [v for v in values if v is not None]
+                
+                if values:
+                    target_analysis[metric] = {
+                        'mean': np.mean(values),
+                        'std': np.std(values),
+                        'min': np.min(values),
+                        'max': np.max(values),
+                        'median': np.median(values)
+                    }
+        
+        analysis[target] = target_analysis
+    
+    return analysis
+
+
+def calculate_confidence_intervals(performance_metrics: List[float], confidence: float = 0.95) -> Dict[str, float]:
+    """
+    신뢰구간 계산
+    
+    Args:
+        performance_metrics: 성능 지표 리스트
+        confidence: 신뢰수준 (0.95 = 95%)
+        
+    Returns:
+        신뢰구간 정보
+    """
+    if len(performance_metrics) < 2:
+        return {'lower': performance_metrics[0], 'upper': performance_metrics[0]}
+    
+    mean_val = np.mean(performance_metrics)
+    std_val = np.std(performance_metrics, ddof=1)
+    n = len(performance_metrics)
+    
+    # t-분포 사용 (소표본)
+    from scipy import stats
+    t_value = stats.t.ppf((1 + confidence) / 2, df=n-1)
+    margin_of_error = t_value * (std_val / np.sqrt(n))
+    
+    return {
+        'mean': mean_val,
+        'lower': mean_val - margin_of_error,
+        'upper': mean_val + margin_of_error,
+        'confidence': confidence
+    }
+
+
+def analyze_fold_variability(fold_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    폴드 간 성능 변동성 분석
+    
+    Args:
+        fold_results: 폴드별 결과 리스트
+        
+    Returns:
+        변동성 분석 결과
+    """
+    variability = {}
+    
+    for target in fold_results[0].get('metrics', {}).keys():
+        target_variability = {}
+        
+        for metric in ['precision', 'recall', 'f1', 'accuracy', 'balanced_accuracy']:
+            if metric in fold_results[0]['metrics'][target]:
+                values = [fold['metrics'][target].get(metric, 0) for fold in fold_results]
+                values = [v for v in values if v is not None]
+                
+                if len(values) > 1:
+                    cv = np.std(values) / np.mean(values)  # 변동계수
+                    target_variability[metric] = {
+                        'coefficient_of_variation': cv,
+                        'stability': 'high' if cv < 0.1 else 'medium' if cv < 0.2 else 'low'
+                    }
+        
+        variability[target] = target_variability
+    
+    return variability
 
 
 def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame, 
@@ -208,8 +487,11 @@ def print_evaluation_summary(all_metrics: Dict[str, Any], feature_validation_res
             logger.info(f"  Recall: {metrics['recall']:.4f}")
             logger.info(f"  F1-Score: {metrics['f1']:.4f}")
             logger.info(f"  Accuracy: {metrics['accuracy']:.4f}")
-            if 'roc_auc' in metrics:
+            logger.info(f"  Balanced Accuracy: {metrics['balanced_accuracy']:.4f}")
+            if 'roc_auc' in metrics and metrics['roc_auc'] is not None:
                 logger.info(f"  ROC-AUC: {metrics['roc_auc']:.4f}")
+            if 'pr_auc' in metrics and metrics['pr_auc'] is not None:
+                logger.info(f"  PR-AUC: {metrics['pr_auc']:.4f}")
             logger.info(f"  Positive Ratio: {metrics['positive_ratio']:.4f}")
     
     # 피처 검증 결과 출력
@@ -367,6 +649,194 @@ def create_regression_plot(y_true: pd.Series, y_pred: pd.Series,
         logger.warning("matplotlib이 설치되지 않아 회귀 플롯을 생성할 수 없습니다.")
 
 
+def evaluate_with_advanced_metrics(y_true: pd.Series, y_pred: pd.Series, y_pred_proba: np.ndarray,
+                                 target_name: str, config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    고급 평가 지표들을 포함한 종합 평가 수행
+    
+    Args:
+        y_true: 실제 값
+        y_pred: 예측 값
+        y_pred_proba: 예측 확률
+        target_name: 타겟 이름
+        config: 설정 딕셔너리
+        
+    Returns:
+        모든 평가 결과
+    """
+    if config is None:
+        config = {}
+    
+    # 기본 분류 지표 계산
+    basic_metrics = calculate_classification_metrics(y_true, y_pred, y_pred_proba)
+    
+    results = {
+        'target_name': target_name,
+        'basic_metrics': basic_metrics,
+        'advanced_metrics': {}
+    }
+    
+    # 고급 평가 지표들 계산
+    if config.get('advanced_metrics', {}).get('enable_precision_recall_curve', True):
+        try:
+            pr_curve = calculate_precision_recall_curve(y_true, y_pred_proba)
+            results['advanced_metrics']['precision_recall_curve'] = pr_curve
+        except Exception as e:
+            logger.warning(f"PR Curve 계산 실패: {e}")
+    
+    if config.get('advanced_metrics', {}).get('enable_roc_curve', True):
+        try:
+            roc_pr_comparison = compare_roc_vs_pr_auc(y_true, y_pred_proba)
+            results['advanced_metrics']['roc_pr_comparison'] = roc_pr_comparison
+        except Exception as e:
+            logger.warning(f"ROC vs PR-AUC 비교 실패: {e}")
+    
+    if config.get('advanced_metrics', {}).get('enable_f1_threshold_optimization', True):
+        try:
+            f1_config = config.get('advanced_metrics', {}).get('f1_threshold_optimization', {})
+            threshold_range = f1_config.get('threshold_range', [0.1, 0.9])
+            step_size = f1_config.get('step_size', 0.05)
+            
+            thresholds = np.arange(threshold_range[0], threshold_range[1] + step_size, step_size)
+            f1_optimization = optimize_f1_threshold(y_true, y_pred_proba, thresholds)
+            results['advanced_metrics']['f1_threshold_optimization'] = f1_optimization
+        except Exception as e:
+            logger.warning(f"F1 임계값 최적화 실패: {e}")
+    
+    return results
+
+
+def create_comprehensive_evaluation_report(all_metrics: Dict[str, Any], 
+                                         fold_results: List[Dict[str, Any]] = None,
+                                         config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    종합적인 평가 리포트 생성
+    
+    Args:
+        all_metrics: 모든 성능 지표
+        fold_results: 폴드별 결과 (선택사항)
+        config: 설정 딕셔너리
+        
+    Returns:
+        종합 평가 리포트
+    """
+    if config is None:
+        config = {}
+    
+    report = {
+        'summary': all_metrics,
+        'fold_analysis': {},
+        'recommendations': []
+    }
+    
+    # 폴드 분석 수행
+    if fold_results and config.get('advanced_metrics', {}).get('enable_fold_analysis', True):
+        try:
+            # 폴드별 성능 분포 분석
+            fold_analysis = analyze_fold_performance_distribution(fold_results)
+            report['fold_analysis']['performance_distribution'] = fold_analysis
+            
+            # 폴드 간 변동성 분석
+            fold_variability = analyze_fold_variability(fold_results)
+            report['fold_analysis']['variability'] = fold_variability
+            
+            # 신뢰구간 계산
+            if config.get('advanced_metrics', {}).get('fold_analysis', {}).get('calculate_confidence_intervals', True):
+                confidence_level = config.get('advanced_metrics', {}).get('fold_analysis', {}).get('confidence_level', 0.95)
+                
+                for target in fold_results[0].get('metrics', {}).keys():
+                    for metric in ['precision', 'recall', 'f1', 'accuracy', 'balanced_accuracy']:
+                        if metric in fold_results[0]['metrics'][target]:
+                            values = [fold['metrics'][target].get(metric, 0) for fold in fold_results]
+                            values = [v for v in values if v is not None]
+                            
+                            if len(values) > 1:
+                                ci = calculate_confidence_intervals(values, confidence_level)
+                                if 'confidence_intervals' not in report['fold_analysis']:
+                                    report['fold_analysis']['confidence_intervals'] = {}
+                                if target not in report['fold_analysis']['confidence_intervals']:
+                                    report['fold_analysis']['confidence_intervals'][target] = {}
+                                report['fold_analysis']['confidence_intervals'][target][metric] = ci
+                                
+        except Exception as e:
+            logger.warning(f"폴드 분석 실패: {e}")
+    
+    # 권장사항 생성
+    recommendations = []
+    
+    for target, target_info in all_metrics.items():
+        if target_info['type'] == 'classification':
+            metrics = target_info['metrics']
+            
+            # 불균형 데이터 관련 권장사항
+            if metrics.get('positive_ratio', 0) < 0.1:
+                recommendations.append(f"{target}: 극도 불균형 데이터 (양성 비율: {metrics['positive_ratio']:.3f}). "
+                                    "Focal Loss나 SMOTE 사용을 고려하세요.")
+            
+            # 성능 관련 권장사항
+            if metrics.get('f1', 0) < 0.3:
+                recommendations.append(f"{target}: 낮은 F1-score ({metrics['f1']:.3f}). "
+                                    "모델 튜닝이나 피처 엔지니어링이 필요합니다.")
+            
+            if metrics.get('balanced_accuracy', 0) < 0.6:
+                recommendations.append(f"{target}: 낮은 Balanced Accuracy ({metrics['balanced_accuracy']:.3f}). "
+                                    "클래스 불균형 처리가 필요합니다.")
+    
+    report['recommendations'] = recommendations
+    
+    return report
+
+
+def save_advanced_evaluation_plots(y_true: pd.Series, y_pred: pd.Series, y_pred_proba: np.ndarray,
+                                 target_name: str, config: Dict[str, Any] = None):
+    """
+    고급 평가 플롯들을 생성하고 저장
+    
+    Args:
+        y_true: 실제 값
+        y_pred: 예측 값
+        y_pred_proba: 예측 확률
+        target_name: 타겟 이름
+        config: 설정 딕셔너리
+    """
+    if config is None:
+        config = {}
+    
+    plots_config = config.get('evaluation', {})
+    save_plots = plots_config.get('save_plots', True)
+    plots_path = plots_config.get('plots_save_path', 'evaluation_plots/')
+    
+    if not save_plots:
+        return
+    
+    # 디렉토리 생성
+    plots_path = Path(plots_path)
+    plots_path.mkdir(parents=True, exist_ok=True)
+    
+    # 혼동 행렬 저장
+    try:
+        cm_path = plots_path / f"{target_name}_confusion_matrix.png"
+        create_confusion_matrix_plot(y_true, y_pred, target_name, str(cm_path))
+    except Exception as e:
+        logger.warning(f"혼동 행렬 저장 실패: {e}")
+    
+    # PR Curve 저장
+    if plots_config.get('advanced_metrics', {}).get('enable_precision_recall_curve', True):
+        try:
+            pr_path = plots_path / f"{target_name}_precision_recall_curve.png"
+            create_precision_recall_plot(y_true, y_pred_proba, target_name, str(pr_path))
+        except Exception as e:
+            logger.warning(f"PR Curve 저장 실패: {e}")
+    
+    # ROC Curve 저장
+    if plots_config.get('advanced_metrics', {}).get('enable_roc_curve', True):
+        try:
+            roc_path = plots_path / f"{target_name}_roc_curve.png"
+            create_roc_curve_plot(y_true, y_pred_proba, target_name, str(roc_path))
+        except Exception as e:
+            logger.warning(f"ROC Curve 저장 실패: {e}")
+
+
 def main():
     """
     테스트용 메인 함수
@@ -384,14 +854,62 @@ def main():
     for metric, value in reg_metrics.items():
         logger.info(f"  {metric}: {value:.4f}")
     
-    # 분류 테스트
-    y_true_clf = np.random.choice([0, 1], n_samples, p=[0.8, 0.2])
-    y_pred_clf = np.random.choice([0, 1], n_samples, p=[0.8, 0.2])
+    # 분류 테스트 (불균형 데이터 시뮬레이션)
+    y_true_clf = np.random.choice([0, 1], n_samples, p=[0.9, 0.1])  # 10% 양성 클래스
+    y_pred_proba = np.random.beta(2, 8, n_samples)  # 불균형 예측 확률
+    y_pred_clf = (y_pred_proba > 0.5).astype(int)
     
-    clf_metrics = calculate_classification_metrics(pd.Series(y_true_clf), pd.Series(y_pred_clf))
+    clf_metrics = calculate_classification_metrics(pd.Series(y_true_clf), pd.Series(y_pred_clf), y_pred_proba)
     logger.info("분류 메트릭 테스트:")
     for metric, value in clf_metrics.items():
         logger.info(f"  {metric}: {value:.4f}")
+    
+    # 고급 평가 지표 테스트
+    logger.info("\n=== 고급 평가 지표 테스트 ===")
+    
+    # PR Curve 테스트
+    pr_curve = calculate_precision_recall_curve(pd.Series(y_true_clf), y_pred_proba)
+    logger.info(f"PR-AUC: {pr_curve['pr_auc']:.4f}")
+    
+    # ROC vs PR-AUC 비교
+    roc_pr_comparison = compare_roc_vs_pr_auc(pd.Series(y_true_clf), y_pred_proba)
+    logger.info(f"ROC-AUC: {roc_pr_comparison['roc_auc']:.4f}")
+    logger.info(f"PR-AUC: {roc_pr_comparison['pr_auc']:.4f}")
+    
+    # F1 임계값 최적화
+    f1_optimization = optimize_f1_threshold(pd.Series(y_true_clf), y_pred_proba)
+    logger.info(f"최적 F1 임계값: {f1_optimization['best_threshold']:.3f}")
+    logger.info(f"최적 F1-Score: {f1_optimization['best_f1_score']:.4f}")
+    
+    # 신뢰구간 테스트
+    test_metrics = [0.75, 0.78, 0.72, 0.80, 0.76]
+    ci = calculate_confidence_intervals(test_metrics, 0.95)
+    logger.info(f"신뢰구간 (95%): {ci['lower']:.4f} - {ci['upper']:.4f}")
+    
+    # 종합 평가 테스트
+    config = {
+        'advanced_metrics': {
+            'enable_precision_recall_curve': True,
+            'enable_roc_curve': True,
+            'enable_f1_threshold_optimization': True,
+            'f1_threshold_optimization': {
+                'threshold_range': [0.1, 0.9],
+                'step_size': 0.05
+            }
+        }
+    }
+    
+    advanced_results = evaluate_with_advanced_metrics(
+        pd.Series(y_true_clf), 
+        pd.Series(y_pred_clf), 
+        y_pred_proba, 
+        'test_target', 
+        config
+    )
+    
+    logger.info("고급 평가 결과:")
+    logger.info(f"  기본 F1-Score: {advanced_results['basic_metrics']['f1']:.4f}")
+    logger.info(f"  최적 F1-Score: {advanced_results['advanced_metrics']['f1_threshold_optimization']['best_f1_score']:.4f}")
     
     logger.info("평가 모듈 테스트 완료!")
 

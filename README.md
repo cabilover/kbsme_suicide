@@ -20,14 +20,20 @@ kbsmc_suicide/
 │   ├── preprocessing.py              # 전처리 파이프라인
 │   ├── feature_engineering.py        # 피처 엔지니어링
 │   ├── models/
-│   │   └── xgboost_model.py          # XGBoost 모델 클래스 (안정화 완료)
+│   │   ├── xgboost_model.py          # XGBoost 모델 클래스 (안정화 완료)
+│   │   └── loss_functions.py         # 손실 함수 모듈 (Focal Loss 포함)
 │   ├── training.py                   # 훈련 파이프라인 (품질 개선 완료)
-│   ├── evaluation.py                 # 평가 모듈
+│   ├── evaluation.py                 # 평가 모듈 (고급 평가 기능 포함)
+│   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝 (Optuna 기반)
 │   └── reference/                    # 참고 자료
 ├── configs/
-│   └── default_config.yaml           # 실험 설정 (일관성 확보)
+│   ├── default_config.yaml           # 실험 설정 (일관성 확보)
+│   ├── focal_loss_config.yaml        # Focal Loss 실험 설정
+│   ├── resampling_config.yaml        # 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 설정
+│   └── hyperparameter_tuning.yaml    # 하이퍼파라미터 튜닝 설정
 ├── scripts/
-│   └── run_experiment.py             # 실험 실행 스크립트
+│   ├── run_experiment.py             # 실험 실행 스크립트 (고급 평가 및 리샘플링 비교 포함)
+│   └── run_hyperparameter_tuning.py  # 하이퍼파라미터 튜닝 실행 스크립트 (리샘플링 비교 포함)
 ├── requirements.txt                  # 필요한 패키지 목록 (XGBoost 1.7.6 고정)
 ├── projectplan                       # 프로젝트 계획서
 ├── PROJECT_PROGRESS.md              # 프로젝트 진행 상황 문서
@@ -75,7 +81,41 @@ python scripts/run_experiment.py --config configs/default_config.yaml --data dat
 - 교차 검증 (다양한 전략 지원)
 - 전처리 및 피처 엔지니어링
 - XGBoost 모델 학습 및 평가 (Early Stopping 지원)
+- 고급 평가 지표 계산 (Balanced Accuracy, Precision-Recall Curve 등)
 - MLflow를 통한 실험 결과 로깅
+
+### 하이퍼파라미터 튜닝 실행
+```bash
+python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparameter_tuning.yaml --nrows 1000
+```
+
+이 명령어는 다음 작업을 수행합니다:
+- Optuna 기반 하이퍼파라미터 최적화
+- Focal Loss 파라미터 튜닝 (alpha, gamma)
+- 교차 검증을 통한 성능 평가
+- 고급 평가 지표 계산 및 로깅
+- 최적 모델 저장 및 시각화 생성
+
+### 리샘플링 실험 실행
+```bash
+# 리샘플링 기법 비교 실험
+python scripts/run_experiment.py --resampling-comparison --nrows 1000
+
+# 특정 리샘플링 기법들만 비교
+python scripts/run_experiment.py --resampling-comparison --resampling-methods smote borderline_smote adasyn --nrows 1000
+
+# 리샘플링 하이퍼파라미터 튜닝 비교
+python scripts/run_hyperparameter_tuning.py --resampling-comparison --nrows 1000
+
+# 통합 설정 파일 사용 (기본값)
+python scripts/run_hyperparameter_tuning.py --nrows 1000
+```
+
+이 명령어들은 다음 작업을 수행합니다:
+- 다양한 리샘플링 기법 비교 (SMOTE, Borderline SMOTE, ADASYN, 언더샘플링, 하이브리드)
+- 각 리샘플링 기법별 하이퍼파라미터 최적화
+- MLflow를 통한 실험 추적 및 비교
+- 최고 성능 기법 자동 선별
 
 ## 생성되는 파일들
 
@@ -89,7 +129,13 @@ python scripts/run_experiment.py --config configs/default_config.yaml --data dat
 ### 실험 결과 (MLflow)
 - **실험 파라미터**: 설정 파일의 모든 파라미터
 - **폴드별 메트릭**: 각 교차 검증 폴드의 성능 지표
+- **고급 평가 지표**: Balanced Accuracy, Precision-Recall Curve, ROC-AUC vs PR-AUC 비교
 - **모델 아티팩트**: 학습된 모델 및 결과 요약
+
+### 튜닝 결과 (models/)
+- **best_tuned_model.joblib**: 최적 파라미터로 학습된 모델
+- **optuna_study.pkl**: Optuna study 객체
+- **optimization_plots.png**: 튜닝 과정 시각화
 
 ## 주요 특징
 
@@ -107,6 +153,29 @@ python scripts/run_experiment.py --config configs/default_config.yaml --data dat
 - **극도 불균형**: 자살 시도 0.12% (849:1)
 - **시계열 다양성**: 개인별 시계열 길이 1-10년
 - **데이터 품질**: 일부 이상치 및 결측치 존재
+
+### 불균형 데이터 처리 및 Focal Loss 지원
+- **Focal Loss 통합**: XGBoost 모델에 Focal Loss를 옵션으로 통합, 극단적 불균형 데이터(예: 자살 시도 849:1)에서 소수 클래스 예측 성능 개선 시도
+- **Focal Loss 파라미터 튜닝**: Optuna 기반 하이퍼파라미터 튜닝에서 `use_focal_loss`, `focal_loss_alpha`, `focal_loss_gamma` 등 Focal Loss 관련 파라미터 탐색 가능
+- **튜닝/실험 파이프라인 완전 호환**: `run_experiment.py`와 `run_hyperparameter_tuning.py` 모두에서 Focal Loss 및 관련 파라미터가 정상적으로 반영 및 실험됨
+- **설정 파일 예시**: `configs/default_config.yaml`, `configs/focal_loss_config.yaml`, `configs/hyperparameter_tuning.yaml`에서 Focal Loss 옵션 및 탐색 범위 지정 가능
+
+### 고급 평가 지표 및 분석 기능
+- **Balanced Accuracy**: 클래스 불균형을 고려한 정확도 측정
+- **Precision-Recall Curve**: 불균형 데이터에 적합한 성능 평가
+- **ROC-AUC vs PR-AUC 비교**: 균형/불균형 데이터에서의 성능 차이 분석
+- **F1-Score 임계값 최적화**: 최적 분류 임계값 자동 탐색
+- **폴드별 성능 변동성 분석**: 교차 검증 안정성 평가
+- **클래스별 샘플 수 통계**: 양성/음성 샘플 분포 및 비율 분석
+- **MLflow 통합 로깅**: 모든 고급 지표가 MLflow에 자동 로깅되어 실험 추적 강화
+
+### 리샘플링 실험 및 하이퍼파라미터 튜닝 통합
+- **리샘플링 기법 비교**: SMOTE, Borderline SMOTE, ADASYN, 언더샘플링, 하이브리드 기법 비교
+- **기법별 하이퍼파라미터 튜닝**: 각 리샘플링 기법에 대해 별도로 최적 하이퍼파라미터 탐색
+- **통합 설정 파일**: `configs/resampling_config.yaml`에서 리샘플링 실험과 하이퍼파라미터 튜닝 설정 통합 관리
+- **자동 성능 비교**: F1-Score 기준으로 최고 성능 기법 자동 선별
+- **MLflow 중첩 실행**: 각 리샘플링 기법별로 별도 MLflow run으로 실험 추적
+- **사용자 인터페이스**: `--resampling-comparison`, `--resampling-methods` 인자로 쉬운 실험 제어
 
 ## 실험 관리 및 데이터 분할 전략
 
@@ -152,6 +221,7 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 - **다중 출력 지원**: 회귀(점수) + 분류(자살 여부)
 - **Early Stopping**: 과적합 방지 (XGBoost 1.7.6 호환)
 - **불균형 처리**: scale_pos_weight 자동 계산
+- **Focal Loss 지원**: 극단적 불균형 데이터 처리를 위한 Focal Loss 옵션
 - **피처 중요도**: 모델 해석을 위한 중요도 추출
 - **파라미터 전달 안정화**: 모델 생성 시와 fit 시 파라미터 분리 관리
 
@@ -159,12 +229,28 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 - **교차 검증**: 다양한 전략 지원
 - **데이터 유출 방지**: 폴드별 전처리 파이프라인 재학습
 - **타겟 결측치 자동 처리**: 학습/검증 데이터에서 결측치가 있는 샘플 자동 제거
-- **성능 지표**: MAE, RMSE, R² (회귀) / Precision, Recall, F1, ROC-AUC (분류)
+- **기본 성능 지표**: MAE, RMSE, R² (회귀) / Precision, Recall, F1, ROC-AUC (분류)
+- **고급 평가 지표**: Balanced Accuracy, Precision-Recall Curve, 최적 임계값 탐색
 - **MLflow 로깅**: 실험 추적 및 결과 저장
+
+### 하이퍼파라미터 튜닝
+- **Optuna 기반 최적화**: 다양한 샘플러(TPE, Random, Grid Search) 지원
+- **Focal Loss 파라미터 튜닝**: alpha, gamma 파라미터 탐색
+- **교차 검증 통합**: 튜닝 과정에서 교차 검증을 통한 안정적 성능 평가
+- **고급 평가 지표**: 튜닝 과정에서도 모든 고급 지표 계산 및 로깅
+- **시각화 생성**: 최적화 과정, 파라미터 중요도, 병렬 좌표 플롯 등
 
 ## 코드 품질 및 안정성
 
 ### 최근 개선사항
+- **리샘플링 실험 통합**: 다양한 리샘플링 기법 비교 및 하이퍼파라미터 튜닝 통합 완성
+- **통합 설정 파일**: `configs/resampling_config.yaml`에서 리샘플링 실험과 하이퍼파라미터 튜닝 설정 통합 관리
+- **사용자 인터페이스 개선**: 리샘플링 실험을 위한 명령행 인자 및 도움말 추가
+- **고급 평가 기능 완전 통합**: Balanced Accuracy, Precision-Recall Curve, 최적 임계값 탐색 등 불균형 데이터에 특화된 평가 지표 완전 구현
+- **MLflow 통합 강화**: 모든 고급 평가 지표가 MLflow에 자동 로깅되어 실험 추적 및 비교 분석 가능
+- **Focal Loss 실험/튜닝 완전 지원**: XGBoost 모델 및 하이퍼파라미터 튜닝 파이프라인에서 Focal Loss 및 관련 파라미터가 완전하게 지원됨 (설정 파일, 실험, 튜닝, 모델 저장까지 일관성 보장)
+- **Optuna 튜닝 파이프라인 개선**: Focal Loss 파라미터도 탐색 가능하도록 파라미터 구조 개선
+- **설정 파일 구조 개선**: Focal Loss 옵션 및 파라미터가 config와 tuning config에 명확히 반영
 - **XGBoost 버전 고정**: 1.7.6 버전으로 안정화하여 early_stopping_rounds 호환성 확보
 - **모델 파라미터 전달 개선**: fit 메서드에서 파라미터 누락 문제 해결
 - **임포트 구조 정리**: 중복 임포트 제거 및 일관된 모듈 구조 적용
@@ -182,12 +268,17 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 - **교차 검증 성공**: 5개 폴드에서 모두 정상 학습 완료
 - **Early Stopping 정상 동작**: 과적합 방지를 위한 조기 종료 기능 활성화
 - **극도 불균형 데이터 처리**: 자살 시도 예측의 849:1 불균형 상황에서 안정적 동작
-- **정확도**: 99.87% (불균형 데이터 특성 반영)
-- **재현율/정밀도/F1**: 0.0 (소수 클래스 예측 어려움)
+- **기본 지표**:
+  - 정확도: 99.87% (불균형 데이터 특성 반영)
+  - 재현율/정밀도/F1: 0.0 (소수 클래스 예측 어려움)
+- **고급 지표**:
+  - Balanced Accuracy: 0.5011 ± 0.0009
+  - Positive Ratio: 0.0012 ± 0.00004
+  - 폴드별 성능 변동성: 낮음 (안정적 성능)
 
 ## 다음 단계
-현재 Phase 5-2 (기준 모델 구축 및 ML 파이프라인 개발 + 코드 품질 개선 + 환경 호환성 완성) 완료 ✅
-→ Phase 5-3 (고급 모델 개발 및 성능 최적화) 진행 예정
+현재 Phase 5-3 (불균형 데이터 처리 및 Focal Loss 통합 + 고급 평가 기능 통합) 완료 ✅
+→ Phase 5-4 (고급 모델 개발 및 성능 최적화) 진행 예정
 
 ## 참고 문서
 - `PROJECT_PROGRESS.md`: 상세한 진행 상황 및 분석 결과
@@ -195,6 +286,6 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 
 ## 기술 스택
 - **Python**: 3.10.18
-- **주요 라이브러리**: pandas, numpy<2, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6
+- **주요 라이브러리**: pandas, numpy<2, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6, optuna
 - **환경 관리**: conda
 - **코드 품질**: PEP 8 준수, 모듈화, 문서화, 안정성 확보 

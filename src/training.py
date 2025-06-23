@@ -233,7 +233,7 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
     Returns:
         교차 검증 결과
     """
-    from src.preprocessing import fit_preprocessing_pipeline, transform_data
+    from src.preprocessing import fit_preprocessing_pipeline, transform_data, apply_resampling
     from src.feature_engineering import fit_feature_engineering, transform_features, get_feature_columns, get_target_columns_from_data
     
     logger.info("교차 검증 시작")
@@ -282,8 +282,25 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         X_val = val_engineered[feature_columns]
         y_val = val_engineered[target_columns]
         
-        # 모델 학습
-        model, training_results = train_model(X_train, y_train, X_val, y_val, config, fold_info)
+        # === 리샘플링 적용 (훈련 데이터에만) ===
+        # 폴드 정보에 폴드 번호 추가
+        fold_info_with_num = fold_info.copy()
+        fold_info_with_num['fold_num'] = fold_count
+        
+        # 훈련 데이터에만 리샘플링 적용 (검증 데이터는 원본 유지)
+        X_train_resampled, y_train_resampled = apply_resampling(
+            X_train, y_train, config, fold_info_with_num
+        )
+        
+        # 리샘플링 결과 로깅
+        original_dist = y_train.value_counts().to_dict()
+        resampled_dist = y_train_resampled.value_counts().to_dict()
+        logger.info(f"폴드 {fold_count} - 리샘플링 전 클래스 분포: {original_dist}")
+        logger.info(f"폴드 {fold_count} - 리샘플링 후 클래스 분포: {resampled_dist}")
+        # === END ===
+        
+        # 모델 학습 (리샘플링된 데이터 사용)
+        model, training_results = train_model(X_train_resampled, y_train_resampled, X_val, y_val, config, fold_info)
         
         # Early Stopping 사용 여부 추적
         if training_results.get('early_stopping_used'):
@@ -303,7 +320,10 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
             'training_results': training_results,
             'model': model,
             'preprocessor': preprocessor,
-            'feature_info': feature_info
+            'feature_info': feature_info,
+            'resampling_applied': config.get('resampling', {}).get('enabled', False),
+            'original_class_dist': original_dist,
+            'resampled_class_dist': resampled_dist
         })
         
         all_fold_metrics.append(training_results['val_metrics'])
@@ -335,9 +355,17 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         for metric_name, value in aggregate_metrics.items():
             mlflow.log_metric(f"cv_{metric_name}", value)
         
+        # 리샘플링 사용 여부 로깅
+        resampling_enabled = config.get('resampling', {}).get('enabled', False)
+        mlflow.log_param("resampling_enabled", resampling_enabled)
+        if resampling_enabled:
+            resampling_method = config.get('resampling', {}).get('method', 'unknown')
+            mlflow.log_param("resampling_method", resampling_method)
+        
         logger.info(f"교차 검증 완료: {fold_count}개 폴드")
         logger.info(f"집계 성능: {aggregate_metrics}")
         logger.info(f"최고 성능 폴드: {cv_results['best_fold']} (점수: {cv_results['best_score']:.4f})")
+        logger.info(f"리샘플링 사용: {resampling_enabled}")
     
     return cv_results
 

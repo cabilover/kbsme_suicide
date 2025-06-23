@@ -3,6 +3,7 @@
 실험 실행 메인 스크립트
 
 이 스크립트는 전체 ML 파이프라인을 실행하며, 데이터 분할부터 모델 학습 및 평가까지 포함합니다.
+리샘플링 실험 기능도 포함되어 있습니다.
 """
 
 import argparse
@@ -13,7 +14,7 @@ import mlflow
 import mlflow.sklearn
 import pandas as pd
 import yaml
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -106,6 +107,11 @@ def log_experiment_params(config: Dict[str, Any]):
         "early_stopping_rounds": xgboost_config['early_stopping_rounds'],
         "verbose": xgboost_config['verbose'],
         
+        # Focal Loss 파라미터
+        "use_focal_loss": xgboost_config.get('use_focal_loss', False),
+        "focal_loss_alpha": xgboost_config.get('focal_loss', {}).get('alpha', 0.25),
+        "focal_loss_gamma": xgboost_config.get('focal_loss', {}).get('gamma', 2.0),
+        
         # 파라미터 소스 추적
         "param_source": "config_file",
         "config_file_path": "configs/default_config.yaml"
@@ -120,6 +126,28 @@ def log_experiment_params(config: Dict[str, Any]):
         "model_save_path": config['training']['model_save_path']
     }
     
+    # 리샘플링 파라미터
+    resampling_config = config.get('resampling', {})
+    resampling_params = {
+        "resampling_enabled": resampling_config.get('enabled', False),
+        "resampling_method": resampling_config.get('method', 'none'),
+        "resampling_random_state": resampling_config.get('random_state', 42)
+    }
+    
+    # 리샘플링 기법별 파라미터
+    if resampling_config.get('enabled', False):
+        method = resampling_config.get('method', 'none')
+        if method == 'smote':
+            resampling_params['smote_k_neighbors'] = resampling_config.get('smote_k_neighbors', 5)
+        elif method == 'borderline_smote':
+            resampling_params['borderline_smote_k_neighbors'] = resampling_config.get('borderline_smote_k_neighbors', 5)
+        elif method == 'adasyn':
+            resampling_params['adasyn_k_neighbors'] = resampling_config.get('adasyn_k_neighbors', 5)
+        elif method == 'under_sampling':
+            resampling_params['under_sampling_strategy'] = resampling_config.get('under_sampling_strategy', 'random')
+        elif method == 'hybrid':
+            resampling_params['hybrid_strategy'] = resampling_config.get('hybrid_strategy', 'smote_tomek')
+    
     # 모든 파라미터 로깅
     all_params = {
         **data_split_params,
@@ -127,7 +155,8 @@ def log_experiment_params(config: Dict[str, Any]):
         **preprocessing_params,
         **feature_params,
         **model_params,
-        **training_params
+        **training_params,
+        **resampling_params
     }
     
     mlflow.log_params(all_params)
@@ -139,6 +168,113 @@ def log_experiment_params(config: Dict[str, Any]):
         if key.startswith('param_source') or key.startswith('config_file'):
             continue
         logger.info(f"  {key}: {value}")
+    
+    # 리샘플링 파라미터 출력
+    if resampling_params['resampling_enabled']:
+        logger.info("=== 리샘플링 파라미터 확인 ===")
+        for key, value in resampling_params.items():
+            logger.info(f"  {key}: {value}")
+
+
+def run_resampling_comparison_experiment(train_val_df: pd.DataFrame, test_df: pd.DataFrame, 
+                                       config: Dict[str, Any], resampling_methods: List[str]) -> Dict[str, Any]:
+    """
+    다양한 리샘플링 기법을 비교하는 실험을 실행합니다.
+    
+    Args:
+        train_val_df: 훈련/검증 데이터
+        test_df: 테스트 데이터
+        config: 기본 설정
+        resampling_methods: 테스트할 리샘플링 기법 리스트
+        
+    Returns:
+        비교 실험 결과
+    """
+    logger.info("=== 리샘플링 비교 실험 시작 ===")
+    
+    comparison_results = {
+        'methods': {},
+        'best_method': None,
+        'best_score': -np.inf,
+        'summary': {}
+    }
+    
+    for method in resampling_methods:
+        logger.info(f"\n--- {method.upper()} 실험 시작 ---")
+        
+        # 설정 복사 및 리샘플링 설정 업데이트
+        method_config = config.copy()
+        method_config['resampling'] = {
+            'enabled': method != 'none',
+            'method': method if method != 'none' else 'smote',  # none이 아닌 경우에만 설정
+            'random_state': 42
+        }
+        
+        # 리샘플링 기법별 파라미터 설정
+        if method == 'smote':
+            method_config['resampling']['smote_k_neighbors'] = 5
+        elif method == 'borderline_smote':
+            method_config['resampling']['borderline_smote_k_neighbors'] = 5
+        elif method == 'adasyn':
+            method_config['resampling']['adasyn_k_neighbors'] = 5
+        elif method == 'under_sampling':
+            method_config['resampling']['under_sampling_strategy'] = 'random'
+        elif method == 'hybrid':
+            method_config['resampling']['hybrid_strategy'] = 'smote_tomek'
+        
+        # MLflow 중첩 실행
+        with mlflow.start_run(run_name=f"resampling_{method}", nested=True):
+            # 실험 파라미터 로깅
+            log_experiment_params(method_config)
+            
+            # 교차 검증 실행
+            cv_results = run_cross_validation(train_val_df, method_config)
+            
+            if not cv_results or not cv_results.get('fold_results'):
+                logger.warning(f"{method} 실험 실패")
+                continue
+            
+            # 최종 테스트 세트 평가
+            final_metrics = evaluate_final_model(test_df, cv_results, method_config)
+            
+            # 결과 수집
+            method_results = {
+                'cv_results': cv_results,
+                'final_metrics': final_metrics,
+                'config': method_config
+            }
+            
+            comparison_results['methods'][method] = method_results
+            
+            # 주요 성능 지표 추출 (F1-Score 기준)
+            primary_metric = 'suicide_a_next_year_f1'
+            if final_metrics and primary_metric in str(final_metrics):
+                # final_metrics에서 해당 지표 찾기
+                score = 0.0
+                for target, target_info in final_metrics.items():
+                    if 'f1' in target_info.get('metrics', {}):
+                        score = target_info['metrics']['f1']
+                        break
+                
+                if score > comparison_results['best_score']:
+                    comparison_results['best_score'] = score
+                    comparison_results['best_method'] = method
+            
+            logger.info(f"{method} 실험 완료")
+    
+    # 비교 결과 요약
+    logger.info("\n=== 리샘플링 비교 결과 요약 ===")
+    for method, results in comparison_results['methods'].items():
+        final_metrics = results['final_metrics']
+        if final_metrics:
+            for target, target_info in final_metrics.items():
+                if 'f1' in target_info.get('metrics', {}):
+                    f1_score = target_info['metrics']['f1']
+                    logger.info(f"{method}: {target} F1-Score = {f1_score:.4f}")
+    
+    logger.info(f"최고 성능 기법: {comparison_results['best_method']} (F1-Score: {comparison_results['best_score']:.4f})")
+    
+    return comparison_results
 
 
 def evaluate_final_model(test_df: pd.DataFrame, cv_results: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -155,7 +291,12 @@ def evaluate_final_model(test_df: pd.DataFrame, cv_results: Dict[str, Any], conf
     """
     from src.preprocessing import transform_data
     from src.feature_engineering import transform_features, get_feature_columns, get_target_columns, get_target_columns_from_data
-    from src.evaluation import calculate_all_metrics, print_evaluation_summary
+    from src.evaluation import (
+        calculate_all_metrics, print_evaluation_summary,
+        evaluate_with_advanced_metrics, create_comprehensive_evaluation_report,
+        save_advanced_evaluation_plots, analyze_fold_performance_distribution,
+        calculate_confidence_intervals, analyze_fold_variability
+    )
     
     logger.info("=== 최종 테스트 세트 평가 ===")
     
@@ -190,8 +331,90 @@ def evaluate_final_model(test_df: pd.DataFrame, cv_results: Dict[str, Any], conf
     if hasattr(best_model, 'predict_proba'):
         test_proba = best_model.predict_proba(X_test)
     
-    # 평가 지표 계산
+    # 기본 평가 지표 계산
     final_metrics = calculate_all_metrics(y_test, test_predictions, test_proba, config)
+    
+    # 고급 평가 기능 수행
+    logger.info("=== 고급 평가 분석 ===")
+    
+    # 폴드별 성능 분석
+    if cv_results.get('fold_results'):
+        fold_results = cv_results['fold_results']
+        
+        # 폴드별 성능 분포 분석
+        performance_distribution = analyze_fold_performance_distribution(fold_results)
+        logger.info("폴드별 성능 분포 분석:")
+        for target, metrics in performance_distribution.items():
+            logger.info(f"\n{target}:")
+            for metric, stats in metrics.items():
+                logger.info(f"  {metric}: {stats['mean']:.4f} ± {stats['std']:.4f}")
+        
+        # 폴드 간 변동성 분석
+        variability = analyze_fold_variability(fold_results)
+        logger.info("\n폴드 간 변동성 분석:")
+        for target, metrics in variability.items():
+            logger.info(f"\n{target}:")
+            for metric, var_info in metrics.items():
+                stability = var_info['stability']
+                cv = var_info['coefficient_of_variation']
+                logger.info(f"  {metric}: {stability} (CV: {cv:.3f})")
+        
+        # 신뢰구간 계산
+        logger.info("\n신뢰구간 분석:")
+        for target in fold_results[0].get('metrics', {}).keys():
+            for metric in ['precision', 'recall', 'f1', 'accuracy', 'balanced_accuracy']:
+                if metric in fold_results[0]['metrics'][target]:
+                    values = [fold['metrics'][target].get(metric, 0) for fold in fold_results]
+                    values = [v for v in values if v is not None]
+                    
+                    if len(values) > 1:
+                        ci = calculate_confidence_intervals(values, 0.95)
+                        logger.info(f"  {target}_{metric}: {ci['mean']:.4f} ({ci['lower']:.4f} - {ci['upper']:.4f})")
+        
+        # MLflow에 고급 메트릭 로깅
+        if performance_distribution:
+            for target, metrics in performance_distribution.items():
+                for metric, stats in metrics.items():
+                    mlflow.log_metric(f"fold_analysis_{target}_{metric}_mean", stats['mean'])
+                    mlflow.log_metric(f"fold_analysis_{target}_{metric}_std", stats['std'])
+                    mlflow.log_metric(f"fold_analysis_{target}_{metric}_min", stats['min'])
+                    mlflow.log_metric(f"fold_analysis_{target}_{metric}_max", stats['max'])
+        
+        # 변동성 메트릭 로깅
+        if variability:
+            for target, metrics in variability.items():
+                for metric, var_info in metrics.items():
+                    mlflow.log_metric(f"fold_variability_{target}_{metric}_cv", var_info['coefficient_of_variation'])
+    
+    # 종합 평가 리포트 생성
+    comprehensive_report = create_comprehensive_evaluation_report(
+        final_metrics, 
+        cv_results.get('fold_results'),
+        config
+    )
+    
+    # 권장사항 출력
+    if comprehensive_report.get('recommendations'):
+        logger.info("\n=== 모델 개선 권장사항 ===")
+        for i, recommendation in enumerate(comprehensive_report['recommendations'], 1):
+            logger.info(f"{i}. {recommendation}")
+    
+    # 고급 평가 플롯 저장
+    if config.get('evaluation', {}).get('save_plots', True):
+        for target in target_columns:
+            if target in y_test.columns and target in test_predictions.columns:
+                try:
+                    # 확률 예측이 있는 경우에만 플롯 생성
+                    if test_proba is not None and target in test_proba:
+                        save_advanced_evaluation_plots(
+                            y_test[target], 
+                            test_predictions[target], 
+                            test_proba[target],
+                            target, 
+                            config
+                        )
+                except Exception as e:
+                    logger.warning(f"{target} 플롯 생성 실패: {e}")
     
     # 결과 출력
     print_evaluation_summary(
@@ -216,7 +439,8 @@ def evaluate_final_model(test_df: pd.DataFrame, cv_results: Dict[str, Any], conf
         "best_score": cv_results.get('best_score'),
         "test_metrics": final_metrics,
         "test_samples": len(test_df),
-        "test_ids_count": len(test_df[config['time_series']['id_column']].unique())
+        "test_ids_count": len(test_df[config['time_series']['id_column']].unique()),
+        "comprehensive_report": comprehensive_report
     }
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -227,7 +451,8 @@ def evaluate_final_model(test_df: pd.DataFrame, cv_results: Dict[str, Any], conf
     return final_metrics
 
 
-def run_full_experiment(config_path: str, data_path: str, nrows: int = None):
+def run_full_experiment(config_path: str, data_path: str, nrows: int = None, 
+                       resampling_comparison: bool = False, resampling_methods: List[str] = None):
     """
     전체 ML 파이프라인 실험을 실행합니다.
     
@@ -235,6 +460,8 @@ def run_full_experiment(config_path: str, data_path: str, nrows: int = None):
         config_path: 설정 파일 경로
         data_path: 데이터 파일 경로
         nrows: 테스트용으로 읽을 행 수 (None이면 전체)
+        resampling_comparison: 리샘플링 비교 실험 여부
+        resampling_methods: 비교할 리샘플링 기법 리스트
         
     Returns:
         bool: 실험 성공 여부
@@ -243,6 +470,7 @@ def run_full_experiment(config_path: str, data_path: str, nrows: int = None):
     config = load_config(config_path)
     
     # MLflow 실험 시작
+    experiment_name = "resampling_comparison" if resampling_comparison else "kbsmc_suicide_prediction"
     with mlflow.start_run(run_name="full_ml_pipeline") as parent_run:
         # 실험 파라미터 로깅
         log_experiment_params(config)
@@ -286,58 +514,78 @@ def run_full_experiment(config_path: str, data_path: str, nrows: int = None):
             "test_ratio_actual": splits_info['test_samples'] / splits_info['total_samples']
         })
         
-        # 4. 교차 검증 및 모델 학습
-        logger.info("=== 4단계: 교차 검증 및 모델 학습 ===")
-        cv_results = run_cross_validation(train_val_df, config)
-        
-        if not cv_results or not cv_results.get('fold_results'):
-            logger.error("교차 검증 실패!")
-            return False
-        
-        # 5. 최종 테스트 세트 평가
-        logger.info("=== 5단계: 최종 테스트 세트 평가 ===")
-        final_metrics = evaluate_final_model(test_df, cv_results, config)
-        
-        # 6. 결과 요약 및 로깅
-        logger.info("=== 6단계: 결과 요약 ===")
-        
-        # 집계 메트릭 로깅
-        aggregate_metrics = cv_results.get('aggregate_metrics', {})
-        for metric_name, value in aggregate_metrics.items():
-            mlflow.log_metric(f"final_{metric_name}", value)
-        
-        # 테스트 세트 정보를 아티팩트로 저장
-        test_set_info = {
-            "test_samples": len(test_df),
-            "test_ids_count": len(test_df[config['time_series']['id_column']].unique()),
-            "test_years_range": (
-                test_df[config['time_series']['year_column']].min(),
-                test_df[config['time_series']['year_column']].max()
-            ),
-            "note": "이 테스트 세트는 최종 모델 평가 시에만 사용됩니다."
-        }
-        
-        import json
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(test_set_info, f, indent=2, default=str)
-            mlflow.log_artifact(f.name, "test_set_info.json")
-        
-        # 7. 실험 완료
-        logger.info("=== 7단계: 실험 완료 ===")
-        logger.info("전체 ML 파이프라인 실험이 성공적으로 완료되었습니다.")
-        logger.info(f"생성된 폴드 수: {len(cv_results['fold_results'])}")
-        logger.info(f"테스트 세트 크기: {len(test_df):,} 행")
-        logger.info(f"최고 성능 폴드: {cv_results.get('best_fold', 'N/A')}")
-        
-        # 주요 성능 지표 출력
-        if aggregate_metrics:
-            logger.info("=== 주요 성능 지표 ===")
+        if resampling_comparison:
+            # 리샘플링 비교 실험
+            logger.info("=== 4단계: 리샘플링 비교 실험 ===")
+            if resampling_methods is None:
+                resampling_methods = ['none', 'smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid']
+            
+            comparison_results = run_resampling_comparison_experiment(
+                train_val_df, test_df, config, resampling_methods
+            )
+            
+            # 비교 결과 로깅
+            mlflow.log_param("resampling_comparison", True)
+            mlflow.log_param("resampling_methods", str(resampling_methods))
+            mlflow.log_param("best_resampling_method", comparison_results.get('best_method', 'none'))
+            mlflow.log_metric("best_resampling_score", comparison_results.get('best_score', 0.0))
+            
+            logger.info("리샘플링 비교 실험 완료")
+            return True
+        else:
+            # 일반 실험
+            # 4. 교차 검증 및 모델 학습
+            logger.info("=== 4단계: 교차 검증 및 모델 학습 ===")
+            cv_results = run_cross_validation(train_val_df, config)
+            
+            if not cv_results or not cv_results.get('fold_results'):
+                logger.error("교차 검증 실패!")
+                return False
+            
+            # 5. 최종 테스트 세트 평가
+            logger.info("=== 5단계: 최종 테스트 세트 평가 ===")
+            final_metrics = evaluate_final_model(test_df, cv_results, config)
+            
+            # 6. 결과 요약 및 로깅
+            logger.info("=== 6단계: 결과 요약 ===")
+            
+            # 집계 메트릭 로깅
+            aggregate_metrics = cv_results.get('aggregate_metrics', {})
             for metric_name, value in aggregate_metrics.items():
-                if 'mean' in metric_name:
-                    logger.info(f"{metric_name}: {value:.4f}")
-        
-        return True
+                mlflow.log_metric(f"final_{metric_name}", value)
+            
+            # 테스트 세트 정보를 아티팩트로 저장
+            test_set_info = {
+                "test_samples": len(test_df),
+                "test_ids_count": len(test_df[config['time_series']['id_column']].unique()),
+                "test_years_range": (
+                    test_df[config['time_series']['year_column']].min(),
+                    test_df[config['time_series']['year_column']].max()
+                ),
+                "note": "이 테스트 세트는 최종 모델 평가 시에만 사용됩니다."
+            }
+            
+            import json
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump(test_set_info, f, indent=2, default=str)
+                mlflow.log_artifact(f.name, "test_set_info.json")
+            
+            # 7. 실험 완료
+            logger.info("=== 7단계: 실험 완료 ===")
+            logger.info("전체 ML 파이프라인 실험이 성공적으로 완료되었습니다.")
+            logger.info(f"생성된 폴드 수: {len(cv_results['fold_results'])}")
+            logger.info(f"테스트 세트 크기: {len(test_df):,} 행")
+            logger.info(f"최고 성능 폴드: {cv_results.get('best_fold', 'N/A')}")
+            
+            # 주요 성능 지표 출력
+            if aggregate_metrics:
+                logger.info("=== 주요 성능 지표 ===")
+                for metric_name, value in aggregate_metrics.items():
+                    if 'mean' in metric_name:
+                        logger.info(f"{metric_name}: {value:.4f}")
+            
+            return True
 
 
 def main():
@@ -369,6 +617,18 @@ def main():
         default="kbsmc_suicide_prediction",
         help="MLflow 실험 이름"
     )
+    parser.add_argument(
+        "--resampling-comparison",
+        action="store_true",
+        help="리샘플링 기법 비교 실험 실행"
+    )
+    parser.add_argument(
+        "--resampling-methods",
+        nargs="+",
+        choices=['none', 'smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid'],
+        default=['none', 'smote', 'borderline_smote', 'adasyn'],
+        help="비교할 리샘플링 기법들"
+    )
     
     args = parser.parse_args()
     
@@ -382,13 +642,23 @@ def main():
         return False
     
     # MLflow 실험 설정
-    setup_mlflow_experiment(args.experiment_name)
+    experiment_name = "resampling_comparison" if args.resampling_comparison else args.experiment_name
+    setup_mlflow_experiment(experiment_name)
     
     # 실험 실행
-    success = run_full_experiment(args.config, args.data, args.nrows)
+    success = run_full_experiment(
+        args.config, 
+        args.data, 
+        args.nrows,
+        args.resampling_comparison,
+        args.resampling_methods
+    )
     
     if success:
-        logger.info("실험이 성공적으로 완료되었습니다.")
+        if args.resampling_comparison:
+            logger.info("리샘플링 비교 실험이 성공적으로 완료되었습니다.")
+        else:
+            logger.info("실험이 성공적으로 완료되었습니다.")
         logger.info("MLflow UI에서 결과를 확인하세요: mlflow ui")
         return True
     else:

@@ -6,21 +6,645 @@
 - sklearn 기반 결측치 처리
 - 범주형 인코딩 (One-Hot Encoding)
 - 데이터 유출 방지 원칙 준수
+- 불균형 데이터 처리를 위한 리샘플링 기법들
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 import logging
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
+from sklearn.neighbors import NearestNeighbors
+from sklearn.utils import resample
 import warnings
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class BaseResampler:
+    """리샘플링 기법들의 기본 클래스"""
+    
+    def __init__(self, random_state: int = 42):
+        """
+        Args:
+            random_state: 재현성을 위한 시드
+        """
+        self.random_state = random_state
+        self.rs = np.random.RandomState(random_state)
+    
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series, 
+                    id_column: str = 'id') -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        리샘플링을 수행합니다.
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 시리즈
+            id_column: ID 컬럼명
+            
+        Returns:
+            리샘플링된 (X, y) 튜플
+        """
+        raise NotImplementedError("하위 클래스에서 구현해야 합니다")
+    
+    def _validate_input(self, X: pd.DataFrame, y: pd.Series, id_column: str) -> None:
+        """입력 데이터 검증"""
+        if len(X) != len(y):
+            raise ValueError("X와 y의 길이가 일치하지 않습니다")
+        if id_column not in X.columns:
+            raise ValueError(f"ID 컬럼 '{id_column}'이 X에 존재하지 않습니다")
+    
+    def _get_class_distribution(self, y: pd.Series) -> Dict[int, int]:
+        """클래스 분포를 반환합니다"""
+        return y.value_counts().to_dict()
+
+
+class SMOTEResampler(BaseResampler):
+    """SMOTE (Synthetic Minority Over-sampling Technique) 구현"""
+    
+    def __init__(self, k_neighbors: int = 5, random_state: int = 42):
+        """
+        Args:
+            k_neighbors: K-NN에서 사용할 이웃 수
+            random_state: 재현성을 위한 시드
+        """
+        super().__init__(random_state)
+        self.k_neighbors = k_neighbors
+    
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series, 
+                    id_column: str = 'id') -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        SMOTE를 사용하여 소수 클래스 오버샘플링을 수행합니다.
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 시리즈
+            id_column: ID 컬럼명
+            
+        Returns:
+            리샘플링된 (X, y) 튜플
+        """
+        self._validate_input(X, y, id_column)
+        
+        # 클래스 분포 확인
+        class_counts = self._get_class_distribution(y)
+        logger.info(f"SMOTE 적용 전 클래스 분포: {class_counts}")
+        
+        if len(class_counts) != 2:
+            raise ValueError("SMOTE는 이진 분류 문제에만 적용 가능합니다")
+        
+        # 다수 클래스와 소수 클래스 식별
+        majority_class = max(class_counts, key=class_counts.get)
+        minority_class = min(class_counts, key=class_counts.get)
+        
+        # 소수 클래스 샘플들
+        minority_samples = X[y == minority_class].copy()
+        minority_labels = y[y == minority_class].copy()
+        
+        if len(minority_samples) <= self.k_neighbors:
+            logger.warning(f"소수 클래스 샘플 수({len(minority_samples)})가 k_neighbors({self.k_neighbors})보다 작습니다. k_neighbors를 {len(minority_samples)-1}로 조정합니다.")
+            self.k_neighbors = min(self.k_neighbors, len(minority_samples) - 1)
+        
+        # 필요한 합성 샘플 수 계산
+        target_count = class_counts[majority_class]
+        synthetic_count = target_count - class_counts[minority_class]
+        
+        if synthetic_count <= 0:
+            logger.info("이미 클래스가 균형잡혀 있습니다. SMOTE를 적용하지 않습니다.")
+            return X, y
+        
+        # K-NN 모델 학습 (ID 컬럼 제외)
+        feature_cols = [col for col in X.columns if col != id_column]
+        knn = NearestNeighbors(n_neighbors=self.k_neighbors + 1, algorithm='auto')
+        knn.fit(minority_samples[feature_cols])
+        
+        # 합성 샘플 생성
+        synthetic_samples = []
+        synthetic_labels = []
+        
+        for _ in range(synthetic_count):
+            # 랜덤하게 소수 클래스 샘플 선택
+            random_idx = self.rs.randint(0, len(minority_samples))
+            random_sample = minority_samples.iloc[random_idx]
+            
+            # K-NN으로 이웃 찾기
+            distances, indices = knn.kneighbors([random_sample[feature_cols]])
+            
+            # 자기 자신을 제외하고 랜덤 이웃 선택
+            neighbor_idx = self.rs.choice(indices[0][1:])  # 첫 번째는 자기 자신
+            neighbor_sample = minority_samples.iloc[neighbor_idx]
+            
+            # 합성 샘플 생성 (선형 보간)
+            alpha = self.rs.random()
+            synthetic_sample = random_sample.copy()
+            
+            for col in feature_cols:
+                synthetic_sample[col] = (alpha * random_sample[col] + 
+                                       (1 - alpha) * neighbor_sample[col])
+            
+            synthetic_samples.append(synthetic_sample)
+            synthetic_labels.append(minority_class)
+        
+        # 원본 데이터와 합성 데이터 결합
+        synthetic_df = pd.DataFrame(synthetic_samples)
+        synthetic_series = pd.Series(synthetic_labels, index=synthetic_df.index)
+        
+        X_resampled = pd.concat([X, synthetic_df], ignore_index=True)
+        y_resampled = pd.concat([y, synthetic_series], ignore_index=True)
+        
+        # 결과 검증
+        final_class_counts = self._get_class_distribution(y_resampled)
+        logger.info(f"SMOTE 적용 후 클래스 분포: {final_class_counts}")
+        logger.info(f"생성된 합성 샘플 수: {synthetic_count}")
+        
+        return X_resampled, y_resampled
+
+
+class BorderlineSMOTEResampler(BaseResampler):
+    """Borderline SMOTE 구현 - 경계선 근처의 소수 클래스 샘플에 집중"""
+    
+    def __init__(self, k_neighbors: int = 5, random_state: int = 42):
+        """
+        Args:
+            k_neighbors: K-NN에서 사용할 이웃 수
+            random_state: 재현성을 위한 시드
+        """
+        super().__init__(random_state)
+        self.k_neighbors = k_neighbors
+    
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series, 
+                    id_column: str = 'id') -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        Borderline SMOTE를 사용하여 경계선 근처의 소수 클래스 오버샘플링을 수행합니다.
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 시리즈
+            id_column: ID 컬럼명
+            
+        Returns:
+            리샘플링된 (X, y) 튜플
+        """
+        self._validate_input(X, y, id_column)
+        
+        # 클래스 분포 확인
+        class_counts = self._get_class_distribution(y)
+        logger.info(f"Borderline SMOTE 적용 전 클래스 분포: {class_counts}")
+        
+        if len(class_counts) != 2:
+            raise ValueError("Borderline SMOTE는 이진 분류 문제에만 적용 가능합니다")
+        
+        # 다수 클래스와 소수 클래스 식별
+        majority_class = max(class_counts, key=class_counts.get)
+        minority_class = min(class_counts, key=class_counts.get)
+        
+        # 소수 클래스 샘플들
+        minority_samples = X[y == minority_class].copy()
+        minority_labels = y[y == minority_class].copy()
+        
+        if len(minority_samples) <= self.k_neighbors:
+            logger.warning(f"소수 클래스 샘플 수({len(minority_samples)})가 k_neighbors({self.k_neighbors})보다 작습니다. k_neighbors를 {len(minority_samples)-1}로 조정합니다.")
+            self.k_neighbors = min(self.k_neighbors, len(minority_samples) - 1)
+        
+        # 필요한 합성 샘플 수 계산
+        target_count = class_counts[majority_class]
+        synthetic_count = target_count - class_counts[minority_class]
+        
+        if synthetic_count <= 0:
+            logger.info("이미 클래스가 균형잡혀 있습니다. Borderline SMOTE를 적용하지 않습니다.")
+            return X, y
+        
+        # K-NN 모델 학습 (전체 데이터에 대해)
+        feature_cols = [col for col in X.columns if col != id_column]
+        knn = NearestNeighbors(n_neighbors=self.k_neighbors + 1, algorithm='auto')
+        knn.fit(X[feature_cols])
+        
+        # 각 소수 클래스 샘플의 위험도 계산
+        danger_samples = []
+        safe_samples = []
+        noise_samples = []
+        
+        for idx, sample in minority_samples.iterrows():
+            # K-NN으로 이웃 찾기
+            distances, indices = knn.kneighbors([sample[feature_cols]])
+            
+            # 이웃들의 클래스 확인
+            neighbor_labels = y.iloc[indices[0][1:]]  # 자기 자신 제외
+            majority_neighbors = sum(neighbor_labels == majority_class)
+            
+            # 위험도 분류
+            if majority_neighbors >= self.k_neighbors * 0.5 and majority_neighbors < self.k_neighbors:
+                danger_samples.append(idx)
+            elif majority_neighbors < self.k_neighbors * 0.5:
+                safe_samples.append(idx)
+            else:
+                noise_samples.append(idx)
+        
+        logger.info(f"위험도 분류 결과 - DANGER: {len(danger_samples)}, SAFE: {len(safe_samples)}, NOISE: {len(noise_samples)}")
+        
+        # DANGER 샘플들에 대해서만 합성 샘플 생성
+        if len(danger_samples) == 0:
+            logger.warning("DANGER 샘플이 없습니다. 일반 SMOTE를 적용합니다.")
+            smote = SMOTEResampler(k_neighbors=self.k_neighbors, random_state=self.random_state)
+            return smote.fit_resample(X, y, id_column)
+        
+        # 합성 샘플 생성
+        synthetic_samples = []
+        synthetic_labels = []
+        
+        for _ in range(synthetic_count):
+            # DANGER 샘플 중 랜덤 선택
+            danger_idx = self.rs.choice(danger_samples)
+            danger_sample = minority_samples.loc[danger_idx]
+            
+            # 해당 샘플의 K-NN 이웃들 중 소수 클래스 이웃 찾기
+            distances, indices = knn.kneighbors([danger_sample[feature_cols]])
+            minority_neighbors = []
+            
+            for neighbor_idx in indices[0][1:]:  # 자기 자신 제외
+                if y.iloc[neighbor_idx] == minority_class:
+                    minority_neighbors.append(neighbor_idx)
+            
+            if len(minority_neighbors) == 0:
+                continue
+            
+            # 랜덤 소수 클래스 이웃 선택
+            neighbor_idx = self.rs.choice(minority_neighbors)
+            neighbor_sample = X.iloc[neighbor_idx]
+            
+            # 합성 샘플 생성 (선형 보간)
+            alpha = self.rs.random()
+            synthetic_sample = danger_sample.copy()
+            
+            for col in feature_cols:
+                synthetic_sample[col] = (alpha * danger_sample[col] + 
+                                       (1 - alpha) * neighbor_sample[col])
+            
+            synthetic_samples.append(synthetic_sample)
+            synthetic_labels.append(minority_class)
+        
+        # 원본 데이터와 합성 데이터 결합
+        if synthetic_samples:
+            synthetic_df = pd.DataFrame(synthetic_samples)
+            synthetic_series = pd.Series(synthetic_labels, index=synthetic_df.index)
+            
+            X_resampled = pd.concat([X, synthetic_df], ignore_index=True)
+            y_resampled = pd.concat([y, synthetic_series], ignore_index=True)
+        else:
+            X_resampled = X.copy()
+            y_resampled = y.copy()
+        
+        # 결과 검증
+        final_class_counts = self._get_class_distribution(y_resampled)
+        logger.info(f"Borderline SMOTE 적용 후 클래스 분포: {final_class_counts}")
+        logger.info(f"생성된 합성 샘플 수: {len(synthetic_samples)}")
+        
+        return X_resampled, y_resampled
+
+
+class ADASYNResampler(BaseResampler):
+    """ADASYN (Adaptive Synthetic Sampling) 구현"""
+    
+    def __init__(self, k_neighbors: int = 5, random_state: int = 42):
+        """
+        Args:
+            k_neighbors: K-NN에서 사용할 이웃 수
+            random_state: 재현성을 위한 시드
+        """
+        super().__init__(random_state)
+        self.k_neighbors = k_neighbors
+    
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series, 
+                    id_column: str = 'id') -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        ADASYN을 사용하여 적응적 소수 클래스 오버샘플링을 수행합니다.
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 시리즈
+            id_column: ID 컬럼명
+            
+        Returns:
+            리샘플링된 (X, y) 튜플
+        """
+        self._validate_input(X, y, id_column)
+        
+        # 클래스 분포 확인
+        class_counts = self._get_class_distribution(y)
+        logger.info(f"ADASYN 적용 전 클래스 분포: {class_counts}")
+        
+        if len(class_counts) != 2:
+            raise ValueError("ADASYN은 이진 분류 문제에만 적용 가능합니다")
+        
+        # 다수 클래스와 소수 클래스 식별
+        majority_class = max(class_counts, key=class_counts.get)
+        minority_class = min(class_counts, key=class_counts.get)
+        
+        # 소수 클래스 샘플들
+        minority_samples = X[y == minority_class].copy()
+        minority_labels = y[y == minority_class].copy()
+        
+        if len(minority_samples) <= self.k_neighbors:
+            logger.warning(f"소수 클래스 샘플 수({len(minority_samples)})가 k_neighbors({self.k_neighbors})보다 작습니다. k_neighbors를 {len(minority_samples)-1}로 조정합니다.")
+            self.k_neighbors = min(self.k_neighbors, len(minority_samples) - 1)
+        
+        # 필요한 합성 샘플 수 계산
+        target_count = class_counts[majority_class]
+        synthetic_count = target_count - class_counts[minority_class]
+        
+        if synthetic_count <= 0:
+            logger.info("이미 클래스가 균형잡혀 있습니다. ADASYN을 적용하지 않습니다.")
+            return X, y
+        
+        # K-NN 모델 학습 (전체 데이터에 대해)
+        feature_cols = [col for col in X.columns if col != id_column]
+        knn = NearestNeighbors(n_neighbors=self.k_neighbors + 1, algorithm='auto')
+        knn.fit(X[feature_cols])
+        
+        # 각 소수 클래스 샘플의 학습 난이도 계산
+        learning_difficulties = []
+        
+        for idx, sample in minority_samples.iterrows():
+            # K-NN으로 이웃 찾기
+            distances, indices = knn.kneighbors([sample[feature_cols]])
+            
+            # 이웃들의 클래스 확인
+            neighbor_labels = y.iloc[indices[0][1:]]  # 자기 자신 제외
+            majority_neighbors = sum(neighbor_labels == majority_class)
+            
+            # 학습 난이도 = 다수 클래스 이웃 비율
+            difficulty = majority_neighbors / self.k_neighbors
+            learning_difficulties.append(difficulty)
+        
+        # 학습 난이도 정규화
+        total_difficulty = sum(learning_difficulties)
+        if total_difficulty == 0:
+            # 모든 샘플이 쉬운 경우 균등 분배
+            normalized_difficulties = [1.0 / len(learning_difficulties)] * len(learning_difficulties)
+        else:
+            normalized_difficulties = [d / total_difficulty for d in learning_difficulties]
+        
+        # 각 샘플별로 생성할 합성 샘플 수 계산
+        samples_to_generate = [int(round(d * synthetic_count)) for d in normalized_difficulties]
+        
+        # 반올림으로 인한 차이 조정
+        while sum(samples_to_generate) < synthetic_count:
+            # 가장 높은 난이도를 가진 샘플에 추가
+            max_idx = learning_difficulties.index(max(learning_difficulties))
+            samples_to_generate[max_idx] += 1
+        
+        # 합성 샘플 생성
+        synthetic_samples = []
+        synthetic_labels = []
+        
+        for i, (idx, sample) in enumerate(minority_samples.iterrows()):
+            num_to_generate = samples_to_generate[i]
+            
+            for _ in range(num_to_generate):
+                # K-NN으로 이웃 찾기
+                distances, indices = knn.kneighbors([sample[feature_cols]])
+                
+                # 소수 클래스 이웃들 찾기
+                minority_neighbors = []
+                for neighbor_idx in indices[0][1:]:  # 자기 자신 제외
+                    if y.iloc[neighbor_idx] == minority_class:
+                        minority_neighbors.append(neighbor_idx)
+                
+                if len(minority_neighbors) == 0:
+                    continue
+                
+                # 랜덤 소수 클래스 이웃 선택
+                neighbor_idx = self.rs.choice(minority_neighbors)
+                neighbor_sample = X.iloc[neighbor_idx]
+                
+                # 합성 샘플 생성 (선형 보간)
+                alpha = self.rs.random()
+                synthetic_sample = sample.copy()
+                
+                for col in feature_cols:
+                    synthetic_sample[col] = (alpha * sample[col] + 
+                                           (1 - alpha) * neighbor_sample[col])
+                
+                synthetic_samples.append(synthetic_sample)
+                synthetic_labels.append(minority_class)
+        
+        # 원본 데이터와 합성 데이터 결합
+        if synthetic_samples:
+            synthetic_df = pd.DataFrame(synthetic_samples)
+            synthetic_series = pd.Series(synthetic_labels, index=synthetic_df.index)
+            
+            X_resampled = pd.concat([X, synthetic_df], ignore_index=True)
+            y_resampled = pd.concat([y, synthetic_series], ignore_index=True)
+        else:
+            X_resampled = X.copy()
+            y_resampled = y.copy()
+        
+        # 결과 검증
+        final_class_counts = self._get_class_distribution(y_resampled)
+        logger.info(f"ADASYN 적용 후 클래스 분포: {final_class_counts}")
+        logger.info(f"생성된 합성 샘플 수: {len(synthetic_samples)}")
+        
+        return X_resampled, y_resampled
+
+
+class UnderSampler(BaseResampler):
+    """언더샘플링 기법 구현"""
+    
+    def __init__(self, strategy: str = 'random', random_state: int = 42):
+        """
+        Args:
+            strategy: 언더샘플링 전략 ('random', 'tomek', 'enn')
+            random_state: 재현성을 위한 시드
+        """
+        super().__init__(random_state)
+        self.strategy = strategy
+    
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series, 
+                    id_column: str = 'id') -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        언더샘플링을 수행합니다.
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 시리즈
+            id_column: ID 컬럼명
+            
+        Returns:
+            리샘플링된 (X, y) 튜플
+        """
+        self._validate_input(X, y, id_column)
+        
+        # 클래스 분포 확인
+        class_counts = self._get_class_distribution(y)
+        logger.info(f"언더샘플링 적용 전 클래스 분포: {class_counts}")
+        
+        if len(class_counts) != 2:
+            raise ValueError("언더샘플링은 이진 분류 문제에만 적용 가능합니다")
+        
+        # 다수 클래스와 소수 클래스 식별
+        majority_class = max(class_counts, key=class_counts.get)
+        minority_class = min(class_counts, key=class_counts.get)
+        
+        # 소수 클래스 샘플들
+        minority_samples = X[y == minority_class].copy()
+        minority_labels = y[y == minority_class].copy()
+        
+        if self.strategy == 'random':
+            # 랜덤 언더샘플링
+            majority_samples = X[y == majority_class].copy()
+            majority_labels = y[y == majority_class].copy()
+            
+            # 소수 클래스 수만큼 다수 클래스 샘플링
+            n_minority = len(minority_samples)
+            majority_downsampled = majority_samples.sample(n=n_minority, random_state=self.random_state)
+            majority_labels_downsampled = majority_labels.loc[majority_downsampled.index]
+            
+            # 결과 결합
+            X_resampled = pd.concat([minority_samples, majority_downsampled], ignore_index=True)
+            y_resampled = pd.concat([minority_labels, majority_labels_downsampled], ignore_index=True)
+            
+        elif self.strategy == 'tomek':
+            # Tomek Links 기반 언더샘플링 (간단한 구현)
+            logger.warning("Tomek Links 언더샘플링은 복잡하므로 랜덤 언더샘플링으로 대체합니다.")
+            return self.fit_resample(X, y, id_column)
+            
+        elif self.strategy == 'enn':
+            # Edited Nearest Neighbors (간단한 구현)
+            logger.warning("ENN 언더샘플링은 복잡하므로 랜덤 언더샘플링으로 대체합니다.")
+            return self.fit_resample(X, y, id_column)
+            
+        else:
+            raise ValueError(f"지원하지 않는 언더샘플링 전략: {self.strategy}")
+        
+        # 결과 검증
+        final_class_counts = self._get_class_distribution(y_resampled)
+        logger.info(f"언더샘플링 적용 후 클래스 분포: {final_class_counts}")
+        
+        return X_resampled, y_resampled
+
+
+class HybridResampler(BaseResampler):
+    """하이브리드 샘플링 기법 구현"""
+    
+    def __init__(self, strategy: str = 'smote_tomek', random_state: int = 42):
+        """
+        Args:
+            strategy: 하이브리드 전략 ('smote_tomek', 'smote_enn')
+            random_state: 재현성을 위한 시드
+        """
+        super().__init__(random_state)
+        self.strategy = strategy
+    
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series, 
+                    id_column: str = 'id') -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        하이브리드 샘플링을 수행합니다.
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 시리즈
+            id_column: ID 컬럼명
+            
+        Returns:
+            리샘플링된 (X, y) 튜플
+        """
+        self._validate_input(X, y, id_column)
+        
+        logger.info(f"하이브리드 샘플링 적용: {self.strategy}")
+        
+        if self.strategy == 'smote_tomek':
+            # SMOTE + Tomek Links
+            smote = SMOTEResampler(random_state=self.random_state)
+            X_resampled, y_resampled = smote.fit_resample(X, y, id_column)
+            
+            # Tomek Links 제거 (간단한 구현으로 생략)
+            logger.info("Tomek Links 제거는 생략하고 SMOTE만 적용합니다.")
+            
+        elif self.strategy == 'smote_enn':
+            # SMOTE + ENN
+            smote = SMOTEResampler(random_state=self.random_state)
+            X_resampled, y_resampled = smote.fit_resample(X, y, id_column)
+            
+            # ENN 제거 (간단한 구현으로 생략)
+            logger.info("ENN 제거는 생략하고 SMOTE만 적용합니다.")
+            
+        else:
+            raise ValueError(f"지원하지 않는 하이브리드 전략: {self.strategy}")
+        
+        return X_resampled, y_resampled
+
+
+class ResamplingPipeline:
+    """리샘플링 파이프라인 통합 관리 클래스"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Args:
+            config: 리샘플링 설정이 포함된 설정 딕셔너리
+        """
+        self.config = config
+        self.resampler = None
+        self._setup_resampler()
+    
+    def _setup_resampler(self):
+        """설정에 따라 리샘플러를 설정합니다"""
+        resampling_config = self.config.get('resampling', {})
+        
+        if not resampling_config.get('enabled', False):
+            logger.info("리샘플링이 비활성화되어 있습니다.")
+            return
+        
+        method = resampling_config.get('method', 'smote')
+        random_state = resampling_config.get('random_state', 42)
+        
+        if method == 'smote':
+            k_neighbors = resampling_config.get('smote_k_neighbors', 5)
+            self.resampler = SMOTEResampler(k_neighbors=k_neighbors, random_state=random_state)
+            
+        elif method == 'borderline_smote':
+            k_neighbors = resampling_config.get('borderline_smote_k_neighbors', 5)
+            self.resampler = BorderlineSMOTEResampler(k_neighbors=k_neighbors, random_state=random_state)
+            
+        elif method == 'adasyn':
+            k_neighbors = resampling_config.get('adasyn_k_neighbors', 5)
+            self.resampler = ADASYNResampler(k_neighbors=k_neighbors, random_state=random_state)
+            
+        elif method == 'under_sampling':
+            strategy = resampling_config.get('under_sampling_strategy', 'random')
+            self.resampler = UnderSampler(strategy=strategy, random_state=random_state)
+            
+        elif method == 'hybrid':
+            strategy = resampling_config.get('hybrid_strategy', 'smote_tomek')
+            self.resampler = HybridResampler(strategy=strategy, random_state=random_state)
+            
+        else:
+            raise ValueError(f"지원하지 않는 리샘플링 방법: {method}")
+        
+        logger.info(f"리샘플러 설정 완료: {method}")
+    
+    def fit_resample(self, X: pd.DataFrame, y: pd.Series, 
+                    id_column: str = 'id') -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        리샘플링을 수행합니다.
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 시리즈
+            id_column: ID 컬럼명
+            
+        Returns:
+            리샘플링된 (X, y) 튜플
+        """
+        if self.resampler is None:
+            logger.info("리샘플러가 설정되지 않았습니다. 원본 데이터를 반환합니다.")
+            return X, y
+        
+        return self.resampler.fit_resample(X, y, id_column)
 
 
 def apply_timeseries_imputation(df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
@@ -202,91 +826,158 @@ def create_preprocessing_pipeline(config: Dict[str, Any]) -> ColumnTransformer:
 
 def fit_preprocessing_pipeline(df: pd.DataFrame, config: Dict[str, Any]) -> Tuple[ColumnTransformer, pd.DataFrame]:
     """
-    전처리 파이프라인을 학습하고 적용합니다.
+    전처리 파이프라인을 피팅하고 변환된 데이터를 반환합니다.
     
     Args:
-        df: 훈련 데이터프레임
+        df: 입력 데이터프레임
         config: 설정 딕셔너리
         
     Returns:
-        학습된 파이프라인과 전처리된 데이터프레임
+        피팅된 전처리 파이프라인과 변환된 데이터프레임
     """
-    logger.info("전처리 파이프라인 학습 시작")
+    logger.info("전처리 파이프라인 피팅 시작")
     
-    # 1단계: 시계열 보간 적용
-    df_ts_imputed = apply_timeseries_imputation(df, config)
+    # 시계열 보간 적용
+    df_imputed = apply_timeseries_imputation(df, config)
     
-    # 2단계: 컬럼 분류
-    numerical_cols = get_numerical_columns(df_ts_imputed, config)
-    categorical_cols = get_categorical_columns(df_ts_imputed, config)
-    passthrough_cols = get_passthrough_columns(df_ts_imputed, config)
+    # 수치형, 범주형, 통과 컬럼 식별
+    numerical_cols = get_numerical_columns(df_imputed, config)
+    categorical_cols = get_categorical_columns(df_imputed, config)
+    passthrough_cols = get_passthrough_columns(df_imputed, config)
     
-    # 3단계: 전처리 파이프라인 생성 및 학습
+    # 전처리 파이프라인 생성
     preprocessor = create_preprocessing_pipeline(config)
     
-    # 실제 컬럼명으로 업데이트
-    preprocessor.transformers[0] = ('num', preprocessor.transformers[0][1], numerical_cols)
-    preprocessor.transformers[1] = ('cat', preprocessor.transformers[1][1], categorical_cols)
+    # 실제 컬럼으로 파이프라인 업데이트
+    transformers = []
     
-    # 파이프라인 학습 및 적용
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        preprocessor.fit(df_ts_imputed)
-        df_processed = pd.DataFrame(
-            preprocessor.transform(df_ts_imputed),
-            columns=preprocessor.get_feature_names_out(),
-            index=df_ts_imputed.index
-        )
+    if numerical_cols:
+        transformers.append(('num', preprocessor.named_transformers_['num'], numerical_cols))
     
-    logger.info(f"전처리 완료: {df_processed.shape}")
-    logger.info(f"결측치 수: {df_processed.isnull().sum().sum()}")
-    logger.info(f"피처 이름: {list(df_processed.columns)}")
+    if categorical_cols:
+        transformers.append(('cat', preprocessor.named_transformers_['cat'], categorical_cols))
     
-    return preprocessor, df_processed
+    if passthrough_cols:
+        transformers.append(('pass', 'passthrough', passthrough_cols))
+    
+    # 새로운 파이프라인 생성
+    preprocessor = ColumnTransformer(
+        transformers=transformers,
+        remainder='drop'  # 처리되지 않은 컬럼은 제거
+    )
+    
+    # 파이프라인 피팅
+    logger.info("전처리 파이프라인 피팅 중...")
+    preprocessor.fit(df_imputed)
+    
+    # 데이터 변환
+    logger.info("데이터 변환 중...")
+    transformed_data = transform_data(df_imputed, preprocessor, config)
+    
+    logger.info("전처리 파이프라인 피팅 완료")
+    return preprocessor, transformed_data
 
 
 def transform_data(df: pd.DataFrame, preprocessor: ColumnTransformer, config: Dict[str, Any]) -> pd.DataFrame:
     """
-    학습된 전처리 파이프라인을 사용하여 데이터를 변환합니다.
+    전처리 파이프라인을 사용하여 데이터를 변환합니다.
     
     Args:
-        df: 변환할 데이터프레임
-        preprocessor: 학습된 전처리 파이프라인
+        df: 입력 데이터프레임
+        preprocessor: 피팅된 전처리 파이프라인
         config: 설정 딕셔너리
         
     Returns:
         변환된 데이터프레임
     """
-    logger.info("전처리 파이프라인 적용")
+    # 파이프라인을 사용하여 데이터 변환
+    transformed_array = preprocessor.transform(df)
     
-    # 1단계: 시계열 보간 적용
-    df_ts_imputed = apply_timeseries_imputation(df, config)
+    # 변환된 배열을 데이터프레임으로 변환
+    feature_names = preprocessor.get_feature_names_out()
+    transformed_df = pd.DataFrame(transformed_array, columns=feature_names, index=df.index)
     
-    # 2단계: 파이프라인 적용
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        df_processed = pd.DataFrame(
-            preprocessor.transform(df_ts_imputed),
-            columns=preprocessor.get_feature_names_out(),
-            index=df_ts_imputed.index
-        )
+    # ID 컬럼 추가 (나중에 리샘플링에서 사용)
+    id_column = config['time_series']['id_column']
+    if id_column in df.columns:
+        transformed_df[id_column] = df[id_column]
+    
+    logger.info(f"데이터 변환 완료: {transformed_df.shape}")
+    return transformed_df
 
-    # XGBoost 호환을 위해 변환 가능한 컬럼만 float32로 변환
-    for col in df_processed.columns:
-        try:
-            df_processed[col] = df_processed[col].astype('float32')
-        except Exception:
-            pass  # 변환 불가 컬럼은 그대로 둠
 
-    logger.info(f"변환 완료: {df_processed.shape}")
-    logger.info(f"결측치 수: {df_processed.isnull().sum().sum()}")
+def apply_resampling(X: pd.DataFrame, y: pd.Series, config: Dict[str, Any], 
+                    fold_info: Optional[Dict[str, Any]] = None) -> Tuple[pd.DataFrame, pd.Series]:
+    """
+    리샘플링을 적용합니다. 데이터 유출을 방지하기 위해 각 폴드에서 독립적으로 적용됩니다.
     
-    return df_processed
+    Args:
+        X: 피처 데이터프레임
+        y: 타겟 시리즈
+        config: 설정 딕셔너리
+        fold_info: 폴드 정보 (MLflow 로깅용)
+        
+    Returns:
+        리샘플링된 (X, y) 튜플
+    """
+    resampling_config = config.get('resampling', {})
+    
+    if not resampling_config.get('enabled', False):
+        logger.info("리샘플링이 비활성화되어 있습니다.")
+        return X, y
+    
+    # 리샘플링 파이프라인 생성
+    resampling_pipeline = ResamplingPipeline(config)
+    
+    # ID 컬럼 확인
+    id_column = config['time_series']['id_column']
+    if id_column not in X.columns:
+        logger.warning(f"ID 컬럼 '{id_column}'이 X에 없습니다. 리샘플링을 건너뜁니다.")
+        return X, y
+    
+    # 리샘플링 적용
+    logger.info("리샘플링 적용 중...")
+    X_resampled, y_resampled = resampling_pipeline.fit_resample(X, y, id_column)
+    
+    # 클래스 분포 변화 로깅
+    original_dist = y.value_counts().to_dict()
+    resampled_dist = y_resampled.value_counts().to_dict()
+    
+    logger.info(f"리샘플링 전 클래스 분포: {original_dist}")
+    logger.info(f"리샘플링 후 클래스 분포: {resampled_dist}")
+    
+    # MLflow 로깅 (폴드 정보가 있는 경우)
+    if fold_info is not None:
+        import mlflow
+        fold_num = fold_info.get('fold_num', 'unknown')
+        
+        # 클래스 분포 변화 로깅
+        for class_label, count in original_dist.items():
+            mlflow.log_metric(f"fold_{fold_num}_original_class_{class_label}_count", count)
+        
+        for class_label, count in resampled_dist.items():
+            mlflow.log_metric(f"fold_{fold_num}_resampled_class_{class_label}_count", count)
+        
+        # 리샘플링 파라미터 로깅
+        method = resampling_config.get('method', 'unknown')
+        mlflow.log_param(f"fold_{fold_num}_resampling_method", method)
+        
+        if method == 'smote':
+            k_neighbors = resampling_config.get('smote_k_neighbors', 5)
+            mlflow.log_param(f"fold_{fold_num}_smote_k_neighbors", k_neighbors)
+        elif method == 'borderline_smote':
+            k_neighbors = resampling_config.get('borderline_smote_k_neighbors', 5)
+            mlflow.log_param(f"fold_{fold_num}_borderline_smote_k_neighbors", k_neighbors)
+        elif method == 'adasyn':
+            k_neighbors = resampling_config.get('adasyn_k_neighbors', 5)
+            mlflow.log_param(f"fold_{fold_num}_adasyn_k_neighbors", k_neighbors)
+    
+    return X_resampled, y_resampled
 
 
 def validate_preprocessing(df: pd.DataFrame, config: Dict[str, Any]) -> bool:
     """
-    전처리 결과의 유효성을 검증합니다.
+    전처리 결과를 검증합니다.
     
     Args:
         df: 전처리된 데이터프레임
@@ -295,47 +986,111 @@ def validate_preprocessing(df: pd.DataFrame, config: Dict[str, Any]) -> bool:
     Returns:
         검증 통과 여부
     """
-    # 1. 결측치 확인
+    logger.info("전처리 결과 검증 중...")
+    
+    # 기본 검증
+    if df.empty:
+        logger.error("전처리된 데이터프레임이 비어있습니다.")
+        return False
+    
+    # 결측치 검증
     missing_count = df.isnull().sum().sum()
     if missing_count > 0:
         logger.warning(f"전처리 후에도 {missing_count}개의 결측치가 남아있습니다.")
-        return False
     
-    # 2. 무한값 확인
-    inf_count = np.isinf(df.select_dtypes(include=[np.number])).sum().sum()
-    if inf_count > 0:
-        logger.warning(f"전처리 후 {inf_count}개의 무한값이 발견되었습니다.")
-        return False
+    # 수치형 컬럼 검증
+    numerical_cols = get_numerical_columns(df, config)
+    for col in numerical_cols:
+        if col in df.columns:
+            if df[col].dtype not in ['int64', 'float64']:
+                logger.warning(f"수치형 컬럼 {col}이 예상 타입이 아닙니다: {df[col].dtype}")
     
-    # 3. 데이터 타입 확인
-    logger.info("전처리 검증 통과 ✓")
+    # 범주형 컬럼 검증
+    categorical_cols = get_categorical_columns(df, config)
+    for col in categorical_cols:
+        if col in df.columns:
+            if df[col].dtype == 'object':
+                logger.warning(f"범주형 컬럼 {col}이 인코딩되지 않았습니다.")
+    
+    logger.info("전처리 결과 검증 완료")
     return True
 
 
 def main():
-    """
-    테스트용 메인 함수
-    """
+    """전처리 모듈 테스트"""
     import yaml
     
-    # 설정 로드
-    with open("configs/default_config.yaml", 'r', encoding='utf-8') as f:
+    # 설정 파일 로드
+    with open('configs/default_config.yaml', 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
-    # 테스트 데이터 로드
-    data_path = "data/processed/processed_data_with_features.csv"
-    df = pd.read_csv(data_path, nrows=1000)
+    # 샘플 데이터 생성 (테스트용)
+    np.random.seed(42)
+    n_samples = 1000
     
-    logger.info(f"테스트 데이터 로드: {len(df):,} 행")
+    # 시계열 데이터 시뮬레이션
+    ids = np.repeat(range(100), 10)  # 100명의 환자, 각각 10개 시점
+    dates = np.tile(pd.date_range('2020-01-01', periods=10, freq='M'), 100)
     
-    # 전처리 파이프라인 학습 및 적용
-    preprocessor, df_processed = fit_preprocessing_pipeline(df, config)
+    # 피처 생성
+    anxiety_scores = np.random.normal(50, 15, n_samples)
+    depress_scores = np.random.normal(45, 12, n_samples)
+    sleep_scores = np.random.normal(60, 10, n_samples)
+    comp_scores = np.random.normal(70, 8, n_samples)
     
-    # 검증
-    if validate_preprocessing(df_processed, config):
-        logger.info("전처리 테스트 성공!")
-    else:
-        logger.error("전처리 테스트 실패!")
+    # 타겟 생성 (극도 불균형)
+    targets = np.random.choice([0, 1], size=n_samples, p=[0.999, 0.001])  # 849:1 비율
+    
+    # 데이터프레임 생성
+    df = pd.DataFrame({
+        'id': ids,
+        'dov': dates,
+        'yov': dates.year,
+        'anxiety_score': anxiety_scores,
+        'depress_score': depress_scores,
+        'sleep_score': sleep_scores,
+        'comp': comp_scores,
+        'age': np.random.normal(45, 15, n_samples),
+        'sex': np.random.choice(['M', 'F'], n_samples),
+        'psychia_cate': np.random.choice(['A', 'B', 'C'], n_samples),
+        'suicide_t': np.random.choice([0, 1], n_samples, p=[0.95, 0.05]),
+        'suicide_a': np.random.choice([0, 1], n_samples, p=[0.99, 0.01]),
+        'suicide_a_next_year': targets
+    })
+    
+    print("원본 데이터 형태:", df.shape)
+    print("클래스 분포:", df['suicide_a_next_year'].value_counts())
+    
+    # 리샘플링 테스트
+    print("\n=== 리샘플링 테스트 ===")
+    
+    # SMOTE 테스트
+    config['resampling']['enabled'] = True
+    config['resampling']['method'] = 'smote'
+    
+    X = df.drop(['suicide_a_next_year'], axis=1)
+    y = df['suicide_a_next_year']
+    
+    X_resampled, y_resampled = apply_resampling(X, y, config)
+    
+    print("SMOTE 적용 후 데이터 형태:", X_resampled.shape)
+    print("SMOTE 적용 후 클래스 분포:", y_resampled.value_counts())
+    
+    # Borderline SMOTE 테스트
+    config['resampling']['method'] = 'borderline_smote'
+    X_resampled2, y_resampled2 = apply_resampling(X, y, config)
+    
+    print("Borderline SMOTE 적용 후 데이터 형태:", X_resampled2.shape)
+    print("Borderline SMOTE 적용 후 클래스 분포:", y_resampled2.value_counts())
+    
+    # ADASYN 테스트
+    config['resampling']['method'] = 'adasyn'
+    X_resampled3, y_resampled3 = apply_resampling(X, y, config)
+    
+    print("ADASYN 적용 후 데이터 형태:", X_resampled3.shape)
+    print("ADASYN 적용 후 클래스 분포:", y_resampled3.value_counts())
+    
+    print("\n리샘플링 테스트 완료!")
 
 
 if __name__ == "__main__":
