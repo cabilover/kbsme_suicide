@@ -2,20 +2,18 @@
 Random Forest 모델 구현
 
 이 모듈은 다중 출력 회귀 및 분류를 위한 Random Forest 모델을 구현합니다.
-해석 가능성과 안정성, 과적합에 강함, 피처 중요도 제공을 특징으로 합니다.
-Focal Loss 설정을 인식하고 적절한 불균형 처리 방법을 적용합니다.
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Tuple, Optional
 import logging
-import warnings
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
+import warnings
+from src.utils import find_column_with_remainder
 from .base_model import BaseModel
 from .model_factory import register_model
-from .loss_functions import validate_focal_loss_parameters
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -28,8 +26,6 @@ class RandomForestModel(BaseModel):
     Random Forest 기반 다중 출력 모델
     
     회귀와 분류 문제를 모두 지원하며, 각 타겟별로 별도의 모델을 학습합니다.
-    해석 가능성과 안정성, 과적합에 강함을 특징으로 합니다.
-    Focal Loss 설정을 인식하고 적절한 불균형 처리 방법을 적용합니다.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -42,30 +38,14 @@ class RandomForestModel(BaseModel):
         # BaseModel 초기화
         super().__init__(config)
         
-        # Focal Loss 설정 확인 (Random Forest는 직접 지원하지 않지만 설정을 인식)
-        self.use_focal_loss = config.get('model', {}).get('random_forest', {}).get('use_focal_loss', False)
-        if self.use_focal_loss:
-            focal_config = config.get('model', {}).get('random_forest', {}).get('focal_loss', {})
-            self.focal_alpha = focal_config.get('alpha', 0.25)
-            self.focal_gamma = focal_config.get('gamma', 2.0)
-            
-            # Focal Loss 파라미터 검증
-            if not validate_focal_loss_parameters(self.focal_alpha, self.focal_gamma):
-                logger.warning("Focal Loss 파라미터가 유효하지 않습니다. 기본값을 사용합니다.")
-                self.focal_alpha = 0.25
-                self.focal_gamma = 2.0
-            
-            logger.info(f"Focal Loss 설정 인식: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
-            logger.info("Random Forest는 직접적인 Focal Loss를 지원하지 않습니다. class_weight를 사용합니다.")
-        
         # 모델 파라미터
         self.model_params = config['model']['random_forest']
         
-        logger.info(f"  - Focal Loss 사용: {self.use_focal_loss}")
+        logger.info(f"  - Focal Loss 사용: False")
     
-    def _calculate_class_weight(self, y_target: pd.Series) -> Dict[int, float]:
+    def _calculate_class_weights(self, y_target: pd.Series) -> Dict[int, float]:
         """
-        Focal Loss 설정을 기반으로 클래스 가중치를 계산합니다.
+        클래스 가중치를 계산합니다.
         
         Args:
             y_target: 타겟 시리즈
@@ -73,27 +53,13 @@ class RandomForestModel(BaseModel):
         Returns:
             클래스별 가중치 딕셔너리
         """
-        if not self.use_focal_loss:
-            return 'balanced'
-        
-        # Focal Loss alpha를 기반으로 클래스 가중치 계산
-        class_counts = y_target.value_counts()
-        total_samples = len(y_target)
-        
-        # alpha가 소수 클래스에 대한 가중치를 나타내므로 이를 활용
-        weights = {}
-        for class_label in class_counts.index:
-            if class_label == 1:  # 양성 클래스 (소수 클래스)
-                weights[class_label] = self.focal_alpha
-            else:  # 음성 클래스 (다수 클래스)
-                weights[class_label] = 1.0 - self.focal_alpha
-        
-        # 정규화
-        total_weight = sum(weights.values())
-        weights = {k: v / total_weight * len(class_counts) for k, v in weights.items()}
-        
-        logger.info(f"Focal Loss 기반 클래스 가중치: {weights}")
-        return weights
+        # 기존 방식: 비율 기반 가중치
+        neg_count = (y_target == 0).sum()
+        pos_count = (y_target == 1).sum()
+        if pos_count > 0:
+            return {0: 1.0, 1: neg_count / pos_count}
+        else:
+            return {0: 1.0, 1: 1.0}
     
     def _get_model_params(self, target: str) -> Dict[str, Any]:
         """
@@ -109,17 +75,10 @@ class RandomForestModel(BaseModel):
         
         # 분류 문제인 경우
         if target in self.classification_targets:
-            if self.use_focal_loss:
-                # Focal Loss 사용 시: 동적으로 계산된 클래스 가중치 사용
-                params['class_weight'] = None  # fit에서 동적으로 설정
-                logger.info(f"  - Focal Loss 기반 클래스 가중치 사용")
-            else:
-                # 기존 방식: balanced 클래스 가중치 사용
-                params['class_weight'] = 'balanced'
-                logger.info(f"  - class_weight: balanced")
+            # 기존 방식: class_weight 사용
+            params['class_weight'] = 'balanced'
         else:
-            # 회귀 문제
-            # Random Forest는 기본적으로 회귀 문제를 처리
+            # 회귀 문제는 추가 설정 불필요
             pass
         
         return params
@@ -178,14 +137,11 @@ class RandomForestModel(BaseModel):
             # 모델 파라미터 준비
             params = self._get_model_params(target)
             
-            # 분류 문제인 경우 불균형 처리
-            if target in self.classification_targets:
-                if self.use_focal_loss:
-                    # Focal Loss 사용 시: 동적으로 계산된 클래스 가중치 사용
-                    class_weight = self._calculate_class_weight(y_target)
-                    logger.info(f"  - Focal Loss 기반 클래스 가중치: {class_weight}")
-                else:
-                    logger.info(f"  - class_weight: {params['class_weight']}")
+            # random_state 중복 제거
+            if 'random_state' in params:
+                random_state = params.pop('random_state')
+            else:
+                random_state = self.config.get('data_split', {}).get('random_state', 42)
             
             # 실제 적용되는 파라미터 로깅
             logger.info(f"=== {target} 모델 파라미터 ===")
@@ -198,26 +154,17 @@ class RandomForestModel(BaseModel):
                 logger.info("회귀 모델 (RandomForestRegressor) 사용")
                 model = RandomForestRegressor(
                     **params,
-                    random_state=self.config['data_split']['random_state'],
+                    random_state=random_state,
                     n_jobs=-1  # 모든 CPU 코어 사용
                 )
             else:
                 # 분류 문제인 경우 클래스 가중치 설정
                 logger.info("분류 모델 (RandomForestClassifier) 사용")
-                if self.use_focal_loss:
-                    class_weight = self._calculate_class_weight(y_target)
-                    model = RandomForestClassifier(
-                        **{k: v for k, v in params.items() if k != 'class_weight'},
-                        class_weight=class_weight,
-                        random_state=self.config['data_split']['random_state'],
-                        n_jobs=-1  # 모든 CPU 코어 사용
-                    )
-                else:
-                    model = RandomForestClassifier(
-                        **params,
-                        random_state=self.config['data_split']['random_state'],
-                        n_jobs=-1  # 모든 CPU 코어 사용
-                    )
+                model = RandomForestClassifier(
+                    **params,
+                    random_state=random_state,
+                    n_jobs=-1  # 모든 CPU 코어 사용
+                )
             
             # 모델 학습
             logger.info(f"Random Forest 모델 학습 시작 (타겟: {target})")

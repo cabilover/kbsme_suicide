@@ -2,27 +2,18 @@
 CatBoost 모델 구현
 
 이 모듈은 다중 출력 회귀 및 분류를 위한 CatBoost 모델을 구현합니다.
-범주형 변수 처리 강점, 과적합 방지 기능, 순열 중요도 제공을 특징으로 합니다.
-Focal Loss 설정을 인식하고 적절한 불균형 처리 방법을 적용합니다.
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Tuple, Optional
 import logging
+import catboost as cb
+from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 import warnings
+from src.utils import find_column_with_remainder
 from .base_model import BaseModel
 from .model_factory import register_model
-from .loss_functions import validate_focal_loss_parameters
-
-# CatBoost 임포트 (설치되지 않은 경우를 대비한 예외 처리)
-try:
-    from catboost import CatBoostRegressor, CatBoostClassifier
-    CATBOOST_AVAILABLE = True
-except ImportError:
-    CATBOOST_AVAILABLE = False
-    CatBoostRegressor = None
-    CatBoostClassifier = None
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -35,8 +26,6 @@ class CatBoostModel(BaseModel):
     CatBoost 기반 다중 출력 모델
     
     회귀와 분류 문제를 모두 지원하며, 각 타겟별로 별도의 모델을 학습합니다.
-    범주형 변수 처리 강점, 과적합 방지 기능, 순열 중요도를 특징으로 합니다.
-    Focal Loss 설정을 인식하고 적절한 불균형 처리 방법을 적용합니다.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -46,74 +35,13 @@ class CatBoostModel(BaseModel):
         Args:
             config: 설정 딕셔너리
         """
-        if not CATBOOST_AVAILABLE:
-            raise ImportError(
-                "CatBoost가 설치되지 않았습니다. "
-                "설치하려면: pip install catboost"
-            )
-        
         # BaseModel 초기화
         super().__init__(config)
-        
-        # Focal Loss 설정 확인 (CatBoost는 직접 지원하지 않지만 설정을 인식)
-        self.use_focal_loss = config.get('model', {}).get('catboost', {}).get('use_focal_loss', False)
-        if self.use_focal_loss:
-            focal_config = config.get('model', {}).get('catboost', {}).get('focal_loss', {})
-            self.focal_alpha = focal_config.get('alpha', 0.25)
-            self.focal_gamma = focal_config.get('gamma', 2.0)
-            
-            # Focal Loss 파라미터 검증
-            if not validate_focal_loss_parameters(self.focal_alpha, self.focal_gamma):
-                logger.warning("Focal Loss 파라미터가 유효하지 않습니다. 기본값을 사용합니다.")
-                self.focal_alpha = 0.25
-                self.focal_gamma = 2.0
-            
-            logger.info(f"Focal Loss 설정 인식: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
-            logger.info("CatBoost는 직접적인 Focal Loss를 지원하지 않습니다. class_weights를 사용합니다.")
         
         # 모델 파라미터
         self.model_params = config['model']['catboost']
         
-        logger.info(f"  - Focal Loss 사용: {self.use_focal_loss}")
-    
-    def _calculate_class_weights(self, y_target: pd.Series) -> List[float]:
-        """
-        Focal Loss 설정을 기반으로 클래스 가중치를 계산합니다.
-        
-        Args:
-            y_target: 타겟 시리즈
-            
-        Returns:
-            클래스별 가중치 리스트 [negative_weight, positive_weight]
-        """
-        if not self.use_focal_loss:
-            # 기존 방식: 비율 기반 가중치
-            neg_count = (y_target == 0).sum()
-            pos_count = (y_target == 1).sum()
-            if pos_count > 0:
-                return [1, neg_count / pos_count]
-            else:
-                return [1, 1]
-        
-        # Focal Loss alpha를 기반으로 클래스 가중치 계산
-        # alpha가 소수 클래스(양성)에 대한 가중치를 나타내므로 이를 활용
-        neg_weight = 1.0 - self.focal_alpha
-        pos_weight = self.focal_alpha
-        
-        # 정규화 (CatBoost는 [negative_weight, positive_weight] 형태 사용)
-        total_weight = neg_weight + pos_weight
-        neg_weight = neg_weight / total_weight
-        pos_weight = pos_weight / total_weight
-        
-        # 비율 조정 (기존 방식과 유사하게)
-        neg_count = (y_target == 0).sum()
-        pos_count = (y_target == 1).sum()
-        if pos_count > 0:
-            pos_weight = pos_weight * (neg_count / pos_count)
-        
-        weights = [neg_weight, pos_weight]
-        logger.info(f"Focal Loss 기반 클래스 가중치: {weights}")
-        return weights
+        logger.info(f"  - Focal Loss 사용: False")
     
     def _get_model_params(self, target: str) -> Dict[str, Any]:
         """
@@ -127,30 +55,50 @@ class CatBoostModel(BaseModel):
         """
         params = self.model_params.copy()
         
-        # CatBoost는 n_jobs, nthread, thread_count(최상위) 등은 인식하지 않음
-        for key in ['n_jobs', 'nthread', 'thread_count']:
-            if key in params:
-                params.pop(key)
-        # thread_count는 fit/predict에서만 사용
-        
         # 분류 문제인 경우
         if target in self.classification_targets:
+            # 기존 방식: class_weights 사용
+            params['class_weights'] = [1.0, self.model_params.get('scale_pos_weight', 1.0)]
             params['loss_function'] = 'Logloss'
             params['eval_metric'] = 'Logloss'
-            if self.use_focal_loss:
-                # Focal Loss 사용 시: 동적으로 계산된 클래스 가중치 사용
-                params['class_weights'] = None  # fit에서 동적으로 설정
-                logger.info(f"  - Focal Loss 기반 클래스 가중치 사용")
-            else:
-                # 기존 방식: 기본 클래스 가중치 설정
-                params['class_weights'] = [1, 1]  # 기본값, 나중에 계산
-                logger.info(f"  - 기본 클래스 가중치 사용")
         else:
             # 회귀 문제
             params['loss_function'] = 'RMSE'
             params['eval_metric'] = 'RMSE'
         
         return params
+    
+    def _calculate_class_weights(self, y_target: pd.Series) -> List[float]:
+        """
+        Focal Loss 설정을 기반으로 클래스 가중치를 계산합니다.
+        
+        Args:
+            y_target: 타겟 시리즈
+            
+        Returns:
+            클래스별 가중치 리스트 [negative_weight, positive_weight]
+        """
+        # 기존 방식: 비율 기반 가중치
+        neg_count = (y_target == 0).sum()
+        pos_count = (y_target == 1).sum()
+        if pos_count > 0:
+            return [1, neg_count / pos_count]
+        else:
+            return [1, 1]
+    
+    def _calculate_focal_loss_metric(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> float:
+        """
+        Focal Loss를 사용한 평가 지표를 계산합니다.
+        
+        Args:
+            y_true: 실제 값
+            y_pred_proba: 예측 확률
+            
+        Returns:
+            Focal Loss 값
+        """
+        focal_loss = FocalLoss(alpha=self.focal_alpha, gamma=self.focal_gamma)
+        return focal_loss(y_true, y_pred_proba)
     
     def _identify_categorical_features(self, X: pd.DataFrame) -> List[int]:
         """
@@ -258,25 +206,16 @@ class CatBoostModel(BaseModel):
             # 모델 파라미터 준비
             params = self._get_model_params(target)
             
-            # 분류 문제인 경우 불균형 처리
-            if target in self.classification_targets:
-                if self.use_focal_loss:
-                    # Focal Loss 사용 시: 동적으로 계산된 클래스 가중치 사용
-                    class_weights = self._calculate_class_weights(y_target)
-                    params['class_weights'] = class_weights
-                    logger.info(f"  - Focal Loss 기반 class_weights: {class_weights}")
-                else:
-                    # 기존 방식: 비율 기반 클래스 가중치 계산
-                    neg_count = (y_target == 0).sum()
-                    pos_count = (y_target == 1).sum()
-                    if pos_count > 0:
-                        params['class_weights'] = [1, neg_count / pos_count]
-                        logger.info(f"  - class_weights: {params['class_weights']}")
-            
             # 실제 적용되는 파라미터 로깅
             logger.info(f"=== {target} 모델 파라미터 ===")
             for key, value in params.items():
                 logger.info(f"  {key}: {value}")
+            
+            # random_seed 중복 제거
+            if 'random_seed' in params:
+                random_seed = params.pop('random_seed')
+            else:
+                random_seed = self.config.get('data_split', {}).get('random_state', 42)
             
             # CatBoost 모델 생성
             logger.info(f"CatBoost 모델 생성 중... (타겟: {target})")
@@ -284,26 +223,17 @@ class CatBoostModel(BaseModel):
                 logger.info("회귀 모델 (CatBoostRegressor) 사용")
                 model = CatBoostRegressor(
                     **params,
-                    random_seed=self.config['data_split']['random_state'],
+                    random_seed=random_seed,
                     verbose=False
                 )
             else:
                 # 분류 문제인 경우 클래스 가중치 설정
                 logger.info("분류 모델 (CatBoostClassifier) 사용")
-                if self.use_focal_loss:
-                    class_weights = self._calculate_class_weights(y_target)
-                    model = CatBoostClassifier(
-                        **{k: v for k, v in params.items() if k != 'class_weights'},
-                        class_weights=class_weights,
-                        random_seed=self.config['data_split']['random_state'],
-                        verbose=False
-                    )
-                else:
-                    model = CatBoostClassifier(
-                        **params,
-                        random_seed=self.config['data_split']['random_state'],
-                        verbose=False
-                    )
+                model = CatBoostClassifier(
+                    **params,
+                    random_seed=random_seed,
+                    verbose=False
+                )
             
             # 모델 학습
             logger.info(f"CatBoost 모델 학습 시작 (타겟: {target})")

@@ -9,12 +9,8 @@ data:
 
 # 피처 설정
 features:
-  # 타겟 컬럼
+  # 타겟 컬럼 - suicide_a_next_year만 사용
   target_columns:
-    - "anxiety_score_next_year"
-    - "depress_score_next_year"
-    - "sleep_score_next_year"
-    - "suicide_t_next_year"
     - "suicide_a_next_year"
   
   # 제외할 컬럼들
@@ -38,28 +34,13 @@ features:
     - "treatment_type"
     - "follow_up_status"
   
-  # 선택된 피처 목록
+  # 선택된 피처 목록 - 기본 인구학적 정보 + 정신 건강 점수만
   selected_features: [
     # 기본 인구학적 정보
     "age", "sex",
     
     # 정신 건강 점수
-    "comp", "anxiety_score", "depress_score", "sleep_score",
-    
-    # 자살 관련 (현재 시점)
-    "suicide_t", "suicide_a",
-    
-    # 분류 정보
-    "psychia_cate",
-    
-    # 시간 기반 피처
-    "month", "day_of_week", "day_of_year",
-    
-    # 과거 이력 피처 (2년 이동 통계)
-    "anxiety_score_rolling_mean_2y", "anxiety_score_rolling_std_2y", "anxiety_score_yoy_change",
-    "depress_score_rolling_mean_2y", "depress_score_rolling_std_2y", "depress_score_yoy_change",
-    "sleep_score_rolling_mean_2y", "sleep_score_rolling_std_2y", "sleep_score_yoy_change",
-    "comp_rolling_mean_2y", "comp_rolling_std_2y", "comp_yoy_change"
+    "comp", "anxiety_score", "depress_score", "sleep_score"
   ]
   
   # 기존 피처 검증 설정
@@ -67,13 +48,16 @@ features:
     scope: "sample"  # "sample", "full", "none"
     sample_size: 10  # scope가 "sample"일 때 검증할 ID 수
   
-  # 지연 피처 설정
+  # Feature Engineering 제어
+  enable_feature_engineering: false  # true: 활성화, false: 비활성화
+  
+  # 지연 피처 설정 - 비활성화
   enable_lagged_features: false
   lag_periods: [1, 2, 3]
   lagged_features:
     columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
   
-  # 이동 통계 피처 설정
+  # 이동 통계 피처 설정 - 비활성화
   enable_rolling_stats: false
   rolling_stats:
     window_sizes: [2, 3]
@@ -83,7 +67,7 @@ features:
 preprocessing:
   # 시계열 보간 설정
   time_series_imputation:
-    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "suicide_t", "suicide_a"]
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
     fallback_strategy: "mean"
   
   # 수치형 결측치 처리
@@ -94,7 +78,7 @@ preprocessing:
   # 범주형 결측치 처리
   categorical_imputation:
     strategy: "most_frequent"  # "most_frequent", "constant"
-    columns: ["sex", "psychia_cate"]
+    columns: ["sex"]
   
   # 범주형 인코딩 설정
   categorical_encoding:

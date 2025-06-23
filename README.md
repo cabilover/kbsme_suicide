@@ -156,41 +156,14 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **데이터 품질**: 일부 이상치 및 결측치 존재
 
 ### 구현된 모델 (✅ 4개 모델 완료)
-- **XGBoost 모델**: Focal Loss 통합, 극단적 불균형 데이터 처리 (정확도 99.87%)
+- **XGBoost 모델**: 극단적 불균형 데이터 처리 (정확도 99.87%)
 - **CatBoost 모델**: 범주형 변수 처리 강점, 균형잡힌 성능 (정확도 85%, AUC-ROC 0.91)
 - **LightGBM 모델**: 빠른 학습 속도와 높은 성능 (정확도 84%, AUC-ROC 0.90)
 - **Random Forest 모델**: 해석 가능성과 안정성 (정확도 83%, AUC-ROC 0.89)
 - **모델 아키텍처 표준화**: BaseModel 추상 클래스와 ModelFactory를 통한 일관된 인터페이스
 
-### 불균형 데이터 처리 및 Focal Loss 지원
-- **Focal Loss 통합**: XGBoost 모델에 Focal Loss를 옵션으로 통합, 극단적 불균형 데이터(예: 자살 시도 849:1)에서 소수 클래스 예측 성능 개선 시도
-- **Focal Loss 파라미터 튜닝**: Optuna 기반 하이퍼파라미터 튜닝에서 `use_focal_loss`, `focal_loss_alpha`, `focal_loss_gamma` 등 Focal Loss 관련 파라미터 탐색 가능
-- **튜닝/실험 파이프라인 완전 호환**: `run_hyperparameter_tuning.py`에서 Focal Loss 및 관련 파라미터가 정상적으로 반영 및 실험됨
-- **설정 파일 예시**: 계층적 config 체계에서 Focal Loss 옵션 및 탐색 범위 지정 가능
-
-### 고급 평가 지표 및 분석 기능
-- **Balanced Accuracy**: 클래스 불균형을 고려한 정확도 측정
-- **Precision-Recall Curve**: 불균형 데이터에 적합한 성능 평가
-- **ROC-AUC vs PR-AUC 비교**: 균형/불균형 데이터에서의 성능 차이 분석
-- **F1-Score 임계값 최적화**: 최적 분류 임계값 자동 탐색
-- **폴드별 성능 변동성 분석**: 교차 검증 안정성 평가
-- **클래스별 샘플 수 통계**: 양성/음성 샘플 분포 및 비율 분석
-- **MLflow 통합 로깅**: 모든 고급 지표가 MLflow에 자동 로깅되어 실험 추적 강화
-
-### ConfigManager 기반 계층적 설정 시스템 (✅ 최신 기능)
-- **계층적 설정 구조**: base, models, experiments, templates로 설정 분리
-- **자동 설정 병합**: ConfigManager가 계층적 config를 자동으로 병합
-- **모델별 자동 설정**: --model-type 인자로 모델별 설정 자동 로딩
-- **실험별 자동 설정**: --experiment-type 인자로 실험별 설정 자동 로딩
-- **백워드 호환성**: 기존 단일 파일 config도 지원
-
-### 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 (✅ 최신 기능)
-- **ConfigManager 기반 리샘플링 비교**: 각 리샘플링 기법별로 ConfigManager를 통해 config를 생성/수정하여 실험을 반복 실행
-- **리샘플링 기법 비교**: SMOTE, Borderline SMOTE, ADASYN, 언더샘플링, 하이브리드 기법 비교
-- **기법별 하이퍼파라미터 튜닝**: 각 리샘플링 기법에 대해 별도로 최적 하이퍼파라미터 탐색
-- **MLflow 중첩 실행**: 각 리샘플링 기법별로 별도 MLflow run으로 실험 추적
-- **자동 성능 비교**: F1-Score 기준으로 최고 성능 기법 자동 선별
-- **사용자 인터페이스**: `--resampling-comparison`, `--resampling-methods` 인자로 쉬운 실험 제어
+### 불균형 데이터 처리
+- **클래스 가중치, scale_pos_weight**: XGBoost 등에서 불균형 데이터 처리를 위한 가중치 옵션 지원
 
 ## 실험 관리 및 데이터 분할 전략
 
@@ -236,7 +209,6 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
 - **다중 출력 지원**: 회귀(점수) + 분류(자살 여부)
 - **Early Stopping**: 과적합 방지 (XGBoost 1.7.6 호환)
 - **불균형 처리**: scale_pos_weight 자동 계산
-- **Focal Loss 지원**: 극단적 불균형 데이터 처리를 위한 Focal Loss 옵션
 - **피처 중요도**: 모델 해석을 위한 중요도 추출
 - **파라미터 전달 안정화**: 모델 생성 시와 fit 시 파라미터 분리 관리
 
@@ -250,7 +222,6 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
 
 ### 하이퍼파라미터 튜닝
 - **Optuna 기반 최적화**: 다양한 샘플러(TPE, Random, Grid Search) 지원
-- **Focal Loss 파라미터 튜닝**: alpha, gamma 파라미터 탐색
 - **교차 검증 통합**: 튜닝 과정에서 교차 검증을 통한 안정적 성능 평가
 - **고급 평가 지표**: 튜닝 과정에서도 모든 고급 지표 계산 및 로깅
 - **시각화 생성**: 최적화 과정, 파라미터 중요도, 병렬 좌표 플롯 등

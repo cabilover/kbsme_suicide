@@ -57,7 +57,7 @@ xgboost_params:
   max_depth:
     type: "int"
     low: 3
-    high: 12
+    high: 15
     log: false
   
   learning_rate:
@@ -101,22 +101,6 @@ xgboost_params:
     low: 0.5
     high: 10.0
     log: true
-  
-  use_focal_loss:
-    type: "categorical"
-    choices: [true, false]
-  
-  focal_loss_alpha:
-    type: "float"
-    low: 0.1
-    high: 0.9
-    log: false
-  
-  focal_loss_gamma:
-    type: "float"
-    low: 0.5
-    high: 5.0
-    log: false
 
 # LightGBM 하이퍼파라미터 검색 범위
 lightgbm_params:
@@ -167,22 +151,6 @@ lightgbm_params:
     low: 1e-8
     high: 10.0
     log: true
-  
-  use_focal_loss:
-    type: "categorical"
-    choices: [true, false]
-  
-  focal_loss_alpha:
-    type: "float"
-    low: 0.1
-    high: 0.9
-    log: false
-  
-  focal_loss_gamma:
-    type: "float"
-    low: 0.5
-    high: 5.0
-    log: false
 
 # CatBoost 하이퍼파라미터 검색 범위
 catboost_params:

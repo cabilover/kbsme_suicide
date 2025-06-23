@@ -2,26 +2,18 @@
 LightGBM 모델 구현
 
 이 모듈은 다중 출력 회귀 및 분류를 위한 LightGBM 모델을 구현합니다.
-빠른 학습 속도와 높은 성능, 범주형 변수 자동 처리, 메모리 효율성을 특징으로 합니다.
-Focal Loss를 통한 불균형 데이터 처리도 지원합니다.
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Tuple, Optional
 import logging
+import lightgbm as lgb
+from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 import warnings
+from src.utils import find_column_with_remainder
 from .base_model import BaseModel
 from .model_factory import register_model
-from .loss_functions import FocalLoss, validate_focal_loss_parameters
-
-# LightGBM 임포트 (설치되지 않은 경우를 대비한 예외 처리)
-try:
-    import lightgbm as lgb
-    LIGHTGBM_AVAILABLE = True
-except ImportError:
-    LIGHTGBM_AVAILABLE = False
-    lgb = None
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -34,8 +26,6 @@ class LightGBMModel(BaseModel):
     LightGBM 기반 다중 출력 모델
     
     회귀와 분류 문제를 모두 지원하며, 각 타겟별로 별도의 모델을 학습합니다.
-    빠른 학습 속도와 높은 성능, 범주형 변수 자동 처리를 특징으로 합니다.
-    Focal Loss를 통한 불균형 데이터 처리도 지원합니다.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -45,88 +35,13 @@ class LightGBMModel(BaseModel):
         Args:
             config: 설정 딕셔너리
         """
-        if not LIGHTGBM_AVAILABLE:
-            raise ImportError(
-                "LightGBM이 설치되지 않았습니다. "
-                "설치하려면: pip install lightgbm"
-            )
-        
         # BaseModel 초기화
         super().__init__(config)
-        
-        # Focal Loss 설정 확인
-        self.use_focal_loss = config.get('model', {}).get('lightgbm', {}).get('use_focal_loss', False)
-        if self.use_focal_loss:
-            focal_config = config.get('model', {}).get('lightgbm', {}).get('focal_loss', {})
-            self.focal_alpha = focal_config.get('alpha', 0.25)
-            self.focal_gamma = focal_config.get('gamma', 2.0)
-            
-            # Focal Loss 파라미터 검증
-            if not validate_focal_loss_parameters(self.focal_alpha, self.focal_gamma):
-                logger.warning("Focal Loss 파라미터가 유효하지 않습니다. 기본값을 사용합니다.")
-                self.focal_alpha = 0.25
-                self.focal_gamma = 2.0
-            
-            logger.info(f"Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
         
         # 모델 파라미터
         self.model_params = config['model']['lightgbm']
         
-        logger.info(f"  - Focal Loss 사용: {self.use_focal_loss}")
-    
-    def _focal_loss_objective(self, predt: np.ndarray, dtrain: lgb.Dataset) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        LightGBM용 Focal Loss objective 함수
-        
-        Args:
-            predt: 예측값
-            dtrain: LightGBM 데이터셋
-            
-        Returns:
-            (gradient, hessian) 튜플
-        """
-        y_true = dtrain.get_label()
-        
-        # 시그모이드 적용
-        predt = 1.0 / (1.0 + np.exp(-predt))
-        
-        # 수치 안정성을 위한 클리핑
-        predt = np.clip(predt, 1e-7, 1.0 - 1e-7)
-        
-        # 예측 확률
-        pt = y_true * predt + (1 - y_true) * (1 - predt)
-        
-        # Focal Loss 가중치
-        focal_weight = (1 - pt) ** self.focal_gamma
-        alpha_weight = self.focal_alpha * y_true + (1 - self.focal_alpha) * (1 - y_true)
-        
-        # 그래디언트와 헤시안 계산
-        grad = alpha_weight * focal_weight * (predt - y_true)
-        hess = alpha_weight * focal_weight * predt * (1 - predt)
-        
-        return grad, hess
-    
-    def _focal_loss_eval(self, predt: np.ndarray, dtrain: lgb.Dataset) -> Tuple[str, float, bool]:
-        """
-        LightGBM용 Focal Loss 평가 함수
-        
-        Args:
-            predt: 예측값
-            dtrain: LightGBM 데이터셋
-            
-        Returns:
-            (metric_name, metric_value, is_higher_better) 튜플
-        """
-        y_true = dtrain.get_label()
-        
-        # 시그모이드 적용
-        predt = 1.0 / (1.0 + np.exp(-predt))
-        
-        # Focal Loss 계산
-        focal_loss = FocalLoss(alpha=self.focal_alpha, gamma=self.focal_gamma)
-        loss_value = focal_loss(y_true, predt)
-        
-        return 'focal_loss', loss_value, False
+        logger.info(f"  - Focal Loss 사용: False")
     
     def _get_model_params(self, target: str) -> Dict[str, Any]:
         """
@@ -142,41 +57,16 @@ class LightGBMModel(BaseModel):
         
         # 분류 문제인 경우
         if target in self.classification_targets:
-            if self.use_focal_loss:
-                # Focal Loss 사용 시: custom objective 사용
-                params['objective'] = 'none'  # custom objective 사용
-                params['metric'] = 'none'     # custom metric 사용
-                # Focal Loss 관련 파라미터는 별도로 관리
-                params['focal_loss_enabled'] = True
-                params['focal_alpha'] = self.focal_alpha
-                params['focal_gamma'] = self.focal_gamma
-                logger.info(f"  - Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
-            else:
-                # 기존 방식: class_weight 사용
-                params['objective'] = 'binary'
-                params['metric'] = 'binary_logloss'
-                params['class_weight'] = 'balanced'
-                logger.info(f"  - class_weight: balanced")
+            # 기존 방식: scale_pos_weight 사용
+            params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
+            params['objective'] = 'binary'
+            params['metric'] = 'binary_logloss'
         else:
             # 회귀 문제
             params['objective'] = 'regression'
             params['metric'] = 'rmse'
         
         return params
-    
-    def _calculate_focal_loss_metric(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> float:
-        """
-        Focal Loss를 사용한 평가 지표를 계산합니다.
-        
-        Args:
-            y_true: 실제 값
-            y_pred_proba: 예측 확률
-            
-        Returns:
-            Focal Loss 값
-        """
-        focal_loss = FocalLoss(alpha=self.focal_alpha, gamma=self.focal_gamma)
-        return focal_loss(y_true, y_pred_proba)
     
     def fit(self, X: pd.DataFrame, y: pd.DataFrame, 
             X_val: pd.DataFrame = None, y_val: pd.DataFrame = None) -> 'LightGBMModel':
@@ -249,15 +139,6 @@ class LightGBMModel(BaseModel):
             # 모델 파라미터 준비
             params = self._get_model_params(target)
             
-            # 분류 문제인 경우 불균형 처리
-            if target in self.classification_targets:
-                if self.use_focal_loss:
-                    # Focal Loss 사용 시: custom objective 사용
-                    logger.info(f"  - Focal Loss 사용으로 class_weight 비활성화")
-                else:
-                    # 기존 방식: class_weight 사용
-                    logger.info(f"  - class_weight: balanced")
-            
             # 실제 적용되는 파라미터 로깅
             logger.info(f"=== {target} 모델 파라미터 ===")
             for key, value in params.items():
@@ -273,55 +154,24 @@ class LightGBMModel(BaseModel):
                 valid_data = lgb.Dataset(X_val_target, label=y_val_target, reference=train_data)
                 logger.info("검증 데이터셋 생성 완료")
             
-            # Focal Loss 관련 파라미터 제거 (LightGBM에서 지원하지 않음)
-            focal_loss_params = ['focal_loss_enabled', 'focal_alpha', 'focal_gamma']
-            for param in focal_loss_params:
-                if param in params:
-                    params.pop(param)
-            
             # 모델 학습
             logger.info(f"LightGBM 모델 학습 시작 (타겟: {target})")
             if use_early_stopping and valid_data is not None:
-                if self.use_focal_loss and target in self.classification_targets:
-                    # Focal Loss 사용 시: custom objective와 eval 함수 사용
-                    logger.info("Focal Loss custom objective 사용")
-                    model = lgb.train(
-                        params,
-                        train_data,
-                        valid_sets=[valid_data],
-                        valid_names=['valid'],
-                        fobj=self._focal_loss_objective,
-                        feval=self._focal_loss_eval,
-                        callbacks=[lgb.early_stopping(early_stopping_rounds), lgb.log_evaluation(0)]
-                    )
-                else:
-                    # 일반적인 학습
-                    logger.info("일반 학습 모드")
-                    model = lgb.train(
-                        params,
-                        train_data,
-                        valid_sets=[valid_data],
-                        valid_names=['valid'],
-                        callbacks=[lgb.early_stopping(early_stopping_rounds), lgb.log_evaluation(0)]
-                    )
+                model = lgb.train(
+                    params,
+                    train_data,
+                    valid_sets=[valid_data],
+                    valid_names=['valid'],
+                    callbacks=[lgb.early_stopping(early_stopping_rounds), lgb.log_evaluation(0)]
+                )
             else:
                 # Early Stopping 없이 학습
                 logger.info("Early Stopping 없이 학습")
-                if self.use_focal_loss and target in self.classification_targets:
-                    logger.info("Focal Loss custom objective 사용")
-                    model = lgb.train(
-                        params,
-                        train_data,
-                        fobj=self._focal_loss_objective,
-                        feval=self._focal_loss_eval,
-                        callbacks=[lgb.log_evaluation(0)]
-                    )
-                else:
-                    model = lgb.train(
-                        params,
-                        train_data,
-                        callbacks=[lgb.log_evaluation(0)]
-                    )
+                model = lgb.train(
+                    params,
+                    train_data,
+                    callbacks=[lgb.log_evaluation(0)]
+                )
             
             # 모델 저장
             self.models[target] = model

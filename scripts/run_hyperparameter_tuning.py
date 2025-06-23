@@ -344,7 +344,7 @@ def run_resampling_tuning_comparison_with_configmanager(
                     yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
                     temp_config_path = f.name
                 try:
-                    tuner = HyperparameterTuner(temp_config_path, temp_config_path)
+                    tuner = HyperparameterTuner(temp_config_path, temp_config_path, nrows=nrows)
                     logger.info(f"{method} 하이퍼파라미터 최적화 실행 중...")
                     best_params, best_score = tuner.optimize(start_mlflow_run=False)
                     logger.info(f"{method} 튜닝 결과 저장 중...")
@@ -406,14 +406,14 @@ def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str
         )
     else:
         # 일반 하이퍼파라미터 튜닝 (MLflow run 시작)
-        with mlflow.start_run():
+        with mlflow.start_run() as run:
             # 기존 코드 그대로 유지
             import tempfile, yaml
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
                 merged_config_path = f.name
             try:
-                tuner = HyperparameterTuner(merged_config_path, merged_config_path)
+                tuner = HyperparameterTuner(merged_config_path, merged_config_path, nrows=nrows)
                 logger.info("하이퍼파라미터 최적화 실행 중...")
                 best_params, best_score = tuner.optimize()
                 logger.info("튜닝 결과 저장 중...")
@@ -423,9 +423,71 @@ def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str
                 logger.info("최적 파라미터:")
                 for param, value in best_params.items():
                     logger.info(f"  {param}: {value}")
-                return best_params, best_score
+                return best_params, best_score, run.info.experiment_id, run.info.run_id
             finally:
                 Path(merged_config_path).unlink(missing_ok=True)
+
+
+def save_experiment_results(result, model_type, experiment_type, nrows=None, experiment_id=None, run_id=None):
+    """
+    실험 결과를 파일로 저장합니다.
+    """
+    from datetime import datetime
+    import json
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"experiment_results_{timestamp}.txt"
+    
+    # MLflow 실험 링크 생성
+    mlflow_link = "http://localhost:5000"
+    if experiment_id is None or run_id is None:
+        experiment_id = "N/A"
+        run_id = "N/A"
+        try:
+            # 현재 활성화된 MLflow run 정보 가져오기
+            current_run = mlflow.active_run()
+            if current_run:
+                experiment_id = current_run.info.experiment_id
+                run_id = current_run.info.run_id
+        except:
+            pass
+    
+    if experiment_id != "N/A" and run_id != "N/A":
+        mlflow_link = f"http://localhost:5000/#/experiments/{experiment_id}/runs/{run_id}"
+    
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(f"실험 결과 - {timestamp}\n")
+        f.write("=" * 50 + "\n")
+        f.write(f"모델 타입: {model_type}\n")
+        f.write(f"실험 타입: {experiment_type}\n")
+        if nrows:
+            f.write(f"사용 데이터 행 수: {nrows}\n")
+        f.write(f"MLflow Experiment ID: {experiment_id}\n")
+        f.write(f"MLflow Run ID: {run_id}\n")
+        f.write(f"MLflow 링크: {mlflow_link}\n")
+        f.write("\n")
+        
+        if isinstance(result, tuple) and len(result) == 2:
+            # 일반 하이퍼파라미터 튜닝 결과
+            best_params, best_score = result
+            f.write(f"최고 성능: {best_score}\n")
+            f.write("최적 파라미터:\n")
+            for param, value in best_params.items():
+                f.write(f"  {param}: {value}\n")
+        else:
+            # 리샘플링 비교 결과
+            f.write("리샘플링 비교 결과:\n")
+            f.write(f"최고 성능 기법: {result.get('best_method', 'none')}\n")
+            f.write(f"최고 성능: {result.get('best_score', 0.0)}\n")
+            f.write("\n각 기법별 성능:\n")
+            for method, method_result in result.get('methods', {}).items():
+                f.write(f"  {method}: {method_result['best_score']}\n")
+    
+    logger.info(f"실험 결과가 {filename}에 저장되었습니다.")
+    logger.info(f"MLflow Experiment ID: {experiment_id}")
+    logger.info(f"MLflow Run ID: {run_id}")
+    logger.info(f"MLflow 링크: {mlflow_link}")
+    return filename
 
 
 def main():
@@ -465,6 +527,14 @@ def main():
                 resampling_comparison=args.resampling_comparison,
                 resampling_methods=args.resampling_methods
             )
+            # 실험 결과 저장
+            if args.resampling_comparison:
+                # 리샘플링 비교 결과
+                save_experiment_results(result, args.model_type, args.experiment_type, args.nrows)
+            else:
+                # 일반 하이퍼파라미터 튜닝 결과
+                best_params, best_score, experiment_id, run_id = result
+                save_experiment_results((best_params, best_score), args.model_type, args.experiment_type, args.nrows, experiment_id, run_id)
         elif args.tuning_config and args.base_config:
             # legacy: 단일 파일 기반
             result = run_resampling_tuning_comparison(

@@ -265,6 +265,29 @@ def fit_feature_engineering(df: pd.DataFrame, config: Dict[str, Any]) -> Tuple[p
     Returns:
         피처 엔지니어링이 적용된 데이터프레임과 피처 정보
     """
+    # Feature engineering 활성화 여부 확인
+    enable_feature_engineering = config['features'].get('enable_feature_engineering', True)
+    
+    if not enable_feature_engineering:
+        logger.info("피처 엔지니어링 비활성화 - 기본 피처만 사용")
+        df_engineered = df.copy()
+        
+        # 피처 정보 수집
+        feature_info = {
+            'validation_results': {},
+            'total_features': len(df_engineered.columns),
+            'original_features': len(df.columns),
+            'new_features': 0,
+            'feature_engineering_disabled': True
+        }
+        
+        logger.info(f"피처 엔지니어링 완료: {feature_info['total_features']}개 피처")
+        logger.info(f"  - 원본 피처: {feature_info['original_features']}개")
+        logger.info(f"  - 새로 생성된 피처: {feature_info['new_features']}개 (비활성화)")
+        logger.info(f"[DEBUG] 피처 엔지니어링 직후 컬럼 목록: {list(df_engineered.columns)}")
+        
+        return df_engineered, feature_info
+    
     logger.info("피처 엔지니어링 시작")
     
     # 1단계: 기존 피처 유효성 검증
@@ -307,6 +330,15 @@ def transform_features(df: pd.DataFrame, feature_info: Dict[str, Any], config: D
     Returns:
         피처 엔지니어링이 적용된 데이터프레임
     """
+    # Feature engineering 활성화 여부 확인
+    enable_feature_engineering = config['features'].get('enable_feature_engineering', True)
+    
+    if not enable_feature_engineering:
+        logger.info("피처 엔지니어링 적용 (기본 피처만 사용)")
+        df_transformed = df.copy()
+        logger.info(f"피처 엔지니어링 적용 완료: {len(df_transformed.columns)}개 피처")
+        return df_transformed
+    
     logger.info("피처 엔지니어링 적용")
     
     # 1단계: 시간 기반 피처 생성
@@ -360,18 +392,12 @@ def get_target_columns_from_data(df: pd.DataFrame, config: Dict[str, Any]) -> Li
 
 def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
     """
-    피처 컬럼 목록을 반환합니다 (타겟 제외).
-    
-    Args:
-        df: 데이터프레임
-        config: 설정 딕셔너리
-        
-    Returns:
-        피처 컬럼 목록
+    피처 컬럼 목록을 반환합니다 (타겟은 항상 제외).
     """
     selected_features = config['features'].get('selected_features', [])
     all_columns = list(df.columns)
     target_columns = get_target_columns(config)
+    
     if not selected_features:
         # 기존 로직 (타겟, ID, 날짜, 범주형/수치형 제외)
         exclude_columns = target_columns + [
@@ -386,24 +412,62 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
         feature_columns = [col for col in all_columns if col not in exclude_columns]
         logger.info(f"기존 로직으로 피처 컬럼 선택: {len(feature_columns)}개")
         return feature_columns
+    
     # selected_features 기반으로 피처 필터링
     available_features = []
     for feature in selected_features:
+        # 1. 원본 이름으로 찾기
+        if feature in all_columns:
+            available_features.append(feature)
+            continue
+            
+        # 2. find_column_with_remainder 사용
         col = find_column_with_remainder(all_columns, feature)
         if col:
             available_features.append(col)
-        else:
-            # OneHotEncoder로 생성된 컬럼들 중 해당 피처에서 나온 것들 찾기
+            continue
+            
+        # 3. 전처리 후 접두사가 붙은 컬럼들 찾기
+        prefixes = ['num__', 'cat__', 'pass__']
+        found = False
+        for prefix in prefixes:
+            prefixed_col = f"{prefix}{feature}"
+            if prefixed_col in all_columns:
+                available_features.append(prefixed_col)
+                found = True
+                break
+        
+        if not found:
+            # 4. OneHotEncoder로 생성된 컬럼들 중 해당 피처에서 나온 것들 찾기
             encoded_cols = [col for col in all_columns if col.startswith(f"{feature}_")]
             available_features.extend(encoded_cols)
+            
+        if not found and not encoded_cols:
+            logger.warning(f"피처를 찾을 수 없습니다: {feature}")
+    
     available_features = sorted(list(set(available_features)))
-    # 타겟 컬럼이 selected_features에 포함되어 있으면 경고
+    
+    # --- 반드시 타겟 컬럼은 feature set에서 제거 ---
+    # 타겟 컬럼의 전처리 후 이름도 고려
+    target_columns_processed = []
+    for target in target_columns:
+        target_columns_processed.append(target)
+        # 전처리 후 접두사가 붙은 타겟 컬럼들도 제거
+        for prefix in ['num__', 'cat__', 'pass__']:
+            prefixed_target = f"{prefix}{target}"
+            if prefixed_target in all_columns:
+                target_columns_processed.append(prefixed_target)
+    
+    available_features = [f for f in available_features if f not in target_columns_processed]
+    
+    # 타겟 컬럼이 selected_features/available_features에 포함되어 있으면 경고
     for target in target_columns:
         if target in selected_features:
             logger.warning(f"[WARNING] selected_features에 타겟 컬럼이 포함되어 있습니다: {target}")
         if target in available_features:
             logger.warning(f"[WARNING] available_features에 타겟 컬럼이 포함되어 있습니다: {target}")
-    logger.info(f"selected_features 기반 피처 컬럼 선택: {len(available_features)}개")
+    
+    logger.info(f"selected_features 기반 피처 컬럼 선택(타겟 제외): {len(available_features)}개")
     logger.debug(f"선택된 피처: {available_features}")
     return available_features
 

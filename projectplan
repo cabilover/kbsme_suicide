@@ -73,11 +73,10 @@ psychia_cate: 자체 분류 (1-7, 6과 7은 고위험군)
 3.2. 모델 후보군 (✅ 4개 모델 구현 완료)
 
     앙상블 모델 (Feature Engineering 기반):
-        XGBoost: 다중 출력 회귀/분류 지원, Focal Loss 통합, Early Stopping 지원
+        XGBoost: 다중 출력 회귀/분류 지원, 극단적 불균형 데이터 처리, Early Stopping 지원
         CatBoost: 범주형 변수 처리 강점, 85% 정확도, 0.91 AUC-ROC 달성
         LightGBM: 빠른 학습 속도와 높은 성능, 84% 정확도, 0.90 AUC-ROC 달성
         Random Forest: 해석 가능성과 안정성, 83% 정확도, 0.89 AUC-ROC 달성
-        Focal Loss: 극단적 불균형 데이터 처리를 위한 손실 함수 통합
         불균형 처리: scale_pos_weight 자동 계산, 클래스 가중치 조정
     
 3.3. 검증 전략 (✅ 구현 완료)

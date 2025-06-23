@@ -41,25 +41,25 @@ class HyperparameterTuner:
     이 클래스는 MLflow와 연동되어 실험 추적 및 결과 저장을 지원합니다.
     """
     
-    def __init__(self, tuning_config_path: str, base_config_path: str = None):
+    def __init__(self, tuning_config_path: str, base_config_path: str = None, nrows: int = None):
         """
         하이퍼파라미터 튜너를 초기화합니다.
         
         Args:
             tuning_config_path: 하이퍼파라미터 튜닝 설정 파일 경로
             base_config_path: 기본 설정 파일 경로 (선택사항)
+            nrows: 사용할 데이터 행 수 (선택사항)
         """
         self.tuning_config_path = tuning_config_path
-        if base_config_path is None:
-            raise ValueError("base_config_path를 명시적으로 지정해야 합니다. (계층적 config 체계에서는 임시 병합 config 파일 경로를 넘겨주세요)")
-        self.base_config_path = base_config_path
+        self.base_config_path = base_config_path or self._get_base_config_path()
+        self.nrows = nrows
         
         # 설정 로드
         self.tuning_config = self._load_tuning_config()
         self.config = self._merge_configs()
         
         # 기본 데이터 파일 경로 (디버깅용으로 오버라이드 가능)
-        self.data_path = "data/processed/processed_data_with_features.csv"
+        self.data_path = self.config.get('data', {}).get('data_path', 'data/processed/processed_data_with_features.csv')
         
         # Optuna study 및 결과 저장용
         self.study = None
@@ -194,9 +194,6 @@ class HyperparameterTuner:
             # 하이퍼파라미터 제안
             params = self._suggest_parameters(trial)
             
-            # MLflow에 파라미터 로깅
-            mlflow.log_params(params)
-            
             # 설정 업데이트
             trial_config = self.config.copy()
             
@@ -240,7 +237,11 @@ class HyperparameterTuner:
                     trial_config['model']['xgboost'].update(focal_loss_params)
             
             # 데이터 로드
-            df = pd.read_csv(self.data_path)
+            if self.nrows:
+                df = pd.read_csv(self.data_path, nrows=self.nrows)
+                logger.info(f"데이터 로드: {self.nrows}개 행 사용")
+            else:
+                df = pd.read_csv(self.data_path)
             
             # 테스트 세트 분리
             train_val_df, test_df, _ = split_test_set(df, self.config)
@@ -281,7 +282,7 @@ class HyperparameterTuner:
                     logger.warning(f"주요 지표 {primary_metric}을 찾을 수 없습니다. f1_score를 사용합니다.")
                     cv_scores.append(metrics.get('f1_score', 0.0))
                 
-                # 각 폴드의 고급 지표들 로깅
+                # 각 폴드의 고급 지표들 로깅 (trial별로 고유한 키 사용)
                 for target, target_metrics in metrics.items():
                     for metric_name, value in target_metrics.items():
                         if isinstance(value, (int, float)):
@@ -291,11 +292,11 @@ class HyperparameterTuner:
             mean_score = np.mean(cv_scores)
             std_score = np.std(cv_scores)
             
-            # 기본 메트릭 로깅
+            # 기본 메트릭 로깅 (trial별로 고유한 키 사용)
             mlflow.log_metric(f"trial_{trial.number}_cv_{primary_metric}_mean", mean_score)
             mlflow.log_metric(f"trial_{trial.number}_cv_{primary_metric}_std", std_score)
             
-            # 고급 분석 결과 로깅
+            # 고급 분석 결과 로깅 (trial별로 고유한 키 사용)
             if performance_distribution:
                 for target, metrics in performance_distribution.items():
                     for metric, stats in metrics.items():
@@ -304,13 +305,13 @@ class HyperparameterTuner:
                         mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_min", stats['min'])
                         mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_max", stats['max'])
             
-            # 변동성 메트릭 로깅
+            # 변동성 메트릭 로깅 (trial별로 고유한 키 사용)
             if variability:
                 for target, metrics in variability.items():
                     for metric, var_info in metrics.items():
                         mlflow.log_metric(f"trial_{trial.number}_fold_variability_{target}_{metric}_cv", var_info['coefficient_of_variation'])
             
-            # 신뢰구간 계산 및 로깅
+            # 신뢰구간 계산 및 로깅 (trial별로 고유한 키 사용)
             for target in fold_results[0].get('metrics', {}).keys():
                 for metric in ['precision', 'recall', 'f1', 'accuracy', 'balanced_accuracy']:
                     if metric in fold_results[0]['metrics'][target]:
@@ -329,7 +330,8 @@ class HyperparameterTuner:
             
         except Exception as e:
             logger.error(f"Trial {trial.number} 실패: {str(e)}")
-            mlflow.log_param("error", str(e))
+            # 에러 로깅 제거 (중복 방지)
+            # mlflow.log_param(f"trial_{trial.number}_error", str(e))
             return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
     
     def optimize(self, start_mlflow_run: bool = True) -> Tuple[Dict[str, Any], float]:
@@ -360,7 +362,7 @@ class HyperparameterTuner:
         n_jobs = self.tuning_config['tuning'].get('n_jobs', 1)
         
         if start_mlflow_run:
-            with mlflow.start_run():
+            with mlflow.start_run(nested=True):
                 return self._run_optimization(n_trials, n_jobs)
         else:
             return self._run_optimization(n_trials, n_jobs)
@@ -381,7 +383,11 @@ class HyperparameterTuner:
         
         self.best_params = self.study.best_params
         self.best_score = self.study.best_value
-        mlflow.log_params(self.best_params)
+        
+        # 최적 파라미터를 best_ 접두사로 로깅하여 중복 방지
+        for param_name, param_value in self.best_params.items():
+            mlflow.log_param(f"best_{param_name}", param_value)
+        
         mlflow.log_metric("best_score", self.best_score)
         logger.info(f"최적화 완료!")
         logger.info(f"  - 최고 성능: {self.best_score:.4f}")

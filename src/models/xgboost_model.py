@@ -12,7 +12,6 @@ import xgboost as xgb
 from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 import warnings
 from src.utils import find_column_with_remainder
-from src.models.loss_functions import FocalLoss, validate_focal_loss_parameters
 from .base_model import BaseModel
 from .model_factory import register_model
 
@@ -27,7 +26,6 @@ class XGBoostModel(BaseModel):
     XGBoost 기반 다중 출력 모델
     
     회귀와 분류 문제를 모두 지원하며, 각 타겟별로 별도의 모델을 학습합니다.
-    Focal Loss를 통한 불균형 데이터 처리도 지원합니다.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -40,25 +38,10 @@ class XGBoostModel(BaseModel):
         # BaseModel 초기화
         super().__init__(config)
         
-        # Focal Loss 설정 확인
-        self.use_focal_loss = config.get('model', {}).get('xgboost', {}).get('use_focal_loss', False)
-        if self.use_focal_loss:
-            focal_config = config.get('model', {}).get('xgboost', {}).get('focal_loss', {})
-            self.focal_alpha = focal_config.get('alpha', 0.25)
-            self.focal_gamma = focal_config.get('gamma', 2.0)
-            
-            # Focal Loss 파라미터 검증
-            if not validate_focal_loss_parameters(self.focal_alpha, self.focal_gamma):
-                logger.warning("Focal Loss 파라미터가 유효하지 않습니다. 기본값을 사용합니다.")
-                self.focal_alpha = 0.25
-                self.focal_gamma = 2.0
-            
-            logger.info(f"Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
-        
         # 모델 파라미터
         self.model_params = config['model']['xgboost']
         
-        logger.info(f"  - Focal Loss 사용: {self.use_focal_loss}")
+        logger.info(f"  - Focal Loss 사용: False")
     
     def _get_model_params(self, target: str) -> Dict[str, Any]:
         """
@@ -74,41 +57,16 @@ class XGBoostModel(BaseModel):
         
         # 분류 문제인 경우
         if target in self.classification_targets:
-            # Focal Loss 사용 여부에 따른 파라미터 설정
-            if self.use_focal_loss:
-                # Focal Loss 사용 시: 기본 objective 유지, Focal Loss는 별도 처리
-                params['objective'] = 'binary:logistic'
-                params['eval_metric'] = 'logloss'
-                # Focal Loss 관련 파라미터는 별도로 관리
-                params['focal_loss_enabled'] = True
-                params['focal_alpha'] = self.focal_alpha
-                params['focal_gamma'] = self.focal_gamma
-                logger.info(f"  - Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
-            else:
-                # 기존 방식: scale_pos_weight 사용
-                params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
-                params['objective'] = 'binary:logistic'
-                params['eval_metric'] = 'logloss'
+            # 기존 방식: scale_pos_weight 사용
+            params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
+            params['objective'] = 'binary:logistic'
+            params['eval_metric'] = 'logloss'
         else:
             # 회귀 문제
             params['objective'] = 'reg:squarederror'
             params['eval_metric'] = 'rmse'
         
         return params
-    
-    def _calculate_focal_loss_metric(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> float:
-        """
-        Focal Loss를 사용한 평가 지표를 계산합니다.
-        
-        Args:
-            y_true: 실제 값
-            y_pred_proba: 예측 확률
-            
-        Returns:
-            Focal Loss 값
-        """
-        focal_loss = FocalLoss(alpha=self.focal_alpha, gamma=self.focal_gamma)
-        return focal_loss(y_true, y_pred_proba)
     
     def fit(self, X: pd.DataFrame, y: pd.DataFrame, 
             X_val: pd.DataFrame = None, y_val: pd.DataFrame = None) -> 'XGBoostModel':
@@ -134,18 +92,27 @@ class XGBoostModel(BaseModel):
         
         # 입력 데이터 검증 및 전처리
         if y_val is not None:
+            logger.info(f"[DEBUG] _validate_input_data 호출 전 y 컬럼: {list(y.columns)}")
+            logger.info(f"[DEBUG] _validate_input_data 호출 전 X shape: {X.shape}")
             X, y = self._validate_input_data(X, y)
+            logger.info(f"[DEBUG] _validate_input_data 호출 후 y 컬럼: {list(y.columns)}")
+            logger.info(f"[DEBUG] _validate_input_data 호출 후 X shape: {X.shape}")
             X_val, y_val = self._validate_input_data(X_val, y_val)
+            logger.info(f"[DEBUG] _validate_input_data 호출 후 X_val shape: {X_val.shape}")
         else:
+            logger.info(f"[DEBUG] _validate_input_data 호출 전 X shape: {X.shape}")
             X = self._validate_input_data(X)
+            logger.info(f"[DEBUG] _validate_input_data 호출 후 X shape: {X.shape}")
+            logger.info(f"[DEBUG] _validate_input_data 호출 전 y 컬럼: {list(y.columns)}")
             y = y.select_dtypes(include=['number', 'bool', 'category'])
             y = y.replace([np.inf, -np.inf], np.nan)
+            logger.info(f"[DEBUG] _validate_input_data 호출 후 y 컬럼: {list(y.columns)}")
         
         # 사용 가능한 타겟 컬럼 찾기 (전처리된 컬럼명 고려)
         available_targets = []
         for target in self.target_columns:
-            # 원본 컬럼명과 remainder__ 접두사가 붙은 컬럼명 모두 확인
-            possible_names = [target, f"remainder__{target}"]
+            # 원본 컬럼명, pass__ 접두사, remainder__ 접두사 모두 확인
+            possible_names = [target, f"pass__{target}", f"remainder__{target}"]
             for name in possible_names:
                 if name in y.columns:
                     available_targets.append(name)
@@ -160,7 +127,13 @@ class XGBoostModel(BaseModel):
             return self
         
         for target in available_targets:
-            original_target = target.replace('remainder__', '') if target.startswith('remainder__') else target
+            # pass__ 또는 remainder__ 접두사 제거하여 원본 타겟명 추출
+            original_target = target
+            if target.startswith('pass__'):
+                original_target = target.replace('pass__', '')
+            elif target.startswith('remainder__'):
+                original_target = target.replace('remainder__', '')
+            
             logger.info(f"타겟 {original_target} 모델 학습 중...")
             
             # 타겟 데이터 정리 (inf, nan 제거)
@@ -180,14 +153,10 @@ class XGBoostModel(BaseModel):
             
             # 분류 문제인 경우 불균형 처리
             if original_target in self.classification_targets:
-                if self.use_focal_loss:
-                    # Focal Loss 사용 시: scale_pos_weight는 사용하지 않음
-                    logger.info(f"  - Focal Loss 사용으로 scale_pos_weight 비활성화")
-                else:
-                    # 기존 방식: scale_pos_weight 계산
-                    pos_weight = self._calculate_scale_pos_weight(y_target)
-                    params['scale_pos_weight'] = pos_weight
-                    logger.info(f"  - scale_pos_weight: {pos_weight:.2f}")
+                # 기존 방식: scale_pos_weight 계산
+                pos_weight = self._calculate_scale_pos_weight(y_target)
+                params['scale_pos_weight'] = pos_weight
+                logger.info(f"  - scale_pos_weight: {pos_weight:.2f}")
             
             # 실제 적용되는 파라미터 로깅
             logger.info(f"=== {original_target} 모델 파라미터 ===")
@@ -202,12 +171,6 @@ class XGBoostModel(BaseModel):
                 fit_params['early_stopping_rounds'] = model_params.pop('early_stopping_rounds')
             if 'verbose' in model_params:
                 fit_params['verbose'] = model_params.pop('verbose')
-            
-            # Focal Loss 관련 파라미터 제거 (XGBoost에서 지원하지 않음)
-            focal_loss_params = ['focal_loss_enabled', 'focal_alpha', 'focal_gamma']
-            for param in focal_loss_params:
-                if param in model_params:
-                    model_params.pop(param)
             
             # 허용된 파라미터만 필터링하여 모델 생성
             allowed_reg_keys = xgb.XGBRegressor().get_params().keys()
@@ -229,6 +192,7 @@ class XGBoostModel(BaseModel):
                 y_val_target is not None and len(y_val_target) > 0
             ):
                 eval_set = [(X_val_target, y_val_target)]
+                
                 model.fit(
                     X_target, y_target,
                     eval_set=eval_set,
@@ -236,6 +200,9 @@ class XGBoostModel(BaseModel):
                     verbose=fit_params.get('verbose', False)
                 )
             else:
+                # Early Stopping 없이 학습
+                logger.info("Early Stopping 없이 학습")
+                
                 model.fit(X_target, y_target)
             
             self.models[original_target] = model
@@ -434,7 +401,6 @@ def main():
                 'n_estimators': 100,
                 'max_depth': 6,
                 'learning_rate': 0.1,
-                'use_focal_loss': False
             }
         }
     }

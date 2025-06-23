@@ -99,6 +99,11 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
     logger.info("모델 학습 완료")
     logger.info(f"검증 성능: {val_metrics}")
     
+    logger.info(f"[DEBUG] train_model 진입 - X_train 컬럼: {list(X_train.columns)}")
+    logger.info(f"[DEBUG] train_model 진입 - y_train 컬럼: {list(y_train.columns)}")
+    logger.info(f"[DEBUG] train_model 진입 - X_val 컬럼: {list(X_val.columns)}")
+    logger.info(f"[DEBUG] train_model 진입 - y_val 컬럼: {list(y_val.columns)}")
+    
     return model, training_results
 
 
@@ -273,14 +278,24 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         train_engineered = transform_features(train_processed, feature_info, config)
         val_engineered = transform_features(val_processed, feature_info, config)
         
+        logger.info(f"[DEBUG] train_engineered 컬럼: {list(train_engineered.columns)}")
+        logger.info(f"[DEBUG] val_engineered 컬럼: {list(val_engineered.columns)}")
+        
         # 피처와 타겟 분리
         feature_columns = get_feature_columns(train_engineered, config)
         target_columns = get_target_columns_from_data(train_engineered, config)
+        logger.info(f"[DEBUG] feature_columns: {feature_columns}")
+        logger.info(f"[DEBUG] target_columns: {target_columns}")
         
         X_train = train_engineered[feature_columns]
         y_train = train_engineered[target_columns]
         X_val = val_engineered[feature_columns]
         y_val = val_engineered[target_columns]
+        
+        logger.info(f"[DEBUG] X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+        logger.info(f"[DEBUG] X_val shape: {X_val.shape}, y_val shape: {y_val.shape}")
+        logger.info(f"[DEBUG] y_train 컬럼: {list(y_train.columns)}")
+        logger.info(f"[DEBUG] y_val 컬럼: {list(y_val.columns)}")
         
         # === 리샘플링 적용 (훈련 데이터에만) ===
         # 폴드 정보에 폴드 번호 추가
@@ -291,6 +306,9 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         X_train_resampled, y_train_resampled = apply_resampling(
             X_train, y_train, config, fold_info_with_num
         )
+        
+        logger.info(f"[DEBUG] X_train_resampled shape: {X_train_resampled.shape}, y_train_resampled shape: {y_train_resampled.shape}")
+        logger.info(f"[DEBUG] y_train_resampled 컬럼: {list(y_train_resampled.columns)}")
         
         # 리샘플링 결과 로깅
         original_dist = y_train.value_counts().to_dict()

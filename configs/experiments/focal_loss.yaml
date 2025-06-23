@@ -23,6 +23,7 @@ overrides:
   # 피처 설정 오버라이드 (단일 타겟으로 집중)
   features:
     target_columns: ["suicide_a_next_year"]  # 자살 시도 예측에 집중
+    # selected_features 제거 - 기본 피처 선택 사용
   
   # 평가 설정 오버라이드
   evaluation:
@@ -51,4 +52,27 @@ focal_loss_experiment:
   secondary_metrics: ["recall", "balanced_accuracy"]
   
   # 실험 설명
-  description: "Focal Loss의 alpha와 gamma 파라미터를 조정하여 극단적 불균형 데이터(849:1)에서 소수 클래스 예측 성능을 개선하는 실험" 
+  description: "Focal Loss의 alpha와 gamma 파라미터를 조정하여 극단적 불균형 데이터(849:1)에서 소수 클래스 예측 성능을 개선하는 실험"
+
+# 빠른 테스트를 위한 설정
+tuning:
+  n_trials: 5  # 20 -> 5로 줄임
+  timeout: 300  # 3600 -> 300초(5분)로 줄임
+  direction: maximize
+  sampler:
+    type: tpe
+    seed: 42
+
+sampler:
+  type: tpe
+  seed: 42
+
+evaluation:
+  primary_metric: f1
+  optimization_direction: maximize
+
+results:
+  save_path: results/focal_loss_tuning_results.csv
+
+mlflow:
+  experiment_name: focal_loss_experiment 

@@ -1,17 +1,19 @@
 """
 모델 평가 모듈
 
-이 모듈은 회귀 및 분류 모델의 성능을 평가하는 함수들을 제공합니다.
+이 모듈은 다양한 성능 지표를 계산하고 평가 결과를 시각화하는 기능을 제공합니다.
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, List, Tuple
+import matplotlib.pyplot as plt
+import seaborn as sns
+from typing import Dict, Any, List, Tuple, Optional
 import logging
 from sklearn.metrics import (
     mean_absolute_error, mean_squared_error, r2_score,
-    precision_score, recall_score, f1_score, roc_auc_score,
-    confusion_matrix, classification_report,
+    precision_score, recall_score, f1_score, accuracy_score,
+    roc_auc_score, confusion_matrix, classification_report,
     precision_recall_curve, average_precision_score,
     balanced_accuracy_score, roc_curve
 )

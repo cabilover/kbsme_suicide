@@ -3,9 +3,17 @@
 ## 🎯 Phase 5-4의 핵심 목표
 현재 Phase 5-3에서 완성된 불균형 데이터 처리 및 리샘플링 하이퍼파라미터 튜닝 통합 시스템을 기반으로, 고급 모델 개발과 성능 최적화를 통해 예측 성능을 한 단계 더 향상시키는 것입니다.
 
+## 🆕 [업데이트] Baseline 실험 계획
+- **최소 feature(기본 feature)와 기본 하이퍼파라미터 튜닝만으로 각 모델의 성능을 측정하는 실험을 우선적으로 진행합니다.**
+    - 피처 엔지니어링, 리샘플링, 앙상블 등 고급 전략을 적용하기 전에, 가장 단순한 feature set과 모델별 기본 튜닝만으로 얻을 수 있는 baseline 성능을 명확히 기록합니다.
+    - 이 baseline 결과는 이후 전략(리샘플링, 고급 피처, 앙상블 등) 도입 시 성능 향상 폭을 객관적으로 비교하는 기준이 됩니다.
+    - 실험 방법: config에서 enable_feature_engineering=False, selected_features에 최소 feature만 지정, tuning space도 기본값 위주로 제한
+    - 모든 모델(XGBoost, CatBoost, LightGBM, Random Forest)에 대해 동일하게 적용
+    - 결과는 MLflow 및 결과 파일로 기록
+
 ## 📊 현재 상황 분석
 - **완성된 시스템**: 
-  - Focal Loss 통합 XGBoost 모델
+  - XGBoost 모델 (불균형 데이터 처리)
   - 고급 평가 기능 (Balanced Accuracy, Precision-Recall Curve 등)
   - 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 시스템
   - MLflow 기반 실험 관리 시스템
@@ -28,6 +36,10 @@
   - 극도 불균형 데이터 (자살 시도 849:1)
   - 시계열 특성을 고려한 모델 개발 필요
   - 모델 해석 가능성 확보
+- **불균형 데이터 처리의 잔여 이슈**: 
+    - XGBoost 실험에서 objective 파라미터 처리 문제(명시적 제거 필요)와 custom objective 사용 시 파라미터 전달 주의 필요
+    - 예측/후처리 단계에서 `inverse_transform` 관련 에러 발생(타겟 인코더 None 처리 필요)
+    - 전체 파이프라인 안정화 및 후처리 로직 개선이 추후 필요
 
 ## 🔧 6개 주요 작업 영역
 
@@ -47,6 +59,7 @@
   - Stacking: 다중 모델의 예측을 메타 모델로 조합
   - Blending: 검증 세트 기반 모델 가중치 최적화
   - Voting: 하드/소프트 보팅을 통한 앙상블
+- **Focal Loss 파이프라인 안정화**: objective 파라미터 처리, 후처리(inverse_transform) 에러 등 잔여 이슈 정리 및 재현성 확보 필요
 
 ### 2. 피처 엔지니어링 고도화 (진행 예정)
 - **시계열 피처 확장**

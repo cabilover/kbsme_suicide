@@ -163,18 +163,51 @@ class BaseModel(ABC):
         Returns:
             전처리된 피처 데이터프레임
         """
-        # XGBoost 입력에 object 컬럼이 포함되지 않도록 처리
-        X = X.select_dtypes(include=['number', 'bool', 'category'])
+        logger.info(f"[DEBUG] _validate_input_data 입력 X shape: {X.shape}")
+        logger.info(f"[DEBUG] _validate_input_data 입력 X 컬럼: {list(X.columns)}")
+        logger.info(f"[DEBUG] _validate_input_data 입력 X dtypes: {X.dtypes.value_counts()}")
         
-        # NaN, inf 값 처리
-        X = X.replace([np.inf, -np.inf], np.nan)
+        # XGBoost 입력에 object 컬럼이 포함되지 않도록 처리
+        # 하지만 category 타입은 유지 (XGBoost에서 지원)
+        # object 타입도 유지하되, 숫자로 변환 가능한 경우 변환
+        X_cleaned = X.copy()
+        
+        # object 타입 컬럼들을 숫자로 변환 시도
+        for col in X_cleaned.columns:
+            if X_cleaned[col].dtype == 'object':
+                try:
+                    # 숫자로 변환 가능한지 확인
+                    pd.to_numeric(X_cleaned[col], errors='raise')
+                    X_cleaned[col] = pd.to_numeric(X_cleaned[col], errors='coerce')
+                    logger.info(f"[DEBUG] 컬럼 {col}을 숫자로 변환 성공")
+                except (ValueError, TypeError):
+                    # 숫자로 변환할 수 없는 경우 그대로 유지
+                    logger.info(f"[DEBUG] 컬럼 {col}은 숫자로 변환 불가, 그대로 유지")
+        
+        # 이제 select_dtypes 적용
+        X_cleaned = X_cleaned.select_dtypes(include=['number', 'bool', 'category'])
+        
+        logger.info(f"[DEBUG] select_dtypes 후 X shape: {X_cleaned.shape}")
+        logger.info(f"[DEBUG] select_dtypes 후 X 컬럼: {list(X_cleaned.columns)}")
+        
+        # 제거된 컬럼 확인
+        removed_columns = set(X.columns) - set(X_cleaned.columns)
+        if removed_columns:
+            logger.warning(f"제거된 컬럼들: {removed_columns}")
+        
+        X_cleaned = X_cleaned.replace([np.inf, -np.inf], np.nan)
         
         if y is not None:
-            y = y.select_dtypes(include=['number', 'bool', 'category'])
+            # y가 Series면 DataFrame으로 변환
+            if isinstance(y, pd.Series):
+                y = y.to_frame()
+            # select_dtypes 제거: 컬럼 유지
             y = y.replace([np.inf, -np.inf], np.nan)
-            return X, y
+            logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}, y shape: {y.shape}")
+            return X_cleaned, y
         
-        return X
+        logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}")
+        return X_cleaned
     
     def _calculate_scale_pos_weight(self, y: pd.Series) -> float:
         """

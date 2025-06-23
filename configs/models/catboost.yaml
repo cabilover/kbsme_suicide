@@ -37,6 +37,12 @@ model:
     auto_class_weights: "Balanced"
     scale_pos_weight: 1.0  # 자동 계산됨
     
+    # Focal Loss 설정 (CatBoost는 직접 지원하지 않지만 설정을 인식)
+    use_focal_loss: false  # Focal Loss 사용 여부 (true/false)
+    focal_loss:
+      alpha: 0.25  # 클래스 가중치 (0 < alpha < 1). 소수 클래스에 더 큰 가중치
+      gamma: 2.0   # 포커싱 파라미터 (gamma >= 0). 쉬운 샘플의 기여도를 낮춤
+    
     # 부스팅 파라미터
     boosting_type: "Plain"
     bootstrap_type: "Bernoulli"
