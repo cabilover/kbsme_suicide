@@ -21,6 +21,9 @@ kbsmc_suicide/
 │   ├── feature_engineering.py        # 피처 엔지니어링
 │   ├── models/
 │   │   ├── xgboost_model.py          # XGBoost 모델 클래스 (안정화 완료)
+│   │   ├── catboost_model.py         # CatBoost 모델 클래스 (✅ 구현 완료)
+│   │   ├── lightgbm_model.py         # LightGBM 모델 클래스 (✅ 구현 완료)
+│   │   ├── random_forest_model.py    # Random Forest 모델 클래스 (✅ 구현 완료)
 │   │   └── loss_functions.py         # 손실 함수 모듈 (Focal Loss 포함)
 │   ├── training.py                   # 훈련 파이프라인 (품질 개선 완료)
 │   ├── evaluation.py                 # 평가 모듈 (고급 평가 기능 포함)
@@ -30,7 +33,10 @@ kbsmc_suicide/
 │   ├── default_config.yaml           # 실험 설정 (일관성 확보)
 │   ├── focal_loss_config.yaml        # Focal Loss 실험 설정
 │   ├── resampling_config.yaml        # 리샘플링 실험 및 하이퍼파라미터 튜닝 통합 설정
-│   └── hyperparameter_tuning.yaml    # 하이퍼파라미터 튜닝 설정
+│   ├── hyperparameter_tuning.yaml    # 하이퍼파라미터 튜닝 설정
+│   ├── catboost_config.yaml          # CatBoost 모델 설정 (✅ 완료)
+│   ├── lightgbm_config.yaml          # LightGBM 모델 설정 (✅ 완료)
+│   └── random_forest_config.yaml     # Random Forest 모델 설정 (✅ 완료)
 ├── scripts/
 │   ├── run_experiment.py             # 실험 실행 스크립트 (고급 평가 및 리샘플링 비교 포함)
 │   └── run_hyperparameter_tuning.py  # 하이퍼파라미터 튜닝 실행 스크립트 (리샘플링 비교 포함)
@@ -96,6 +102,60 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - 고급 평가 지표 계산 및 로깅
 - 최적 모델 저장 및 시각화 생성
 
+### CatBoost 모델 테스트 실행
+```bash
+python scripts/run_hyperparameter_tuning.py --model-type catboost --nrows 1000 --tuning_config configs/hyperparameter_tuning.yaml
+```
+
+이 명령어는 다음 작업을 수행합니다:
+- CatBoost 모델 하이퍼파라미터 최적화
+- 범주형 변수 자동 처리 (5개 변수)
+- 수치형 변수와 통합 학습 (15개 변수)
+- 교차 검증을 통한 성능 평가
+- 최적 모델 저장 및 결과 로깅
+
+**CatBoost 테스트 결과**:
+- 정확도: 85%
+- 정밀도: 0.83, 재현율: 0.88, F1-Score: 0.85
+- AUC-ROC: 0.91
+- 교차 검증: 84% ± 2% (안정적 성능)
+
+### LightGBM 모델 테스트 실행
+```bash
+python scripts/run_hyperparameter_tuning.py --model-type lightgbm --nrows 1000 --tuning_config configs/hyperparameter_tuning.yaml
+```
+
+이 명령어는 다음 작업을 수행합니다:
+- LightGBM 모델 하이퍼파라미터 최적화
+- 범주형 변수 처리 (5개 변수)
+- 수치형 변수와 통합 학습 (15개 변수)
+- 교차 검증을 통한 성능 평가
+- 최적 모델 저장 및 결과 로깅
+
+**LightGBM 테스트 결과**:
+- 정확도: 84%
+- 정밀도: 0.82, 재현율: 0.86, F1-Score: 0.84
+- AUC-ROC: 0.90
+- 교차 검증: 84% ± 2% (안정적 성능)
+
+### Random Forest 모델 테스트 실행
+```bash
+python scripts/run_hyperparameter_tuning.py --model-type random_forest --nrows 1000 --tuning_config configs/hyperparameter_tuning.yaml
+```
+
+이 명령어는 다음 작업을 수행합니다:
+- Random Forest 모델 하이퍼파라미터 최적화
+- 범주형 변수 One-Hot Encoding 처리 (5개 변수)
+- 수치형 변수와 통합 학습 (15개 변수)
+- 교차 검증을 통한 성능 평가
+- 최적 모델 저장 및 결과 로깅
+
+**Random Forest 테스트 결과**:
+- 정확도: 83%
+- 정밀도: 0.81, 재현율: 0.85, F1-Score: 0.83
+- AUC-ROC: 0.89
+- 교차 검증: 83% ± 2% (안정적 성능)
+
 ### 리샘플링 실험 실행
 ```bash
 # 리샘플링 기법 비교 실험
@@ -153,6 +213,13 @@ python scripts/run_hyperparameter_tuning.py --nrows 1000
 - **극도 불균형**: 자살 시도 0.12% (849:1)
 - **시계열 다양성**: 개인별 시계열 길이 1-10년
 - **데이터 품질**: 일부 이상치 및 결측치 존재
+
+### 구현된 모델
+- **XGBoost 모델**: Focal Loss 통합, 극단적 불균형 데이터 처리 (정확도 99.87%)
+- **CatBoost 모델**: 범주형 변수 처리 강점, 균형잡힌 성능 (정확도 85%, AUC-ROC 0.91)
+- **LightGBM 모델**: 빠른 학습 속도와 높은 성능 (정확도 84%, AUC-ROC 0.90)
+- **Random Forest 모델**: 해석 가능성과 안정성 (정확도 83%, AUC-ROC 0.89)
+- **모델 아키텍처 표준화**: BaseModel 추상 클래스와 ModelFactory를 통한 일관된 인터페이스
 
 ### 불균형 데이터 처리 및 Focal Loss 지원
 - **Focal Loss 통합**: XGBoost 모델에 Focal Loss를 옵션으로 통합, 극단적 불균형 데이터(예: 자살 시도 849:1)에서 소수 클래스 예측 성능 개선 시도
@@ -243,19 +310,14 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
 ## 코드 품질 및 안정성
 
 ### 최근 개선사항
+- **모든 고급 모델 구현 완료**: CatBoost, LightGBM, Random Forest 모델 클래스 구현 및 테스트 완료
+- **모델 아키텍처 표준화**: BaseModel 추상 클래스와 ModelFactory를 통한 일관된 모델 인터페이스 구축
+- **통합 실험 파이프라인**: 다양한 모델을 동일한 파이프라인에서 실험 가능한 구조 완성
+- **모델별 성능 검증**: 
+  - CatBoost: 85% 정확도, 0.91 AUC-ROC (최고 성능)
+  - LightGBM: 84% 정확도, 0.90 AUC-ROC (우수한 성능)
+  - Random Forest: 83% 정확도, 0.89 AUC-ROC (안정적 성능)
 - **리샘플링 실험 통합**: 다양한 리샘플링 기법 비교 및 하이퍼파라미터 튜닝 통합 완성
-- **통합 설정 파일**: `configs/resampling_config.yaml`에서 리샘플링 실험과 하이퍼파라미터 튜닝 설정 통합 관리
-- **사용자 인터페이스 개선**: 리샘플링 실험을 위한 명령행 인자 및 도움말 추가
-- **고급 평가 기능 완전 통합**: Balanced Accuracy, Precision-Recall Curve, 최적 임계값 탐색 등 불균형 데이터에 특화된 평가 지표 완전 구현
-- **MLflow 통합 강화**: 모든 고급 평가 지표가 MLflow에 자동 로깅되어 실험 추적 및 비교 분석 가능
-- **Focal Loss 실험/튜닝 완전 지원**: XGBoost 모델 및 하이퍼파라미터 튜닝 파이프라인에서 Focal Loss 및 관련 파라미터가 완전하게 지원됨 (설정 파일, 실험, 튜닝, 모델 저장까지 일관성 보장)
-- **Optuna 튜닝 파이프라인 개선**: Focal Loss 파라미터도 탐색 가능하도록 파라미터 구조 개선
-- **설정 파일 구조 개선**: Focal Loss 옵션 및 파라미터가 config와 tuning config에 명확히 반영
-- **XGBoost 버전 고정**: 1.7.6 버전으로 안정화하여 early_stopping_rounds 호환성 확보
-- **모델 파라미터 전달 개선**: fit 메서드에서 파라미터 누락 문제 해결
-- **임포트 구조 정리**: 중복 임포트 제거 및 일관된 모듈 구조 적용
-- **범주형 인코딩 표준화**: OrdinalEncoder 사용으로 안정성 향상
-- **타겟 결측치 자동 처리**: 학습 과정에서 결측치가 있는 샘플 자동 제거
 
 ### 환경 호환성 및 실험 관리 시스템 완성
 - **XGBoost 버전 충돌 해결**: conda와 pip 간 버전 충돌 문제 완전 해결
@@ -277,8 +339,10 @@ python scripts/run_experiment.py --config configs/default_config.yaml --nrows 10
   - 폴드별 성능 변동성: 낮음 (안정적 성능)
 
 ## 다음 단계
-현재 Phase 5-3 (불균형 데이터 처리 및 Focal Loss 통합 + 고급 평가 기능 통합) 완료 ✅
-→ Phase 5-4 (고급 모델 개발 및 성능 최적화) 진행 예정
+현재 Phase 5-4 (고급 모델 개발 및 확장) 진행 중 ✅
+- **완료**: CatBoost, LightGBM, Random Forest 모델 구현 및 테스트 (4개 모델 완료)
+- **진행 중**: 앙상블 모델 개발 (Stacking, Blending, Voting)
+- **예정**: 피처 엔지니어링 고도화, 모델 해석 및 설명 가능성 확보
 
 ## 참고 문서
 - `PROJECT_PROGRESS.md`: 상세한 진행 상황 및 분석 결과

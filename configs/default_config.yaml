@@ -1,10 +1,20 @@
-# 기본 설정 파일
+# 기본 설정 파일 (XGBoost)
 # 데이터 분할 및 검증 전략 설정
+
+# 데이터 설정
+data:
+  file_path: "data/processed_data.csv"
+  encoding: "utf-8"
+  na_values: ["", "nan", "NaN", "NULL", "null"]
 
 # 데이터 분할 설정
 data_split:
   test_ids_ratio: 0.15  # 최종 테스트 세트에 사용할 ID 비율
   random_state: 42      # 재현성을 위한 시드
+  method: "stratified_kfold"
+  n_splits: 5
+  test_size: 0.2
+  val_size: 0.2
 
 # 검증 전략 설정
 validation:
@@ -31,61 +41,36 @@ time_series:
   year_column: "yov"                   # 연도 컬럼명
   id_column: "id"                      # 개인 ID 컬럼명
 
-# 전처리 설정
-preprocessing:
-  # 시계열 보간 설정
-  time_series_imputation:
-    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "suicide_t", "suicide_a"]
-    fallback_strategy: "mean"  # ffill/bfill 후에도 결측치가 남을 경우 사용할 전략
-  
-  # 수치형 결측치 처리
-  numerical_imputation:
-    strategy: "mean"  # "mean", "median", "constant"
-    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "age"]
-  
-  # 범주형 결측치 처리
-  categorical_imputation:
-    strategy: "most_frequent"  # "most_frequent", "constant"
-    columns: ["sex", "psychia_cate"]
-  
-  # 범주형 인코딩 설정
-  categorical_encoding:
-    method: "ordinal"  # "onehot", "ordinal", "none"
-    # onehot: One-Hot Encoding (XGBoost에 적합)
-    # ordinal: Ordinal Encoding (순서가 있는 범주형에 적합)
-    # none: 인코딩 없음
-
-# 리샘플링 설정 (불균형 데이터 처리)
-resampling:
-  enabled: false  # 리샘플링 활성화 여부
-  method: "smote"  # "smote", "borderline_smote", "adasyn", "under_sampling", "hybrid"
-  random_state: 42  # 재현성을 위한 시드
-  
-  # SMOTE 설정
-  smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
-  
-  # Borderline SMOTE 설정
-  borderline_smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
-  
-  # ADASYN 설정
-  adasyn_k_neighbors: 5  # K-NN에서 사용할 이웃 수
-  
-  # 언더샘플링 설정
-  under_sampling_strategy: "random"  # "random", "tomek", "enn"
-  
-  # 하이브리드 샘플링 설정
-  hybrid_strategy: "smote_tomek"  # "smote_tomek", "smote_enn"
-  
-  # 시계열 특화 설정
-  time_series_adapted:
-    enabled: false  # 시계열 특성을 고려한 리샘플링 활성화
-    time_weight: 0.3  # 시간적 유사성 가중치 (0~1)
-    pattern_preservation: true  # 시계열 패턴 보존 여부
-
-# 피처 엔지니어링 설정
+# 피처 설정
 features:
-  # 타겟 컬럼 (단일 타겟으로 단순화)
-  target_columns: ["suicide_a_next_year"]
+  # 타겟 컬럼
+  target_columns:
+    - "anxiety_score_next_year"
+    - "depress_score_next_year"
+    - "sleep_score_next_year"
+    - "suicide_t_next_year"
+    - "suicide_a_next_year"
+  
+  # 제외할 컬럼들
+  exclude_columns:
+    - "id"
+    - "patient_id"
+    - "visit_date"
+    - "visit_year"
+  
+  # 범주형 변수 처리
+  categorical_columns:
+    - "gender"
+    - "marital_status"
+    - "education_level"
+    - "income_level"
+    - "residence_type"
+    - "insurance_type"
+    - "primary_diagnosis"
+    - "comorbidity"
+    - "medication_type"
+    - "treatment_type"
+    - "follow_up_status"
   
   # 선택된 피처 목록 (문제 발생 가능성 있는 변수들 제외)
   selected_features: [
@@ -133,6 +118,8 @@ features:
 
 # 모델 설정
 model:
+  model_type: "xgboost"
+  
   # XGBoost 모델 파라미터
   xgboost:
     n_estimators: 100
@@ -151,6 +138,76 @@ model:
       alpha: 0.25  # 클래스 가중치 (0 < alpha < 1). 소수 클래스에 더 큰 가중치
       gamma: 2.0   # 포커싱 파라미터 (gamma >= 0). 쉬운 샘플의 기여도를 낮춤
 
+# 전처리 설정
+preprocessing:
+  # 시계열 보간 설정
+  time_series_imputation:
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "suicide_t", "suicide_a"]
+    fallback_strategy: "mean"  # ffill/bfill 후에도 결측치가 남을 경우 사용할 전략
+  
+  # 수치형 결측치 처리
+  numerical_imputation:
+    strategy: "mean"  # "mean", "median", "constant"
+    columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "age"]
+  
+  # 범주형 결측치 처리
+  categorical_imputation:
+    strategy: "most_frequent"  # "most_frequent", "constant"
+    columns: ["sex", "psychia_cate"]
+  
+  # 범주형 인코딩 설정
+  categorical_encoding:
+    method: "ordinal"  # "onehot", "ordinal", "none"
+    # onehot: One-Hot Encoding (XGBoost에 적합)
+    # ordinal: Ordinal Encoding (순서가 있는 범주형에 적합)
+    # none: 인코딩 없음
+  
+  # 결측치 처리
+  missing_value_strategy: "median"
+  
+  # 이상치 처리
+  outlier_detection:
+    method: "iqr"
+    threshold: 1.5
+  
+  # 스케일링
+  scaling:
+    method: "robust"
+    with_mean: true
+    with_std: true
+  
+  # 피처 선택
+  feature_selection:
+    method: "variance_threshold"
+    threshold: 0.01
+
+# 리샘플링 설정 (불균형 데이터 처리)
+resampling:
+  enabled: false  # 리샘플링 활성화 여부
+  method: "smote"  # "smote", "borderline_smote", "adasyn", "under_sampling", "hybrid"
+  random_state: 42  # 재현성을 위한 시드
+  
+  # SMOTE 설정
+  smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # Borderline SMOTE 설정
+  borderline_smote_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # ADASYN 설정
+  adasyn_k_neighbors: 5  # K-NN에서 사용할 이웃 수
+  
+  # 언더샘플링 설정
+  under_sampling_strategy: "random"  # "random", "tomek", "enn"
+  
+  # 하이브리드 샘플링 설정
+  hybrid_strategy: "smote_tomek"  # "smote_tomek", "smote_enn"
+  
+  # 시계열 특화 설정
+  time_series_adapted:
+    enabled: false  # 시계열 특성을 고려한 리샘플링 활성화
+    time_weight: 0.3  # 시간적 유사성 가중치 (0~1)
+    pattern_preservation: true  # 시계열 패턴 보존 여부
+
 # 학습 설정
 training:
   # Early Stopping 설정
@@ -166,11 +223,32 @@ training:
 
 # 평가 설정
 evaluation:
-  # 회귀 지표
-  regression_metrics: ["mae", "rmse", "r2"]
+  # 분류 메트릭
+  classification_metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "auc"
+    - "roc_auc"
+    - "average_precision"
+    - "balanced_accuracy"
   
-  # 분류 지표 (기본)
-  classification_metrics: ["precision", "recall", "f1", "accuracy", "balanced_accuracy", "roc_auc", "pr_auc"]
+  # 회귀 메트릭
+  regression_metrics:
+    - "mse"
+    - "rmse"
+    - "mae"
+    - "r2"
+    - "explained_variance"
+  
+  # 교차 검증
+  cv_metrics:
+    - "accuracy"
+    - "f1"
+    - "auc"
+    - "rmse"
+    - "r2"
   
   # 고급 평가 지표 설정
   advanced_metrics:
@@ -196,7 +274,63 @@ evaluation:
   save_plots: true
   plots_save_path: "evaluation_plots/"
 
+# 출력 설정
+output:
+  directory: "results/xgboost"
+  save_model: true
+  save_predictions: true
+  save_feature_importance: true
+  save_confusion_matrix: true
+  save_roc_curve: true
+  save_precision_recall_curve: true
+
 # 로깅 설정
 logging:
-  log_splits_info: true               # 분할 정보 로깅 여부
-  log_fold_details: true              # 각 폴드 상세 정보 로깅 여부 
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/xgboost_experiment.log"
+
+# 실험 설정
+experiment:
+  name: "xgboost_suicide_prediction"
+  description: "XGBoost를 사용한 자살 위험 예측 모델"
+  tags:
+    - "xgboost"
+    - "suicide_prediction"
+    - "healthcare"
+    - "classification"
+    - "regression"
+  
+  # 하이퍼파라미터 튜닝
+  hyperparameter_tuning:
+    enabled: false
+    method: "optuna"
+    n_trials: 100
+    timeout: 3600  # 1시간
+    
+    # 튜닝할 파라미터
+    parameters:
+      n_estimators:
+        type: "int"
+        low: 50
+        high: 300
+      max_depth:
+        type: "int"
+        low: 3
+        high: 10
+      learning_rate:
+        type: "float"
+        low: 0.01
+        high: 0.3
+      subsample:
+        type: "float"
+        low: 0.6
+        high: 1.0
+      colsample_bytree:
+        type: "float"
+        low: 0.6
+        high: 1.0
+      min_child_weight:
+        type: "int"
+        low: 1
+        high: 10 

@@ -151,9 +151,24 @@ class HyperparameterTuner:
             제안된 하이퍼파라미터 딕셔너리
         """
         params = {}
-        xgboost_params = self.tuning_config['xgboost_params']
         
-        for param_name, param_config in xgboost_params.items():
+        # 모델 타입 확인
+        model_type = self.config.get('model', {}).get('model_type', 'xgboost')
+        
+        # 모델 타입별 파라미터 설정
+        if model_type == 'xgboost':
+            model_params = self.tuning_config.get('xgboost_params', {})
+        elif model_type == 'lightgbm':
+            model_params = self.tuning_config.get('lightgbm_params', {})
+        elif model_type == 'random_forest':
+            model_params = self.tuning_config.get('random_forest_params', {})
+        elif model_type == 'catboost':
+            model_params = self.tuning_config.get('catboost_params', {})
+        else:
+            logger.warning(f"지원하지 않는 모델 타입: {model_type}. XGBoost 파라미터를 사용합니다.")
+            model_params = self.tuning_config.get('xgboost_params', {})
+        
+        for param_name, param_config in model_params.items():
             param_type = param_config['type']
             
             if param_type == "categorical":
@@ -191,6 +206,9 @@ class HyperparameterTuner:
             # 설정 업데이트
             trial_config = self.config.copy()
             
+            # 모델 타입 확인
+            model_type = trial_config.get('model', {}).get('model_type', 'xgboost')
+            
             # Focal Loss 파라미터 처리
             focal_loss_params = {}
             params_copy = params.copy()
@@ -204,12 +222,28 @@ class HyperparameterTuner:
                     focal_loss_params['focal_loss'] = {}
                 focal_loss_params['focal_loss']['gamma'] = params_copy.pop('focal_loss_gamma')
             
-            # XGBoost 파라미터 업데이트
-            trial_config['model']['xgboost'].update(params_copy)
-            
-            # Focal Loss 파라미터가 있으면 업데이트
-            if focal_loss_params:
-                trial_config['model']['xgboost'].update(focal_loss_params)
+            # 모델 타입별 파라미터 업데이트
+            if model_type == 'xgboost':
+                trial_config['model']['xgboost'].update(params_copy)
+                if focal_loss_params:
+                    trial_config['model']['xgboost'].update(focal_loss_params)
+            elif model_type == 'lightgbm':
+                trial_config['model']['lightgbm'].update(params_copy)
+                if focal_loss_params:
+                    trial_config['model']['lightgbm'].update(focal_loss_params)
+            elif model_type == 'random_forest':
+                trial_config['model']['random_forest'].update(params_copy)
+                if focal_loss_params:
+                    trial_config['model']['random_forest'].update(focal_loss_params)
+            elif model_type == 'catboost':
+                trial_config['model']['catboost'].update(params_copy)
+                if focal_loss_params:
+                    trial_config['model']['catboost'].update(focal_loss_params)
+            else:
+                logger.warning(f"지원하지 않는 모델 타입: {model_type}. XGBoost를 사용합니다.")
+                trial_config['model']['xgboost'].update(params_copy)
+                if focal_loss_params:
+                    trial_config['model']['xgboost'].update(focal_loss_params)
             
             # 데이터 로드
             df = pd.read_csv(self.data_path)
@@ -321,10 +355,13 @@ class HyperparameterTuner:
         sampler = self._create_sampler()
         direction = self.tuning_config['tuning']['direction']
         
+        # 모델 타입 확인
+        model_type = self.config.get('model', {}).get('model_type', 'xgboost')
+        
         self.study = optuna.create_study(
             direction=direction,
             sampler=sampler,
-            study_name=f"xgboost_optimization_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            study_name=f"{model_type}_optimization_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
         
         # 최적화 실행
@@ -401,12 +438,28 @@ class HyperparameterTuner:
                 focal_loss_params['focal_loss'] = {}
             focal_loss_params['focal_loss']['gamma'] = best_params_copy.pop('focal_loss_gamma')
         
-        # XGBoost 파라미터 업데이트
-        model_config['model']['xgboost'].update(best_params_copy)
-        
-        # Focal Loss 파라미터가 있으면 업데이트
-        if focal_loss_params:
-            model_config['model']['xgboost'].update(focal_loss_params)
+        # 모델 타입별 파라미터 업데이트
+        if model_config['model']['model_type'] == 'xgboost':
+            model_config['model']['xgboost'].update(best_params_copy)
+            if focal_loss_params:
+                model_config['model']['xgboost'].update(focal_loss_params)
+        elif model_config['model']['model_type'] == 'lightgbm':
+            model_config['model']['lightgbm'].update(best_params_copy)
+            if focal_loss_params:
+                model_config['model']['lightgbm'].update(focal_loss_params)
+        elif model_config['model']['model_type'] == 'random_forest':
+            model_config['model']['random_forest'].update(best_params_copy)
+            if focal_loss_params:
+                model_config['model']['random_forest'].update(focal_loss_params)
+        elif model_config['model']['model_type'] == 'catboost':
+            model_config['model']['catboost'].update(best_params_copy)
+            if focal_loss_params:
+                model_config['model']['catboost'].update(focal_loss_params)
+        else:
+            logger.warning(f"지원하지 않는 모델 타입: {model_config['model']['model_type']}. XGBoost를 사용합니다.")
+            model_config['model']['xgboost'].update(best_params_copy)
+            if focal_loss_params:
+                model_config['model']['xgboost'].update(focal_loss_params)
         
         # 전체 데이터로 최종 모델 학습
         df = pd.read_csv(self.data_path)

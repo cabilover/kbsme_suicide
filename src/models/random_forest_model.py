@@ -1,38 +1,40 @@
 """
-XGBoost 모델 구현
+Random Forest 모델 구현
 
-이 모듈은 다중 출력 회귀 및 분류를 위한 XGBoost 모델을 구현합니다.
+이 모듈은 다중 출력 회귀 및 분류를 위한 Random Forest 모델을 구현합니다.
+해석 가능성과 안정성, 과적합에 강함, 피처 중요도 제공을 특징으로 합니다.
+Focal Loss 설정을 인식하고 적절한 불균형 처리 방법을 적용합니다.
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Tuple, Optional
 import logging
-import xgboost as xgb
-from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 import warnings
-from src.utils import find_column_with_remainder
-from src.models.loss_functions import FocalLoss, validate_focal_loss_parameters
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 from .base_model import BaseModel
 from .model_factory import register_model
+from .loss_functions import validate_focal_loss_parameters
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@register_model("xgboost")
-class XGBoostModel(BaseModel):
+@register_model("random_forest")
+class RandomForestModel(BaseModel):
     """
-    XGBoost 기반 다중 출력 모델
+    Random Forest 기반 다중 출력 모델
     
     회귀와 분류 문제를 모두 지원하며, 각 타겟별로 별도의 모델을 학습합니다.
-    Focal Loss를 통한 불균형 데이터 처리도 지원합니다.
+    해석 가능성과 안정성, 과적합에 강함을 특징으로 합니다.
+    Focal Loss 설정을 인식하고 적절한 불균형 처리 방법을 적용합니다.
     """
     
     def __init__(self, config: Dict[str, Any]):
         """
-        XGBoost 모델 초기화
+        Random Forest 모델 초기화
         
         Args:
             config: 설정 딕셔너리
@@ -40,10 +42,10 @@ class XGBoostModel(BaseModel):
         # BaseModel 초기화
         super().__init__(config)
         
-        # Focal Loss 설정 확인
-        self.use_focal_loss = config.get('model', {}).get('xgboost', {}).get('use_focal_loss', False)
+        # Focal Loss 설정 확인 (Random Forest는 직접 지원하지 않지만 설정을 인식)
+        self.use_focal_loss = config.get('model', {}).get('random_forest', {}).get('use_focal_loss', False)
         if self.use_focal_loss:
-            focal_config = config.get('model', {}).get('xgboost', {}).get('focal_loss', {})
+            focal_config = config.get('model', {}).get('random_forest', {}).get('focal_loss', {})
             self.focal_alpha = focal_config.get('alpha', 0.25)
             self.focal_gamma = focal_config.get('gamma', 2.0)
             
@@ -53,12 +55,45 @@ class XGBoostModel(BaseModel):
                 self.focal_alpha = 0.25
                 self.focal_gamma = 2.0
             
-            logger.info(f"Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
+            logger.info(f"Focal Loss 설정 인식: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
+            logger.info("Random Forest는 직접적인 Focal Loss를 지원하지 않습니다. class_weight를 사용합니다.")
         
         # 모델 파라미터
-        self.model_params = config['model']['xgboost']
+        self.model_params = config['model']['random_forest']
         
         logger.info(f"  - Focal Loss 사용: {self.use_focal_loss}")
+    
+    def _calculate_class_weight(self, y_target: pd.Series) -> Dict[int, float]:
+        """
+        Focal Loss 설정을 기반으로 클래스 가중치를 계산합니다.
+        
+        Args:
+            y_target: 타겟 시리즈
+            
+        Returns:
+            클래스별 가중치 딕셔너리
+        """
+        if not self.use_focal_loss:
+            return 'balanced'
+        
+        # Focal Loss alpha를 기반으로 클래스 가중치 계산
+        class_counts = y_target.value_counts()
+        total_samples = len(y_target)
+        
+        # alpha가 소수 클래스에 대한 가중치를 나타내므로 이를 활용
+        weights = {}
+        for class_label in class_counts.index:
+            if class_label == 1:  # 양성 클래스 (소수 클래스)
+                weights[class_label] = self.focal_alpha
+            else:  # 음성 클래스 (다수 클래스)
+                weights[class_label] = 1.0 - self.focal_alpha
+        
+        # 정규화
+        total_weight = sum(weights.values())
+        weights = {k: v / total_weight * len(class_counts) for k, v in weights.items()}
+        
+        logger.info(f"Focal Loss 기반 클래스 가중치: {weights}")
+        return weights
     
     def _get_model_params(self, target: str) -> Dict[str, Any]:
         """
@@ -74,172 +109,130 @@ class XGBoostModel(BaseModel):
         
         # 분류 문제인 경우
         if target in self.classification_targets:
-            # Focal Loss 사용 여부에 따른 파라미터 설정
             if self.use_focal_loss:
-                # Focal Loss 사용 시: 기본 objective 유지, Focal Loss는 별도 처리
-                params['objective'] = 'binary:logistic'
-                params['eval_metric'] = 'logloss'
-                # Focal Loss 관련 파라미터는 별도로 관리
-                params['focal_loss_enabled'] = True
-                params['focal_alpha'] = self.focal_alpha
-                params['focal_gamma'] = self.focal_gamma
-                logger.info(f"  - Focal Loss 활성화: alpha={self.focal_alpha}, gamma={self.focal_gamma}")
+                # Focal Loss 사용 시: 동적으로 계산된 클래스 가중치 사용
+                params['class_weight'] = None  # fit에서 동적으로 설정
+                logger.info(f"  - Focal Loss 기반 클래스 가중치 사용")
             else:
-                # 기존 방식: scale_pos_weight 사용
-                params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
-                params['objective'] = 'binary:logistic'
-                params['eval_metric'] = 'logloss'
+                # 기존 방식: balanced 클래스 가중치 사용
+                params['class_weight'] = 'balanced'
+                logger.info(f"  - class_weight: balanced")
         else:
             # 회귀 문제
-            params['objective'] = 'reg:squarederror'
-            params['eval_metric'] = 'rmse'
+            # Random Forest는 기본적으로 회귀 문제를 처리
+            pass
         
         return params
     
-    def _calculate_focal_loss_metric(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> float:
-        """
-        Focal Loss를 사용한 평가 지표를 계산합니다.
-        
-        Args:
-            y_true: 실제 값
-            y_pred_proba: 예측 확률
-            
-        Returns:
-            Focal Loss 값
-        """
-        focal_loss = FocalLoss(alpha=self.focal_alpha, gamma=self.focal_gamma)
-        return focal_loss(y_true, y_pred_proba)
-    
     def fit(self, X: pd.DataFrame, y: pd.DataFrame, 
-            X_val: pd.DataFrame = None, y_val: pd.DataFrame = None) -> 'XGBoostModel':
+            X_val: pd.DataFrame = None, y_val: pd.DataFrame = None) -> 'RandomForestModel':
         """
         모델을 학습합니다.
         
         Args:
             X: 피처 데이터프레임
             y: 타겟 데이터프레임
-            X_val: 검증 피처 데이터프레임 (Early Stopping용, 선택사항)
-            y_val: 검증 타겟 데이터프레임 (Early Stopping용, 선택사항)
+            X_val: 검증 피처 데이터프레임 (사용하지 않음, 호환성을 위해 유지)
+            y_val: 검증 타겟 데이터프레임 (사용하지 않음, 호환성을 위해 유지)
             
         Returns:
             학습된 모델
         """
-        logger.info("XGBoost 모델 학습 시작")
-        early_stopping_rounds = self.model_params.get('early_stopping_rounds', None)
-        use_early_stopping = early_stopping_rounds is not None and X_val is not None and y_val is not None
-        if use_early_stopping:
-            logger.info(f"Early Stopping 활성화 (rounds: {early_stopping_rounds})")
-        else:
-            logger.info("Early Stopping 비활성화")
+        logger.info("Random Forest 모델 학습 시작")
+        logger.info(f"입력 데이터 형태: X={X.shape}, y={y.shape}")
         
         # 입력 데이터 검증 및 전처리
-        if y_val is not None:
-            X, y = self._validate_input_data(X, y)
-            X_val, y_val = self._validate_input_data(X_val, y_val)
-        else:
-            X = self._validate_input_data(X)
-            y = y.select_dtypes(include=['number', 'bool', 'category'])
-            y = y.replace([np.inf, -np.inf], np.nan)
+        logger.info("입력 데이터 검증 및 전처리 중...")
+        X = self._validate_input_data(X)
+        y = y.select_dtypes(include=['number', 'bool', 'category'])
+        y = y.replace([np.inf, -np.inf], np.nan)
         
-        # 사용 가능한 타겟 컬럼 찾기 (전처리된 컬럼명 고려)
+        logger.info(f"전처리 후 데이터 형태: X={X.shape}, y={y.shape}")
+        
+        # 사용 가능한 타겟 컬럼 찾기
         available_targets = []
         for target in self.target_columns:
-            # 원본 컬럼명과 remainder__ 접두사가 붙은 컬럼명 모두 확인
-            possible_names = [target, f"remainder__{target}"]
-            for name in possible_names:
-                if name in y.columns:
-                    available_targets.append(name)
-                    break
-        
+            if target in y.columns:
+                available_targets.append(target)
         logger.info(f"사용 가능한 타겟 컬럼: {available_targets}")
         
         if not available_targets:
-            logger.warning("사용 가능한 타겟 컬럼이 없습니다. 데이터를 확인해주세요.")
-            logger.info(f"y 컬럼들: {list(y.columns)}")
-            logger.info(f"찾고 있는 타겟들: {self.target_columns}")
+            logger.error("사용 가능한 타겟 컬럼이 없습니다!")
             return self
         
         for target in available_targets:
-            original_target = target.replace('remainder__', '') if target.startswith('remainder__') else target
-            logger.info(f"타겟 {original_target} 모델 학습 중...")
+            logger.info(f"=== 타겟 {target} 모델 학습 시작 ===")
             
             # 타겟 데이터 정리 (inf, nan 제거)
             y_target = y[target].replace([np.inf, -np.inf], np.nan).dropna()
             X_target = X.loc[y_target.index]
             
-            # 검증 데이터 정리
-            if use_early_stopping and target in y_val.columns:
-                y_val_target = y_val[target].replace([np.inf, -np.inf], np.nan).dropna()
-                X_val_target = X_val.loc[y_val_target.index]
-            else:
-                y_val_target = None
-                X_val_target = None
+            logger.info(f"타겟 {target} 데이터 정리 후: X={X_target.shape}, y={len(y_target)}")
+            
+            # 클래스 분포 확인 (분류 문제인 경우)
+            if target in self.classification_targets:
+                class_counts = y_target.value_counts()
+                logger.info(f"클래스 분포: {dict(class_counts)}")
+                logger.info(f"불균형 비율: {class_counts.min() / class_counts.max():.3f}")
             
             # 모델 파라미터 준비
-            params = self._get_model_params(original_target)
+            params = self._get_model_params(target)
             
             # 분류 문제인 경우 불균형 처리
-            if original_target in self.classification_targets:
+            if target in self.classification_targets:
                 if self.use_focal_loss:
-                    # Focal Loss 사용 시: scale_pos_weight는 사용하지 않음
-                    logger.info(f"  - Focal Loss 사용으로 scale_pos_weight 비활성화")
+                    # Focal Loss 사용 시: 동적으로 계산된 클래스 가중치 사용
+                    class_weight = self._calculate_class_weight(y_target)
+                    logger.info(f"  - Focal Loss 기반 클래스 가중치: {class_weight}")
                 else:
-                    # 기존 방식: scale_pos_weight 계산
-                    pos_weight = self._calculate_scale_pos_weight(y_target)
-                    params['scale_pos_weight'] = pos_weight
-                    logger.info(f"  - scale_pos_weight: {pos_weight:.2f}")
+                    logger.info(f"  - class_weight: {params['class_weight']}")
             
             # 실제 적용되는 파라미터 로깅
-            logger.info(f"=== {original_target} 모델 파라미터 ===")
+            logger.info(f"=== {target} 모델 파라미터 ===")
             for key, value in params.items():
                 logger.info(f"  {key}: {value}")
             
-            # Early Stopping 관련 파라미터를 fit에서 제외하고 모델 생성 시 사용할 파라미터에서 분리
-            model_params = params.copy()
-            fit_params = {}
-            
-            if 'early_stopping_rounds' in model_params:
-                fit_params['early_stopping_rounds'] = model_params.pop('early_stopping_rounds')
-            if 'verbose' in model_params:
-                fit_params['verbose'] = model_params.pop('verbose')
-            
-            # Focal Loss 관련 파라미터 제거 (XGBoost에서 지원하지 않음)
-            focal_loss_params = ['focal_loss_enabled', 'focal_alpha', 'focal_gamma']
-            for param in focal_loss_params:
-                if param in model_params:
-                    model_params.pop(param)
-            
-            # 허용된 파라미터만 필터링하여 모델 생성
-            allowed_reg_keys = xgb.XGBRegressor().get_params().keys()
-            allowed_clf_keys = xgb.XGBClassifier().get_params().keys()
-            
-            if original_target in self.regression_targets:
-                filtered_params = {k: v for k, v in model_params.items() if k in allowed_reg_keys}
-                model = xgb.XGBRegressor(**filtered_params, random_state=self.config['data_split']['random_state'])
-            else:
-                filtered_params = {k: v for k, v in model_params.items() if k in allowed_clf_keys}
-                model = xgb.XGBClassifier(**filtered_params, random_state=self.config['data_split']['random_state'])
-            
-            logger.info(f"model 인스턴스 타입: {type(model)}")
-            
-            # 모델 학습 (Early Stopping 조건부 적용)
-            if (
-                use_early_stopping and target in y_val.columns and
-                X_val_target is not None and len(X_val_target) > 0 and
-                y_val_target is not None and len(y_val_target) > 0
-            ):
-                eval_set = [(X_val_target, y_val_target)]
-                model.fit(
-                    X_target, y_target,
-                    eval_set=eval_set,
-                    early_stopping_rounds=fit_params.get('early_stopping_rounds'),
-                    verbose=fit_params.get('verbose', False)
+            # Random Forest 모델 생성
+            logger.info(f"Random Forest 모델 생성 중... (타겟: {target})")
+            if target in self.regression_targets:
+                logger.info("회귀 모델 (RandomForestRegressor) 사용")
+                model = RandomForestRegressor(
+                    **params,
+                    random_state=self.config['data_split']['random_state'],
+                    n_jobs=-1  # 모든 CPU 코어 사용
                 )
             else:
-                model.fit(X_target, y_target)
+                # 분류 문제인 경우 클래스 가중치 설정
+                logger.info("분류 모델 (RandomForestClassifier) 사용")
+                if self.use_focal_loss:
+                    class_weight = self._calculate_class_weight(y_target)
+                    model = RandomForestClassifier(
+                        **{k: v for k, v in params.items() if k != 'class_weight'},
+                        class_weight=class_weight,
+                        random_state=self.config['data_split']['random_state'],
+                        n_jobs=-1  # 모든 CPU 코어 사용
+                    )
+                else:
+                    model = RandomForestClassifier(
+                        **params,
+                        random_state=self.config['data_split']['random_state'],
+                        n_jobs=-1  # 모든 CPU 코어 사용
+                    )
             
-            self.models[original_target] = model
-            logger.info(f"  - {original_target} 모델 학습 완료")
+            # 모델 학습
+            logger.info(f"Random Forest 모델 학습 시작 (타겟: {target})")
+            model.fit(X_target, y_target)
+            
+            # 모델 정보 로깅
+            logger.info(f"타겟 {target} 모델 학습 완료")
+            if hasattr(model, 'n_estimators'):
+                logger.info(f"  - 트리 개수: {model.n_estimators}")
+            if hasattr(model, 'n_features_in_'):
+                logger.info(f"  - 피처 개수: {model.n_features_in_}")
+            if hasattr(model, 'classes_') and model.classes_ is not None:
+                logger.info(f"  - 클래스: {model.classes_}")
+            
+            self.models[target] = model
         
         self.is_fitted = True
         logger.info(f"모든 모델 학습 완료 ({len(self.models)}개)")
@@ -258,7 +251,7 @@ class XGBoostModel(BaseModel):
         if not self.is_fitted:
             raise ValueError("모델이 학습되지 않았습니다. fit() 메서드를 먼저 호출하세요.")
         
-        logger.info("XGBoost 모델 예측 시작")
+        logger.info("Random Forest 모델 예측 시작")
         
         # 입력 데이터 검증 및 전처리
         X = self._validate_input_data(X)
@@ -299,7 +292,7 @@ class XGBoostModel(BaseModel):
         if not self.is_fitted:
             raise ValueError("모델이 학습되지 않았습니다. fit() 메서드를 먼저 호출하세요.")
         
-        logger.info("XGBoost 모델 확률 예측 시작")
+        logger.info("Random Forest 모델 확률 예측 시작")
         
         # 입력 데이터 검증 및 전처리
         X = self._validate_input_data(X)
@@ -354,14 +347,14 @@ class XGBoostModel(BaseModel):
             
             model = self.models[t]
             
-            # 피처 중요도 추출
+            # Random Forest 피처 중요도 추출
             importance = model.feature_importances_
             
-            # 전처리된 피처 이름 처리
+            # 피처 이름 처리
             if hasattr(model, 'feature_names_in_'):
                 feature_names = model.feature_names_in_
             else:
-                # XGBoost 모델에서 피처 이름이 없는 경우
+                # 피처 이름이 없는 경우
                 feature_names = [f'feature_{i}' for i in range(len(importance))]
             
             # 데이터프레임으로 변환
@@ -419,6 +412,33 @@ class XGBoostModel(BaseModel):
         }).sort_values('mean_importance', ascending=False)
         
         return {'aggregated': aggregated_df}
+    
+    def get_model_interpretability_info(self) -> Dict[str, Any]:
+        """
+        모델 해석 가능성 정보를 반환합니다.
+        
+        Returns:
+            모델 해석 가능성 정보
+        """
+        if not self.is_fitted:
+            raise ValueError("모델이 학습되지 않았습니다. fit() 메서드를 먼저 호출하세요.")
+        
+        interpretability_info = {
+            'model_type': 'Random Forest',
+            'advantages': [
+                '피처 중요도 제공',
+                '과적합에 강함',
+                '해석 가능성 높음',
+                '불균형 데이터 처리 가능',
+                '범주형 변수 자동 처리'
+            ],
+            'feature_importance_available': True,
+            'partial_dependence_available': True,
+            'shap_values_available': True,
+            'num_models': len(self.models)
+        }
+        
+        return interpretability_info
 
 
 def main():
@@ -429,18 +449,21 @@ def main():
             'target_columns': ['suicide_a_next_year']
         },
         'model': {
-            'model_type': 'xgboost',
-            'xgboost': {
+            'model_type': 'random_forest',
+            'random_forest': {
                 'n_estimators': 100,
-                'max_depth': 6,
-                'learning_rate': 0.1,
-                'use_focal_loss': False
+                'max_depth': 10,
+                'min_samples_split': 2,
+                'min_samples_leaf': 1,
+                'max_features': 'sqrt',
+                'bootstrap': True,
+                'oob_score': True
             }
         }
     }
     
     # 모델 생성
-    model = XGBoostModel(config)
+    model = RandomForestModel(config)
     print(f"모델 타입: {model.model_type}")
     print(f"회귀 타겟: {model.regression_targets}")
     print(f"분류 타겟: {model.classification_targets}")

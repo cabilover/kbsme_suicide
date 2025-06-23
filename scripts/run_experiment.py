@@ -93,29 +93,90 @@ def log_experiment_params(config: Dict[str, Any]):
         "enable_rolling_stats": config['features']['enable_rolling_stats']
     }
     
-    # XGBoost 모델 파라미터 (상세 로깅)
-    xgboost_config = config['model']['xgboost']
+    # 모델 타입 확인
+    model_type = config.get('model', {}).get('model_type', 'xgboost')
+    
+    # 모델별 파라미터 로깅
     model_params = {
-        # 기본 파라미터
-        "n_estimators": xgboost_config['n_estimators'],
-        "max_depth": xgboost_config['max_depth'],
-        "learning_rate": xgboost_config['learning_rate'],
-        "subsample": xgboost_config['subsample'],
-        "colsample_bytree": xgboost_config['colsample_bytree'],
-        "min_child_weight": xgboost_config['min_child_weight'],
-        "scale_pos_weight": xgboost_config['scale_pos_weight'],
-        "early_stopping_rounds": xgboost_config['early_stopping_rounds'],
-        "verbose": xgboost_config['verbose'],
-        
-        # Focal Loss 파라미터
-        "use_focal_loss": xgboost_config.get('use_focal_loss', False),
-        "focal_loss_alpha": xgboost_config.get('focal_loss', {}).get('alpha', 0.25),
-        "focal_loss_gamma": xgboost_config.get('focal_loss', {}).get('gamma', 2.0),
-        
-        # 파라미터 소스 추적
+        "model_type": model_type
+    }
+    
+    if model_type == 'xgboost':
+        xgboost_config = config['model']['xgboost']
+        model_params.update({
+            # 기본 파라미터
+            "n_estimators": xgboost_config['n_estimators'],
+            "max_depth": xgboost_config['max_depth'],
+            "learning_rate": xgboost_config['learning_rate'],
+            "subsample": xgboost_config['subsample'],
+            "colsample_bytree": xgboost_config['colsample_bytree'],
+            "min_child_weight": xgboost_config['min_child_weight'],
+            "scale_pos_weight": xgboost_config['scale_pos_weight'],
+            "early_stopping_rounds": xgboost_config['early_stopping_rounds'],
+            "verbose": xgboost_config['verbose'],
+            
+            # Focal Loss 파라미터
+            "use_focal_loss": xgboost_config.get('use_focal_loss', False),
+            "focal_loss_alpha": xgboost_config.get('focal_loss', {}).get('alpha', 0.25),
+            "focal_loss_gamma": xgboost_config.get('focal_loss', {}).get('gamma', 2.0),
+        })
+    elif model_type == 'lightgbm':
+        lightgbm_config = config['model']['lightgbm']
+        model_params.update({
+            "n_estimators": lightgbm_config['n_estimators'],
+            "max_depth": lightgbm_config['max_depth'],
+            "learning_rate": lightgbm_config['learning_rate'],
+            "subsample": lightgbm_config['subsample'],
+            "colsample_bytree": lightgbm_config['colsample_bytree'],
+            "min_child_weight": lightgbm_config['min_child_weight'],
+            "early_stopping_rounds": lightgbm_config['early_stopping_rounds'],
+            "verbose": lightgbm_config['verbose'],
+            
+            # Focal Loss 파라미터
+            "use_focal_loss": lightgbm_config.get('use_focal_loss', False),
+            "focal_loss_alpha": lightgbm_config.get('focal_loss', {}).get('alpha', 0.25),
+            "focal_loss_gamma": lightgbm_config.get('focal_loss', {}).get('gamma', 2.0),
+        })
+    elif model_type == 'random_forest':
+        rf_config = config['model']['random_forest']
+        model_params.update({
+            "n_estimators": rf_config['n_estimators'],
+            "max_depth": rf_config['max_depth'],
+            "min_samples_split": rf_config['min_samples_split'],
+            "min_samples_leaf": rf_config['min_samples_leaf'],
+            "max_features": rf_config['max_features'],
+            "bootstrap": rf_config['bootstrap'],
+            "oob_score": rf_config['oob_score'],
+            
+            # Focal Loss 파라미터
+            "use_focal_loss": rf_config.get('use_focal_loss', False),
+            "focal_loss_alpha": rf_config.get('focal_loss', {}).get('alpha', 0.25),
+            "focal_loss_gamma": rf_config.get('focal_loss', {}).get('gamma', 2.0),
+        })
+    elif model_type == 'catboost':
+        catboost_config = config['model']['catboost']
+        model_params.update({
+            "iterations": catboost_config['iterations'],
+            "depth": catboost_config['depth'],
+            "learning_rate": catboost_config['learning_rate'],
+            "l2_leaf_reg": catboost_config['l2_leaf_reg'],
+            "border_count": catboost_config['border_count'],
+            "bagging_temperature": catboost_config['bagging_temperature'],
+            "random_strength": catboost_config['random_strength'],
+            "early_stopping_rounds": catboost_config['early_stopping_rounds'],
+            "verbose": catboost_config['verbose'],
+            
+            # Focal Loss 파라미터
+            "use_focal_loss": catboost_config.get('use_focal_loss', False),
+            "focal_loss_alpha": catboost_config.get('focal_loss', {}).get('alpha', 0.25),
+            "focal_loss_gamma": catboost_config.get('focal_loss', {}).get('gamma', 2.0),
+        })
+    
+    # 파라미터 소스 추적
+    model_params.update({
         "param_source": "config_file",
         "config_file_path": "configs/default_config.yaml"
-    }
+    })
     
     # 학습 파라미터
     training_params = {
@@ -162,8 +223,8 @@ def log_experiment_params(config: Dict[str, Any]):
     mlflow.log_params(all_params)
     logger.info("실험 파라미터 로깅 완료")
     
-    # XGBoost 파라미터 상세 출력 (디버깅용)
-    logger.info("=== XGBoost 파라미터 확인 ===")
+    # 모델 파라미터 상세 출력 (디버깅용)
+    logger.info(f"=== {model_type.upper()} 파라미터 확인 ===")
     for key, value in model_params.items():
         if key.startswith('param_source') or key.startswith('config_file'):
             continue
@@ -606,6 +667,13 @@ def main():
         help="데이터 파일 경로"
     )
     parser.add_argument(
+        "--model-type",
+        type=str,
+        choices=['xgboost', 'lightgbm', 'random_forest', 'catboost'],
+        default=None,
+        help="사용할 모델 타입 (설정 파일의 model_type을 덮어씀)"
+    )
+    parser.add_argument(
         "--nrows", 
         type=int, 
         default=10000,
@@ -640,6 +708,12 @@ def main():
     if not Path(args.data).exists():
         logger.error(f"데이터 파일이 존재하지 않습니다: {args.data}")
         return False
+    
+    # 설정 로드 및 모델 타입 업데이트
+    config = load_config(args.config)
+    if args.model_type:
+        config['model']['model_type'] = args.model_type
+        logger.info(f"모델 타입을 {args.model_type}으로 설정했습니다.")
     
     # MLflow 실험 설정
     experiment_name = "resampling_comparison" if args.resampling_comparison else args.experiment_name

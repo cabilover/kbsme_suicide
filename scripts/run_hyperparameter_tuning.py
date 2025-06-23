@@ -364,6 +364,11 @@ def main():
     --tuning_config configs/hyperparameter_tuning_tpe.yaml \\
     --base_config configs/default_config.yaml
   
+  # 특정 모델 타입으로 튜닝 실행
+  python scripts/run_hyperparameter_tuning.py \\
+    --model-type lightgbm \\
+    --tuning_config configs/resampling_config.yaml
+  
   # 샘플 데이터로 빠른 테스트
   python scripts/run_hyperparameter_tuning.py \\
     --tuning_config configs/resampling_config.yaml \\
@@ -388,6 +393,14 @@ def main():
         type=str, 
         default="configs/default_config.yaml",
         help="기본 설정 파일 경로 (기본값: configs/default_config.yaml)"
+    )
+    
+    parser.add_argument(
+        "--model-type",
+        type=str,
+        choices=['xgboost', 'lightgbm', 'random_forest', 'catboost'],
+        default=None,
+        help="사용할 모델 타입 (설정 파일의 model_type을 덮어씀)"
     )
     
     parser.add_argument(
@@ -427,6 +440,12 @@ def main():
     args = parser.parse_args()
     
     try:
+        # 기본 설정 로드 및 모델 타입 업데이트
+        base_config = load_config(args.base_config)
+        if args.model_type:
+            base_config['model']['model_type'] = args.model_type
+            logger.info(f"모델 타입을 {args.model_type}으로 설정했습니다.")
+        
         # 하이퍼파라미터 튜닝 실행
         result = run_hyperparameter_tuning(
             tuning_config_path=args.tuning_config,

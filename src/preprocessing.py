@@ -754,7 +754,8 @@ def get_passthrough_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[st
         config['time_series']['year_column']
     ]
     
-    # 타겟 컬럼들은 제외하지 않음 (피처 엔지니어링 후 분리하기 위해)
+    # 타겟 컬럼들은 반드시 포함 (피처 엔지니어링 후 분리하기 위해)
+    target_columns = config['features']['target_columns']
     
     # 이미 처리되는 컬럼들도 제외
     numerical_cols = get_numerical_columns(df, config)
@@ -764,6 +765,12 @@ def get_passthrough_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[st
     
     # 통과시킬 컬럼들 (존재하는 컬럼만)
     passthrough_cols = [col for col in df.columns if col not in exclude_columns]
+    
+    # 타겟 컬럼들이 제외되었다면 다시 추가
+    for target in target_columns:
+        if target in df.columns and target not in passthrough_cols:
+            passthrough_cols.append(target)
+            logger.info(f"타겟 컬럼 '{target}'을 통과 컬럼에 추가")
     
     logger.info(f"통과시킬 컬럼: {passthrough_cols}")
     return passthrough_cols
@@ -826,14 +833,14 @@ def create_preprocessing_pipeline(config: Dict[str, Any]) -> ColumnTransformer:
 
 def fit_preprocessing_pipeline(df: pd.DataFrame, config: Dict[str, Any]) -> Tuple[ColumnTransformer, pd.DataFrame]:
     """
-    전처리 파이프라인을 피팅하고 변환된 데이터를 반환합니다.
+    전처리 파이프라인을 피팅하고 데이터를 변환합니다.
     
     Args:
         df: 입력 데이터프레임
         config: 설정 딕셔너리
         
     Returns:
-        피팅된 전처리 파이프라인과 변환된 데이터프레임
+        (피팅된 전처리 파이프라인, 변환된 데이터프레임) 튜플
     """
     logger.info("전처리 파이프라인 피팅 시작")
     
@@ -852,10 +859,14 @@ def fit_preprocessing_pipeline(df: pd.DataFrame, config: Dict[str, Any]) -> Tupl
     transformers = []
     
     if numerical_cols:
-        transformers.append(('num', preprocessor.named_transformers_['num'], numerical_cols))
+        # 수치형 전처리기 가져오기 (피팅 전이므로 transformers에서 가져옴)
+        num_transformer = preprocessor.transformers[0][1]  # ('num', transformer, columns)
+        transformers.append(('num', num_transformer, numerical_cols))
     
     if categorical_cols:
-        transformers.append(('cat', preprocessor.named_transformers_['cat'], categorical_cols))
+        # 범주형 전처리기 가져오기 (피팅 전이므로 transformers에서 가져옴)
+        cat_transformer = preprocessor.transformers[1][1]  # ('cat', transformer, columns)
+        transformers.append(('cat', cat_transformer, categorical_cols))
     
     if passthrough_cols:
         transformers.append(('pass', 'passthrough', passthrough_cols))
@@ -863,7 +874,7 @@ def fit_preprocessing_pipeline(df: pd.DataFrame, config: Dict[str, Any]) -> Tupl
     # 새로운 파이프라인 생성
     preprocessor = ColumnTransformer(
         transformers=transformers,
-        remainder='drop'  # 처리되지 않은 컬럼은 제거
+        remainder='passthrough'  # 처리되지 않은 컬럼은 그대로 유지
     )
     
     # 파이프라인 피팅
@@ -897,9 +908,18 @@ def transform_data(df: pd.DataFrame, preprocessor: ColumnTransformer, config: Di
     feature_names = preprocessor.get_feature_names_out()
     transformed_df = pd.DataFrame(transformed_array, columns=feature_names, index=df.index)
     
+    # 'remainder__'로 시작하는 컬럼명을 원래 이름으로 복원
+    new_columns = []
+    for col in transformed_df.columns:
+        if col.startswith('remainder__'):
+            new_columns.append(col.replace('remainder__', '', 1))
+        else:
+            new_columns.append(col)
+    transformed_df.columns = new_columns
+    
     # ID 컬럼 추가 (나중에 리샘플링에서 사용)
     id_column = config['time_series']['id_column']
-    if id_column in df.columns:
+    if id_column in df.columns and id_column not in transformed_df.columns:
         transformed_df[id_column] = df[id_column]
     
     logger.info(f"데이터 변환 완료: {transformed_df.shape}")

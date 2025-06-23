@@ -290,6 +290,7 @@ def fit_feature_engineering(df: pd.DataFrame, config: Dict[str, Any]) -> Tuple[p
     logger.info(f"피처 엔지니어링 완료: {feature_info['total_features']}개 피처")
     logger.info(f"  - 원본 피처: {feature_info['original_features']}개")
     logger.info(f"  - 새로 생성된 피처: {feature_info['new_features']}개")
+    logger.info(f"[DEBUG] 피처 엔지니어링 직후 컬럼 목록: {list(df_with_rolling.columns)}")
     
     return df_with_rolling, feature_info
 
@@ -342,15 +343,18 @@ def get_target_columns_from_data(df: pd.DataFrame, config: Dict[str, Any]) -> Li
     target_columns = get_target_columns(config)
     all_columns = list(df.columns)
     available_targets = []
-    
     for target in target_columns:
-        # utils.py의 find_column_with_remainder 사용
+        # utils.py의 find_column_with_remainder 사용 + 'pass__' 접두사도 체크
         found_col = find_column_with_remainder(all_columns, target)
         if found_col:
             available_targets.append(found_col)
         else:
-            logger.warning(f"타겟 컬럼을 찾을 수 없습니다: {target}")
-    
+            # 'pass__' 접두사도 체크
+            pass_col = f"pass__{target}"
+            if pass_col in all_columns:
+                available_targets.append(pass_col)
+            else:
+                logger.warning(f"타겟 컬럼을 찾을 수 없습니다: {target}")
     return available_targets
 
 
@@ -367,9 +371,9 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
     """
     selected_features = config['features'].get('selected_features', [])
     all_columns = list(df.columns)
+    target_columns = get_target_columns(config)
     if not selected_features:
         # 기존 로직 (타겟, ID, 날짜, 범주형/수치형 제외)
-        target_columns = get_target_columns(config)
         exclude_columns = target_columns + [
             config['time_series']['id_column'],
             config['time_series']['date_column'],
@@ -393,6 +397,12 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
             encoded_cols = [col for col in all_columns if col.startswith(f"{feature}_")]
             available_features.extend(encoded_cols)
     available_features = sorted(list(set(available_features)))
+    # 타겟 컬럼이 selected_features에 포함되어 있으면 경고
+    for target in target_columns:
+        if target in selected_features:
+            logger.warning(f"[WARNING] selected_features에 타겟 컬럼이 포함되어 있습니다: {target}")
+        if target in available_features:
+            logger.warning(f"[WARNING] available_features에 타겟 컬럼이 포함되어 있습니다: {target}")
     logger.info(f"selected_features 기반 피처 컬럼 선택: {len(available_features)}개")
     logger.debug(f"선택된 피처: {available_features}")
     return available_features
