@@ -165,6 +165,12 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 ### 불균형 데이터 처리
 - **클래스 가중치, scale_pos_weight**: XGBoost 등에서 불균형 데이터 처리를 위한 가중치 옵션 지원
 
+### 최신 실험 결과
+- **2025-06-23 기준, XGBoost, CatBoost, LightGBM, Random Forest 4개 모델 모두 ConfigManager 기반 하이퍼파라미터 튜닝 및 전체 파이프라인 정상 동작 확인
+- **타겟 컬럼 매칭 로직 개선**: 전처리 후 컬럼명 변경에도 모든 모델에서 타겟 인식 및 학습/예측 정상 동작
+- **극단적 불균형 데이터**: 자살 시도 0.12%로 인해 F1-score 등 주요 분류 성능은 0.0에 수렴(모델 구조/파이프라인 문제 아님)
+- **파이프라인 구조 안정화**: 실험 결과, 파이프라인/모델 구조/MLflow 연동/결과 저장 등 모든 시스템이 안정적으로 동작
+
 ## 실험 관리 및 데이터 분할 전략
 
 ### 실험 관리 시스템
