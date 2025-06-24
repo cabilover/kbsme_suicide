@@ -14,6 +14,7 @@ import warnings
 from src.utils import find_column_with_remainder
 from .base_model import BaseModel
 from .model_factory import register_model
+import re
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -61,25 +62,49 @@ class RandomForestModel(BaseModel):
         else:
             return {0: 1.0, 1: 1.0}
     
-    def _get_model_params(self, target: str) -> Dict[str, Any]:
-        """
-        특정 타겟에 대한 모델 파라미터를 반환합니다.
-        
-        Args:
-            target: 타겟 컬럼명
-            
-        Returns:
-            모델 파라미터 딕셔너리
-        """
+    def _strip_prefix(self, col):
+        for prefix in ['pass__', 'num__', 'cat__']:
+            if col.startswith(prefix):
+                return col[len(prefix):]
+        return col
+
+    def _find_available_targets(self, y):
+        # 접두사 제거 후 비교
+        y_cols = list(y.columns)
+        clean_y_cols = [self._strip_prefix(col) for col in y_cols]
+        clean_class_targets = [self._strip_prefix(t) for t in self.classification_targets]
+        return [col for col, clean_col in zip(y_cols, clean_y_cols) if clean_col in clean_class_targets]
+
+    def _get_model_params(self, target: str) -> dict:
         params = self.model_params.copy()
+        # 접두사 제거 후 비교
+        clean_target = self._strip_prefix(target)
+        clean_class_targets = [self._strip_prefix(t) for t in self.classification_targets]
         
-        # 분류 문제인 경우
-        if target in self.classification_targets:
-            # 기존 방식: class_weight 사용
-            params['class_weight'] = 'balanced'
+        # 공통 파라미터 설정
+        params['n_jobs'] = self.model_params.get('n_jobs', 28)
+        
+        if clean_target in clean_class_targets:
+            # 분류 모델용 파라미터
+            params['class_weight'] = self.model_params.get('class_weight', 'balanced')
+            params['criterion'] = self.model_params.get('criterion', 'gini')
+            
+            # 분류 모델에서 지원하지 않는 파라미터 제거
+            params.pop('max_features_regression', None)
+            params.pop('min_impurity_decrease_regression', None)
+            params.pop('criterion_regression', None)
         else:
-            # 회귀 문제는 추가 설정 불필요
-            pass
+            # 회귀 모델용 파라미터
+            params['criterion'] = self.model_params.get('criterion', 'mse')
+            
+            # 회귀 모델에서 지원하지 않는 파라미터 제거
+            params.pop('class_weight', None)
+            params.pop('criterion_classification', None)
+        
+        # 공통적으로 제거할 파라미터들
+        params.pop('sample_weight', None)  # fit()에서만 사용
+        params.pop('use_focal_loss', None)
+        params.pop('focal_loss', None)
         
         return params
     
@@ -102,18 +127,23 @@ class RandomForestModel(BaseModel):
         
         # 입력 데이터 검증 및 전처리
         logger.info("입력 데이터 검증 및 전처리 중...")
-        X = self._validate_input_data(X)
-        y = y.select_dtypes(include=['number', 'bool', 'category'])
-        y = y.replace([np.inf, -np.inf], np.nan)
+        if y_val is not None:
+            X, y = self._validate_input_data(X, y)
+            X_val, y_val = self._validate_input_data(X_val, y_val)
+        else:
+            X = self._validate_input_data(X)
+            y = y.select_dtypes(include=['number', 'bool', 'category'])
+            y = y.replace([np.inf, -np.inf], np.nan)
         
         logger.info(f"전처리 후 데이터 형태: X={X.shape}, y={y.shape}")
         
-        # 사용 가능한 타겟 컬럼 찾기
-        available_targets = []
-        for target in self.target_columns:
-            if target in y.columns:
-                available_targets.append(target)
+        # 사용 가능한 타겟 컬럼 찾기 (접두사 포함)
+        available_targets = self._find_available_targets(y)
         logger.info(f"사용 가능한 타겟 컬럼: {available_targets}")
+        
+        if y.shape[1] == 0:
+            logger.error("y 데이터프레임에 컬럼이 없습니다! 타겟 컬럼 매칭을 확인하세요.")
+            return self
         
         if not available_targets:
             logger.error("사용 가능한 타겟 컬럼이 없습니다!")
@@ -136,7 +166,11 @@ class RandomForestModel(BaseModel):
             
             # 모델 파라미터 준비
             params = self._get_model_params(target)
-            
+            # sample_weight 분리
+            sample_weight = None
+            if 'sample_weight' in params:
+                sample_weight = params.pop('sample_weight')
+
             # random_state 중복 제거
             if 'random_state' in params:
                 random_state = params.pop('random_state')
@@ -147,28 +181,32 @@ class RandomForestModel(BaseModel):
             logger.info(f"=== {target} 모델 파라미터 ===")
             for key, value in params.items():
                 logger.info(f"  {key}: {value}")
+            if sample_weight is not None:
+                logger.info(f"  sample_weight: {sample_weight}")
             
             # Random Forest 모델 생성
             logger.info(f"Random Forest 모델 생성 중... (타겟: {target})")
-            if target in self.regression_targets:
-                logger.info("회귀 모델 (RandomForestRegressor) 사용")
-                model = RandomForestRegressor(
-                    **params,
-                    random_state=random_state,
-                    n_jobs=-1  # 모든 CPU 코어 사용
-                )
-            else:
-                # 분류 문제인 경우 클래스 가중치 설정
+            clean_target = self._strip_prefix(target)
+            clean_class_targets = [self._strip_prefix(t) for t in self.classification_targets]
+            if clean_target in clean_class_targets:
                 logger.info("분류 모델 (RandomForestClassifier) 사용")
                 model = RandomForestClassifier(
                     **params,
-                    random_state=random_state,
-                    n_jobs=-1  # 모든 CPU 코어 사용
+                    random_state=random_state
+                )
+            else:
+                logger.info("회귀 모델 (RandomForestRegressor) 사용")
+                model = RandomForestRegressor(
+                    **params,
+                    random_state=random_state
                 )
             
             # 모델 학습
             logger.info(f"Random Forest 모델 학습 시작 (타겟: {target})")
-            model.fit(X_target, y_target)
+            if sample_weight is not None:
+                model.fit(X_target, y_target, sample_weight=sample_weight)
+            else:
+                model.fit(X_target, y_target)
             
             # 모델 정보 로깅
             logger.info(f"타겟 {target} 모델 학습 완료")

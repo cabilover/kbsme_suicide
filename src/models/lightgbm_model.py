@@ -54,18 +54,28 @@ class LightGBMModel(BaseModel):
             모델 파라미터 딕셔너리
         """
         params = self.model_params.copy()
-        
-        # 분류 문제인 경우
-        if target in self.classification_targets:
-            # 기존 방식: scale_pos_weight 사용
+        params.pop('focal_loss', None)  # LightGBM은 focal_loss를 지원하지 않음
+        params.pop('use_focal_loss', None)  # 내부 플래그도 제거
+
+        # 타겟 접두사 제거
+        clean_target = target
+        for prefix in ['pass__', 'num__', 'cat__']:
+            if target.startswith(prefix):
+                clean_target = target[len(prefix):]
+                break
+        # classification_targets도 접두사 제거해서 비교
+        clean_classification_targets = [
+            t[len(prefix):] if any(t.startswith(prefix) for prefix in ['pass__', 'num__', 'cat__']) else t
+            for t in self.classification_targets
+            for prefix in ['pass__', 'num__', 'cat__'] if t.startswith(prefix) or prefix == 'pass__'
+        ]
+        if clean_target in clean_classification_targets:
             params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
             params['objective'] = 'binary'
             params['metric'] = 'binary_logloss'
         else:
-            # 회귀 문제
             params['objective'] = 'regression'
             params['metric'] = 'rmse'
-        
         return params
     
     def fit(self, X: pd.DataFrame, y: pd.DataFrame, 
@@ -106,13 +116,13 @@ class LightGBMModel(BaseModel):
         
         logger.info(f"전처리 후 데이터 형태: X={X.shape}, y={y.shape}")
         
-        # 사용 가능한 타겟 컬럼 찾기
-        available_targets = []
-        for target in self.target_columns:
-            if target in y.columns:
-                available_targets.append(target)
+        # 사용 가능한 타겟 컬럼 찾기 (접두사 포함)
+        available_targets = self._find_available_targets(y)
         logger.info(f"사용 가능한 타겟 컬럼: {available_targets}")
-        
+
+        if y.shape[1] == 0:
+            logger.error("y 데이터프레임에 컬럼이 없습니다! 타겟 컬럼 매칭을 확인하세요.")
+            return self
         if not available_targets:
             logger.error("사용 가능한 타겟 컬럼이 없습니다!")
             return self
@@ -184,6 +194,7 @@ class LightGBMModel(BaseModel):
                 logger.info(f"  - Best Iteration: {model.best_iteration}")
         
         logger.info("LightGBM 모델 학습 완료")
+        self.is_fitted = True  # 모델 학습 완료 표시
         return self
     
     def predict(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -206,24 +217,19 @@ class LightGBMModel(BaseModel):
         
         predictions = {}
         
-        for target in self.target_columns:
-            if target not in self.models:
-                logger.warning(f"타겟 {target}에 대한 모델이 없습니다. 건너뜁니다.")
-                continue
-            
+        # 실제 학습된 모델의 키를 사용
+        for target in self.models.keys():
             model = self.models[target]
-            
-            # 예측 수행
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                pred = model.predict(X)
-            
-            predictions[target] = pred
-            logger.info(f"  - {target} 예측 완료")
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    pred = model.predict(X)
+                predictions[target] = pred
+                logger.info(f"  - {target} 예측 완료")
+            except Exception as e:
+                logger.warning(f"{target} 예측 중 예외 발생: {e}")
         
-        # 데이터프레임으로 변환
         result_df = pd.DataFrame(predictions, index=X.index)
-        
         logger.info(f"예측 완료: {result_df.shape}")
         return result_df
     
@@ -247,23 +253,20 @@ class LightGBMModel(BaseModel):
         
         proba_predictions = {}
         
-        for target in self.classification_targets:
-            if target not in self.models:
+        # 실제 학습된 모델의 키를 사용 (분류 모델만)
+        for target in self.models.keys():
+            if target not in self.classification_targets:
                 continue
-            
             model = self.models[target]
-            
-            # 확률 예측 수행 (LightGBM은 predict_proba 대신 predict 사용)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                # LightGBM의 predict는 기본적으로 확률을 반환
-                proba = model.predict(X)
-                # 이진 분류의 경우 [0, 1] 확률을 [0, 1] 형태로 변환
-                proba_reshaped = np.column_stack([1 - proba, proba])
-            
-            proba_predictions[target] = proba_reshaped
-            logger.info(f"  - {target} 확률 예측 완료")
-        
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    proba = model.predict(X)
+                    proba_reshaped = np.column_stack([1 - proba, proba])
+                proba_predictions[target] = proba_reshaped
+                logger.info(f"  - {target} 확률 예측 완료")
+            except Exception as e:
+                logger.warning(f"{target} 확률 예측 중 예외 발생: {e}")
         return proba_predictions
     
     def get_feature_importance(self, target: str = None, aggregate: bool = False) -> Dict[str, pd.DataFrame]:

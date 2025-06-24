@@ -48,11 +48,25 @@ class BaseModel(ABC):
     def _classify_targets(self):
         """타겟을 회귀와 분류로 분류합니다."""
         for target in self.target_columns:
-            if target.endswith('_next_year'):
-                base_target = target.replace('_next_year', '')
+            # 전처리 과정에서 추가된 접두사 제거
+            clean_target = target
+            for prefix in ['pass__', 'num__', 'cat__']:
+                if target.startswith(prefix):
+                    clean_target = target[len(prefix):]
+                    break
+            
+            # _next_year 접미사가 있는 경우와 없는 경우 모두 처리
+            if clean_target.endswith('_next_year'):
+                base_target = clean_target.replace('_next_year', '')
                 if base_target in ['anxiety_score', 'depress_score', 'sleep_score']:
                     self.regression_targets.append(target)
                 elif base_target in ['suicide_t', 'suicide_a']:
+                    self.classification_targets.append(target)
+            else:
+                # _next_year 접미사가 없는 경우도 처리
+                if clean_target in ['anxiety_score', 'depress_score', 'sleep_score']:
+                    self.regression_targets.append(target)
+                elif clean_target in ['suicide_t', 'suicide_a']:
                     self.classification_targets.append(target)
     
     @abstractmethod
@@ -201,10 +215,14 @@ class BaseModel(ABC):
             # y가 Series면 DataFrame으로 변환
             if isinstance(y, pd.Series):
                 y = y.to_frame()
-            # select_dtypes 제거: 컬럼 유지
-            y = y.replace([np.inf, -np.inf], np.nan)
-            logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}, y shape: {y.shape}")
-            return X_cleaned, y
+            
+            # y 데이터 처리: 타겟 컬럼은 그대로 유지하되 inf 값만 처리
+            y_cleaned = y.copy()
+            y_cleaned = y_cleaned.replace([np.inf, -np.inf], np.nan)
+            
+            logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}, y shape: {y_cleaned.shape}")
+            logger.info(f"[DEBUG] _validate_input_data 출력 y 컬럼: {list(y_cleaned.columns)}")
+            return X_cleaned, y_cleaned
         
         logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}")
         return X_cleaned
@@ -243,4 +261,24 @@ class BaseModel(ABC):
             'regression_targets': self.regression_targets,
             'classification_targets': self.classification_targets,
             'num_models': len(self.models)
-        } 
+        }
+
+    def _find_available_targets(self, y: pd.DataFrame) -> list:
+        """
+        다양한 접두사와 원본명을 모두 고려하여 y에서 사용 가능한 타겟 컬럼을 찾습니다.
+        """
+        all_columns = list(y.columns)
+        available_targets = []
+        for target in self.target_columns:
+            candidates = [
+                target,
+                f"pass__{target}",
+                f"remainder__{target}",
+                f"num__{target}",
+                f"cat__{target}"
+            ]
+            for cand in candidates:
+                if cand in all_columns:
+                    available_targets.append(cand)
+                    break
+        return available_targets 
