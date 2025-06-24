@@ -375,18 +375,32 @@ def get_target_columns_from_data(df: pd.DataFrame, config: Dict[str, Any]) -> Li
     target_columns = get_target_columns(config)
     all_columns = list(df.columns)
     available_targets = []
+    
+    logger.info(f"[DEBUG] get_target_columns_from_data - all_columns: {all_columns}")
+    logger.info(f"[DEBUG] get_target_columns_from_data - target_columns: {target_columns}")
+    
     for target in target_columns:
-        # utils.py의 find_column_with_remainder 사용 + 'pass__' 접두사도 체크
-        found_col = find_column_with_remainder(all_columns, target)
-        if found_col:
-            available_targets.append(found_col)
-        else:
-            # 'pass__' 접두사도 체크
-            pass_col = f"pass__{target}"
-            if pass_col in all_columns:
-                available_targets.append(pass_col)
-            else:
-                logger.warning(f"타겟 컬럼을 찾을 수 없습니다: {target}")
+        # 모든 가능한 접두사 확인
+        candidates = [
+            target,  # 원본 이름
+            f"pass__{target}",  # pass__ 접두사
+            f"remainder__{target}",  # remainder__ 접두사
+            f"num__{target}",  # num__ 접두사
+            f"cat__{target}"  # cat__ 접두사
+        ]
+        
+        found = False
+        for candidate in candidates:
+            if candidate in all_columns:
+                available_targets.append(candidate)
+                logger.info(f"타겟 {target} 매칭됨: {candidate}")
+                found = True
+                break
+        
+        if not found:
+            logger.warning(f"타겟 컬럼을 찾을 수 없습니다: {target} (후보: {candidates})")
+    
+    logger.info(f"[DEBUG] get_target_columns_from_data - available_targets: {available_targets}")
     return available_targets
 
 

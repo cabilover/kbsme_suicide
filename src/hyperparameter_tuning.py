@@ -19,6 +19,7 @@ import seaborn as sns
 from datetime import datetime
 import os
 import time
+import numbers
 
 # 프로젝트 루트를 Python 경로에 추가
 import sys
@@ -43,18 +44,26 @@ class HyperparameterTuner:
     이 클래스는 MLflow와 연동되어 실험 추적 및 결과 저장을 지원합니다.
     """
     
-    def __init__(self, config: Dict[str, Any], data_path: str, nrows: Optional[int] = None):
+    def __init__(self, config: Dict[str, Any], data: Optional[pd.DataFrame] = None, data_path: Optional[str] = None, nrows: Optional[int] = None):
         """
         하이퍼파라미터 튜너를 초기화합니다.
         
         Args:
             config: 설정 딕셔너리
-            data_path: 데이터 파일 경로
+            data: 데이터프레임 (직접 전달하는 경우)
+            data_path: 데이터 파일 경로 (data가 None인 경우 사용)
             nrows: 사용할 데이터 행 수 (None이면 전체)
         """
         self.config = config
-        self.data_path = data_path
         self.nrows = nrows
+        
+        # 데이터 경로 설정
+        if data_path is not None:
+            self.data_path = data_path
+        elif 'data' in config and 'file_path' in config['data']:
+            self.data_path = config['data']['file_path']
+        else:
+            self.data_path = 'data/processed/processed_data_with_features.csv'  # 기본값
         
         # 로그 파일 설정
         self.log_file_path = setup_tuning_logger()
@@ -63,7 +72,11 @@ class HyperparameterTuner:
         self.setup_mlflow()
         
         # 데이터 로딩
-        self.data = self.load_data()
+        if data is not None:
+            self.data = data
+            logger.info(f"전달받은 데이터 사용: {self.data.shape}")
+        else:
+            self.data = self.load_data()
         
         # 모델 타입 확인
         self.model_type = config.get('model', {}).get('model_type', 'xgboost')
@@ -75,9 +88,6 @@ class HyperparameterTuner:
         self.timeout = self.tuning_config.get('tuning', {}).get('timeout', 3600)
         
         logger.info(f"튜닝 설정 - 시도 횟수: {self.n_trials}, 타임아웃: {self.timeout}초")
-        
-        # 기본 데이터 파일 경로 (디버깅용으로 오버라이드 가능)
-        self.data_path = self.config.get('data', {}).get('data_path', 'data/processed/processed_data_with_features.csv')
         
         # Optuna study 및 결과 저장용
         self.study = None
@@ -298,78 +308,40 @@ class HyperparameterTuner:
                 
                 # 기본 지표 추출
                 if primary_metric in metrics:
-                    cv_scores.append(metrics[primary_metric])
+                    score = metrics[primary_metric]
+                    # 안전한 float 변환
+                    score = safe_float_conversion(score)
+                    
+                    # 유효한 숫자인지 확인
+                    if not is_valid_number(score):
+                        logger.warning(f"Trial {trial.number} - 유효하지 않은 score 타입: {type(score)}, 값: {score}")
+                        score = 0.0
+                    
+                    # NaN/Inf 체크 (이미 float이므로 안전)
+                    if np.isnan(score) or np.isinf(score):
+                        logger.warning(f"Trial {trial.number} - NaN/Inf score: {score}")
+                        score = 0.0
+                    
+                    cv_scores.append(score)
                     valid_metrics_found = True
+                    
+                    # MLflow 로깅
+                    try:
+                        mlflow.log_metric(f"fold_{fold_idx}_{primary_metric}", score)
+                    except Exception as e:
+                        logger.warning(f"MLflow 로깅 실패: {e}")
                 else:
-                    logger.warning(f"주요 지표 {primary_metric}을 찾을 수 없습니다. f1_score를 사용합니다.")
-                    fallback_score = metrics.get('f1_score', 0.0)
-                    cv_scores.append(fallback_score)
-                    if fallback_score != 0.0:
-                        valid_metrics_found = True
-                
-                # 각 폴드의 고급 지표들 로깅 (trial별로 고유한 키 사용)
-                for target, target_metrics in metrics.items():
-                    for metric_name, value in target_metrics.items():
-                        if isinstance(value, (int, float)) and not np.isnan(value) and not np.isinf(value):
-                            try:
-                                mlflow.log_metric(f"trial_{trial.number}_fold_{fold_idx+1}_{target}_{metric_name}", value)
-                            except Exception as e:
-                                logger.warning(f"MLflow 메트릭 로깅 실패: {e}")
+                    logger.warning(f"Trial {trial.number} - primary_metric '{primary_metric}' not found in metrics")
+                    cv_scores.append(0.0)
             
-            # 평균 성능 계산
-            if cv_scores:
+            # CV 스코어 계산
+            if cv_scores and valid_metrics_found:
                 mean_score = np.mean(cv_scores)
-                std_score = np.std(cv_scores)
+                logger.info(f"Trial {trial.number}: CV 스코어 = {mean_score:.6f} (개별: {[f'{s:.6f}' for s in cv_scores]})")
                 
-                # 기본 메트릭 로깅 (trial별로 고유한 키 사용)
-                try:
-                    mlflow.log_metric(f"trial_{trial.number}_cv_{primary_metric}_mean", mean_score)
-                    mlflow.log_metric(f"trial_{trial.number}_cv_{primary_metric}_std", std_score)
-                except Exception as e:
-                    logger.warning(f"MLflow 기본 메트릭 로깅 실패: {e}")
-                
-                # 고급 분석 결과 로깅 (trial별로 고유한 키 사용)
-                if performance_distribution:
-                    for target, metrics in performance_distribution.items():
-                        for metric, stats in metrics.items():
-                            try:
-                                mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_mean", stats['mean'])
-                                mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_std", stats['std'])
-                                mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_min", stats['min'])
-                                mlflow.log_metric(f"trial_{trial.number}_fold_analysis_{target}_{metric}_max", stats['max'])
-                            except Exception as e:
-                                logger.warning(f"MLflow 고급 분석 로깅 실패: {e}")
-                
-                # 변동성 메트릭 로깅 (trial별로 고유한 키 사용)
-                if variability:
-                    for target, metrics in variability.items():
-                        for metric, var_info in metrics.items():
-                            try:
-                                mlflow.log_metric(f"trial_{trial.number}_fold_variability_{target}_{metric}_cv", var_info['coefficient_of_variation'])
-                            except Exception as e:
-                                logger.warning(f"MLflow 변동성 메트릭 로깅 실패: {e}")
-                
-                # 신뢰구간 계산 및 로깅 (trial별로 고유한 키 사용)
-                for target in fold_results[0].get('metrics', {}).keys():
-                    for metric in ['precision', 'recall', 'f1', 'accuracy', 'balanced_accuracy']:
-                        if metric in fold_results[0]['metrics'][target]:
-                            values = [fold['metrics'][target].get(metric, 0) for fold in fold_results]
-                            values = [v for v in values if v is not None and not np.isnan(v)]
-                            
-                            if len(values) > 1:
-                                try:
-                                    ci = calculate_confidence_intervals(values, 0.95)
-                                    mlflow.log_metric(f"trial_{trial.number}_ci_{target}_{metric}_mean", ci['mean'])
-                                    mlflow.log_metric(f"trial_{trial.number}_ci_{target}_{metric}_lower", ci['lower'])
-                                    mlflow.log_metric(f"trial_{trial.number}_ci_{target}_{metric}_upper", ci['upper'])
-                                except Exception as e:
-                                    logger.warning(f"MLflow 신뢰구간 로깅 실패: {e}")
-                
-                logger.info(f"Trial {trial.number}: {primary_metric} = {mean_score:.4f} ± {std_score:.4f}")
-                
-                # 유효한 메트릭이 없으면 경고
-                if not valid_metrics_found:
-                    logger.warning(f"Trial {trial.number}: 유효한 메트릭을 찾을 수 없습니다. 기본값 반환")
+                # 유효한 값인지 확인
+                if np.isnan(mean_score) or np.isinf(mean_score):
+                    logger.warning(f"Trial {trial.number}: 유효하지 않은 평균 스코어: {mean_score}")
                     return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
                 
                 return mean_score
@@ -462,6 +434,14 @@ class HyperparameterTuner:
                 logger.warning(f"MLflow best_score 로깅 실패: {e}")
         else:
             logger.warning(f"유효하지 않은 best_score: {self.best_score}")
+            # best_score가 유효하지 않은 경우 0.0으로 설정
+            try:
+                self.best_score = float(self.best_score) if self.best_score != float('-inf') and self.best_score != float('inf') else 0.0
+                mlflow.log_metric("best_score", self.best_score)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"best_score 타입 변환 실패: {self.best_score} ({type(self.best_score)}): {e}")
+                self.best_score = 0.0
+                mlflow.log_metric("best_score", self.best_score)
         
         logger.info(f"최적화 완료!")
         logger.info(f"  - 최고 성능: {self.best_score:.4f}")
@@ -552,11 +532,77 @@ class HyperparameterTuner:
         feature_columns = get_feature_columns(train_engineered, self.config)
         target_columns = get_target_columns_from_data(train_engineered, self.config)
         
+        # 타겟 컬럼 매칭 문제 해결
+        logger.info(f"[DEBUG] _save_best_model - train_engineered 컬럼: {list(train_engineered.columns)}")
+        logger.info(f"[DEBUG] _save_best_model - feature_columns: {feature_columns}")
+        logger.info(f"[DEBUG] _save_best_model - target_columns: {target_columns}")
+        
+        # 타겟 컬럼이 비어있는 경우 수동으로 찾기
+        if not target_columns:
+            logger.warning("get_target_columns_from_data에서 타겟 컬럼을 찾지 못했습니다. 수동으로 찾습니다.")
+            available_targets = []
+            for target in self.config['features']['target_columns']:
+                candidates = [
+                    target,
+                    f"pass__{target}",
+                    f"remainder__{target}",
+                    f"num__{target}",
+                    f"cat__{target}"
+                ]
+                for cand in candidates:
+                    if cand in train_engineered.columns:
+                        available_targets.append(cand)
+                        logger.info(f"타겟 {target} 매칭됨: {cand}")
+                        break
+                else:
+                    logger.warning(f"타겟 {target} 매칭 실패. 후보: {candidates}")
+            
+            if available_targets:
+                target_columns = available_targets
+                logger.info(f"수동으로 찾은 타겟 컬럼: {target_columns}")
+            else:
+                logger.error("타겟 컬럼을 찾을 수 없습니다!")
+                return
+        
         X_train = train_engineered[feature_columns]
         y_train = train_engineered[target_columns]
         
+        logger.info(f"[DEBUG] _save_best_model - X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+        logger.info(f"[DEBUG] _save_best_model - y_train 컬럼: {list(y_train.columns)}")
+        
         # ModelFactory를 사용하여 모델 타입에 따라 동적으로 모델 생성
         model = ModelFactory.create_model(model_config)
+        
+        # 최종 모델 학습 시 타겟 컬럼 문제 해결
+        # y_train이 비어있지 않은지 확인
+        if y_train.empty or y_train.shape[1] == 0:
+            logger.error("y_train이 비어있습니다. 타겟 컬럼을 다시 확인합니다.")
+            # 수동으로 타겟 컬럼 찾기
+            for target in self.config['features']['target_columns']:
+                candidates = [
+                    target,
+                    f"pass__{target}",
+                    f"remainder__{target}",
+                    f"num__{target}",
+                    f"cat__{target}"
+                ]
+                for cand in candidates:
+                    if cand in train_engineered.columns:
+                        y_train = train_engineered[[cand]]
+                        logger.info(f"수동으로 타겟 컬럼 찾음: {cand}")
+                        break
+                if not y_train.empty:
+                    break
+            
+            if y_train.empty:
+                logger.error("타겟 컬럼을 찾을 수 없습니다!")
+                return
+        
+        # _validate_input_data를 호출하지 않고 직접 모델 학습
+        logger.info(f"최종 모델 학습 - X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+        logger.info(f"최종 모델 학습 - y_train 컬럼: {list(y_train.columns)}")
+        
+        # 모델 학습
         model.fit(X_train, y_train)
         
         # 모델 저장

@@ -54,7 +54,8 @@ sampler:
 
 # 평가 지표 설정
 evaluation:
-  primary_metric: "f1_score"
+  # 극도 불균형 데이터에 적합한 평가 지표
+  primary_metric: "pr_auc"  # Precision-Recall AUC (불균형 데이터에 적합)
   secondary_metrics: ["recall", "precision", "balanced_accuracy", "roc_auc"]
   
   # 교차 검증 설정

@@ -293,7 +293,8 @@ random_forest_params:
 
 # 평가 지표 설정 (불균형 데이터에 최적화)
 evaluation:
-  primary_metric: "f1_score"
+  # 극도 불균형 데이터에 적합한 평가 지표
+  primary_metric: "pr_auc"  # Precision-Recall AUC (불균형 데이터에 적합)
   secondary_metrics: ["recall", "precision", "balanced_accuracy", "roc_auc"]
   optimization_direction: "maximize"  # 하이퍼파라미터 튜닝 최적화 방향
   

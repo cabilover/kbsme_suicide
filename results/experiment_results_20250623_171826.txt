@@ -1,0 +1,18 @@
+실험 결과 - 20250623_171826
+==================================================
+모델 타입: catboost
+실험 타입: hyperparameter_tuning
+사용 데이터 행 수: 10000
+MLflow Experiment ID: 765186397364671153
+MLflow Run ID: 5c66514b6fb9483a81db02f4e7ade14f
+MLflow 링크: http://localhost:5000/#/experiments/765186397364671153/runs/5c66514b6fb9483a81db02f4e7ade14f
+
+최고 성능: -inf
+최적 파라미터:
+  bagging_temperature: 0.4370861069626263
+  border_count: 244
+  depth: 8
+  iterations: 319
+  l2_leaf_reg: 1.4322493718230251
+  learning_rate: 0.01699897838270077
+  random_strength: 0.13066739238053282

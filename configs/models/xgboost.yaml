@@ -16,6 +16,7 @@ model:
     scale_pos_weight: 1.0  # 분류 문제에서 자동으로 계산됨
     early_stopping_rounds: 10
     verbose: 0
+    n_jobs: 28   # 병렬처리 코어 수
     
     # Focal Loss 설정
     use_focal_loss: false  # Focal Loss 사용 여부 (true/false)

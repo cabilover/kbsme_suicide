@@ -243,11 +243,8 @@ class RandomForestModel(BaseModel):
         
         predictions = {}
         
-        for target in self.target_columns:
-            if target not in self.models:
-                logger.warning(f"타겟 {target}에 대한 모델이 없습니다. 건너뜁니다.")
-                continue
-            
+        # 실제 학습된 모델의 키를 사용 (접두사 포함)
+        for target in self.models.keys():
             model = self.models[target]
             
             # 예측 수행
@@ -258,11 +255,14 @@ class RandomForestModel(BaseModel):
             predictions[target] = pred
             logger.info(f"  - {target} 예측 완료")
         
-        # 데이터프레임으로 변환
-        result_df = pd.DataFrame(predictions, index=X.index)
-        
-        logger.info(f"예측 완료: {result_df.shape}")
-        return result_df
+        # 예측 결과를 데이터프레임으로 변환
+        if predictions:
+            result_df = pd.DataFrame(predictions, index=X.index)
+            logger.info(f"예측 완료: {result_df.shape}")
+            return result_df
+        else:
+            logger.warning("예측할 모델이 없습니다.")
+            return pd.DataFrame(index=X.index)
     
     def predict_proba(self, X: pd.DataFrame) -> Dict[str, np.ndarray]:
         """
@@ -284,11 +284,14 @@ class RandomForestModel(BaseModel):
         
         proba_predictions = {}
         
-        for target in self.classification_targets:
-            if target not in self.models:
-                continue
-            
+        # 실제 학습된 분류 모델의 키를 사용 (접두사 포함)
+        for target in self.models.keys():
             model = self.models[target]
+            
+            # 분류 모델인지 확인
+            if not hasattr(model, 'predict_proba'):
+                logger.warning(f"타겟 {target}의 모델이 분류 모델이 아닙니다. 건너뜁니다.")
+                continue
             
             # 확률 예측 수행
             with warnings.catch_warnings():

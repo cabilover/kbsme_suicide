@@ -36,7 +36,7 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
     Returns:
         학습된 모델과 학습 결과
     """
-    from src.models.xgboost_model import XGBoostModel
+    from src.models import ModelFactory
     
     logger.info("모델 학습 시작")
     
@@ -54,8 +54,12 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
     logger.info(f"결측 타겟 제거: train {n_train_before}->{n_train_after}, val {n_val_before}->{n_val_after}")
     # === END ===
     
-    # 모델 초기화
-    model = XGBoostModel(config)
+    # 모델 타입 확인 및 모델 초기화
+    model_type = config.get('model', {}).get('model_type', 'xgboost')
+    logger.info(f"모델 타입: {model_type}")
+    
+    # ModelFactory를 사용하여 적절한 모델 생성
+    model = ModelFactory.create_model(config)
     
     # Early Stopping 설정
     early_stopping = config['training']['early_stopping']
@@ -84,12 +88,15 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
     # 피처 중요도 수집
     feature_importance = model.get_feature_importance()
     
+    # 모델 파라미터 수집 (모델 타입에 따라)
+    model_params = config['model'].get(model_type, {})
+    
     # 학습 결과 수집
     training_results = {
         'fold_info': fold_info,
         'val_metrics': val_metrics,
         'feature_importance': feature_importance,
-        'model_params': config['model']['xgboost'],
+        'model_params': model_params,
         'early_stopping_used': early_stopping
     }
     
@@ -107,55 +114,83 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
     return model, training_results
 
 
+def strip_prefix_and_suffix(col):
+    # 접두사 제거
+    for prefix in ['pass__', 'num__', 'cat__', 'remainder__']:
+        if col.startswith(prefix):
+            col = col[len(prefix):]
+    # 불필요한 접미사 제거
+    return col
+
 def evaluate_predictions(y_true: pd.DataFrame, y_pred: pd.DataFrame, 
                         config: Dict[str, Any]) -> Dict[str, float]:
     """
     예측 결과를 평가합니다.
-    
-    Args:
-        y_true: 실제 값
-        y_pred: 예측 값
-        config: 설정 딕셔너리
-        
-    Returns:
-        평가 지표 딕셔너리
     """
     from src.evaluation import calculate_regression_metrics, calculate_classification_metrics
+    
+    logger.info("=== 예측 결과 평가 시작 ===")
+    logger.info(f"y_true shape: {y_true.shape}, y_pred shape: {y_pred.shape}")
+    logger.info(f"y_true columns: {list(y_true.columns)}")
+    logger.info(f"y_pred columns: {list(y_pred.columns)}")
     
     metrics = {}
     all_pred_columns = list(y_pred.columns)
     
-    # 타겟별로 평가
     for target in y_true.columns:
-        # remainder__ 처리 일관성 적용
-        pred_col = find_column_with_remainder(all_pred_columns, target.replace('remainder__', ''))
-        if not pred_col:
+        logger.info(f"타겟 '{target}' 평가 중...")
+        # 1. 정확한 매칭
+        pred_col = None
+        if target in all_pred_columns:
+            pred_col = target
+            logger.info(f"  정확한 매칭: {target}")
+        else:
+            # 2. 접두사 제거 후 매칭
+            target_clean = strip_prefix_and_suffix(target)
+            for col in all_pred_columns:
+                col_clean = strip_prefix_and_suffix(col)
+                if col_clean == target_clean:
+                    pred_col = col
+                    logger.info(f"  접두사 제거 매칭: {col}")
+                    break
+            # 3. 부분 일치 허용 (ex. _next_year 등)
+            if pred_col is None:
+                for col in all_pred_columns:
+                    col_clean = strip_prefix_and_suffix(col)
+                    if target_clean in col_clean or col_clean in target_clean:
+                        pred_col = col
+                        logger.info(f"  부분 일치 매칭: {col}")
+                        break
+        if pred_col is None:
+            logger.warning(f"  예측 컬럼을 찾을 수 없음: {target}")
+            logger.warning(f"  사용 가능한 예측 컬럼: {all_pred_columns}")
             continue
         true_vals = y_true[target]
         pred_vals = y_pred[pred_col]
-        
-        # 전처리된 컬럼명에서 원본 타겟명 추출
-        original_target = target.replace('remainder__', '') if target.startswith('remainder__') else target
-        
-        # 회귀 문제인지 분류 문제인지 판단
-        if original_target.endswith('_next_year'):
-            base_target = original_target.replace('_next_year', '')
-            if base_target in ['anxiety_score', 'depress_score', 'sleep_score']:
-                # 회귀 문제
-                target_metrics = calculate_regression_metrics(true_vals, pred_vals)
-                for metric_name, value in target_metrics.items():
-                    metrics[f"{original_target}_{metric_name}"] = value
-            elif base_target in ['suicide_t', 'suicide_a']:
-                # 분류 문제
-                target_metrics = calculate_classification_metrics(true_vals, pred_vals)
-                for metric_name, value in target_metrics.items():
-                    metrics[f"{original_target}_{metric_name}"] = value
-        else:
-            # 타겟 이름이 _next_year로 끝나지 않는 경우 기본적으로 분류로 처리
-            target_metrics = calculate_classification_metrics(true_vals, pred_vals)
+        valid_mask = true_vals.notna() & pred_vals.notna()
+        true_vals_clean = true_vals[valid_mask]
+        pred_vals_clean = pred_vals[valid_mask]
+        logger.info(f"타겟 '{target}' - 유효한 샘플 수: {len(true_vals_clean)}")
+        logger.info(f"타겟 '{target}' - true_vals unique: {true_vals_clean.unique()}")
+        logger.info(f"타겟 '{target}' - pred_vals unique: {pred_vals_clean.unique()}")
+        if len(true_vals_clean) == 0:
+            logger.warning(f"  유효한 샘플 없음: {target}")
+            continue
+        if true_vals_clean.dtype.kind in 'if' and len(true_vals_clean.unique()) > 10:
+            logger.info(f"타겟 '{target}' - 회귀 문제로 처리")
+            target_metrics = calculate_regression_metrics(true_vals_clean, pred_vals_clean)
             for metric_name, value in target_metrics.items():
-                metrics[f"{original_target}_{metric_name}"] = value
-    
+                logger.info(f"  {metric_name}: {value}")
+        else:
+            logger.info(f"타겟 '{target}' - 분류 문제로 처리")
+            target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
+            for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                if m not in target_metrics:
+                    target_metrics[m] = 0.0
+            for metric_name, value in target_metrics.items():
+                logger.info(f"  {metric_name}: {value}")
+        metrics[target] = target_metrics
+    logger.info(f"=== 예측 결과 평가 완료 - {len(metrics)}개 타겟 ===")
     return metrics
 
 
@@ -170,13 +205,23 @@ def log_training_results(training_results: Dict[str, Any], fold_count: int):
     # 검증 메트릭 로깅
     val_metrics = training_results['val_metrics']
     for metric_name, value in val_metrics.items():
-        mlflow.log_metric(f"fold_{fold_count}_{metric_name}", value)
+        if isinstance(value, (int, float)) and not np.isnan(value) and not np.isinf(value):
+            try:
+                mlflow.log_metric(f"fold_{fold_count}_{metric_name}", value)
+            except Exception as e:
+                logger.warning(f"MLflow 메트릭 로깅 실패 (fold_{fold_count}_{metric_name}): {e}")
     
     # Early Stopping 정보 로깅
     if training_results.get('early_stopping_used'):
-        mlflow.log_metric(f"fold_{fold_count}_early_stopping_used", 1)
+        try:
+            mlflow.log_metric(f"fold_{fold_count}_early_stopping_used", 1)
+        except Exception as e:
+            logger.warning(f"MLflow Early Stopping 로깅 실패: {e}")
     else:
-        mlflow.log_metric(f"fold_{fold_count}_early_stopping_used", 0)
+        try:
+            mlflow.log_metric(f"fold_{fold_count}_early_stopping_used", 0)
+        except Exception as e:
+            logger.warning(f"MLflow Early Stopping 로깅 실패: {e}")
     
     # 피처 중요도 로깅 (첫 번째 폴드만)
     if fold_count == 1 and training_results.get('feature_importance'):
@@ -189,42 +234,43 @@ def log_training_results(training_results: Dict[str, Any], fold_count: int):
             for _, row in top_features.iterrows():
                 # 피처 이름에서 특수문자 제거하여 MLflow 메트릭 이름으로 사용
                 safe_feature_name = row['feature'].replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
-                mlflow.log_metric(
-                    f"feature_importance_{target}_{safe_feature_name}", 
-                    row['importance']
-                )
+                try:
+                    mlflow.log_metric(
+                        f"feature_importance_{target}_{safe_feature_name}", 
+                        row['importance']
+                    )
+                except Exception as e:
+                    logger.warning(f"MLflow 피처 중요도 로깅 실패: {e}")
         
         # 집계된 피처 중요도 로깅 (여러 타겟이 있는 경우)
         if len(feature_importance) > 1:
             try:
                 from src.models.xgboost_model import XGBoostModel
-                # 임시 모델 인스턴스 생성하여 집계 메서드 사용
-                temp_model = XGBoostModel(training_results['model_params'])
-                aggregated_importance = temp_model._aggregate_feature_importance(feature_importance)
+                aggregated_importance = XGBoostModel.aggregate_feature_importance(feature_importance)
+                top_aggregated = aggregated_importance.head(10)
                 
-                if 'aggregated' in aggregated_importance:
-                    agg_df = aggregated_importance['aggregated']
-                    top_agg_features = agg_df.head(10)
-                    for _, row in top_agg_features.iterrows():
-                        safe_feature_name = row['feature'].replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                for _, row in top_aggregated.iterrows():
+                    safe_feature_name = row['feature'].replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                    try:
                         mlflow.log_metric(
                             f"aggregated_feature_importance_{safe_feature_name}", 
-                            row['mean_importance']
+                            row['importance']
                         )
-                        mlflow.log_metric(
-                            f"aggregated_feature_importance_std_{safe_feature_name}", 
-                            row['std_importance']
-                        )
+                    except Exception as e:
+                        logger.warning(f"MLflow 집계 피처 중요도 로깅 실패: {e}")
             except Exception as e:
-                logger.warning(f"집계된 피처 중요도 로깅 실패: {e}")
+                logger.warning(f"집계 피처 중요도 계산 실패: {e}")
     
     # 피처 검증 결과 로깅 (첫 번째 폴드만)
-    if fold_count == 1 and 'feature_validation_results' in training_results:
-        validation_results = training_results['feature_validation_results']
-        for feature, is_valid in validation_results.items():
-            mlflow.log_metric(f"feature_validation_{feature}", int(is_valid))
+    if fold_count == 1 and training_results.get('feature_validation_results'):
+        feature_validation_results = training_results['feature_validation_results']
+        for feature, is_valid in feature_validation_results.items():
+            try:
+                mlflow.log_metric(f"feature_validation_{feature}", int(is_valid))
+            except Exception as e:
+                logger.warning(f"MLflow 피처 검증 로깅 실패: {e}")
     
-    logger.info(f"폴드 {fold_count} 학습 결과 로깅 완료")
+    logger.info(f"폴드 {fold_count} 학습 결과 MLflow 로깅 완료")
 
 
 def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -371,19 +417,32 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         
         # MLflow에 집계 메트릭 로깅
         for metric_name, value in aggregate_metrics.items():
-            mlflow.log_metric(f"cv_{metric_name}", value)
+            if isinstance(value, (int, float)) and not np.isnan(value) and not np.isinf(value):
+                try:
+                    mlflow.log_metric(f"cv_{metric_name}", value)
+                except Exception as e:
+                    logger.warning(f"MLflow 집계 메트릭 로깅 실패 (cv_{metric_name}): {e}")
         
         # 리샘플링 사용 여부 로깅
         resampling_enabled = config.get('resampling', {}).get('enabled', False)
-        mlflow.log_param("resampling_enabled", resampling_enabled)
+        try:
+            mlflow.log_param("resampling_enabled", resampling_enabled)
+        except Exception as e:
+            logger.warning(f"MLflow 리샘플링 파라미터 로깅 실패: {e}")
+        
         if resampling_enabled:
             resampling_method = config.get('resampling', {}).get('method', 'unknown')
-            mlflow.log_param("resampling_method", resampling_method)
+            try:
+                mlflow.log_param("resampling_method", resampling_method)
+            except Exception as e:
+                logger.warning(f"MLflow 리샘플링 메서드 로깅 실패: {e}")
         
         logger.info(f"교차 검증 완료: {fold_count}개 폴드")
         logger.info(f"집계 성능: {aggregate_metrics}")
         logger.info(f"최고 성능 폴드: {cv_results['best_fold']} (점수: {cv_results['best_score']:.4f})")
         logger.info(f"리샘플링 사용: {resampling_enabled}")
+    else:
+        logger.warning("집계 메트릭을 계산할 수 없습니다. 폴드 메트릭이 비어있습니다.")
     
     return cv_results
 

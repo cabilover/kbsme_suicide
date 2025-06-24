@@ -3,7 +3,7 @@
 
 # 데이터 설정
 data:
-  file_path: "data/processed_data.csv"
+  file_path: "data/processed/processed_data_with_features.csv"
   encoding: "utf-8"
   na_values: ["", "nan", "NaN", "NULL", "null"]
 

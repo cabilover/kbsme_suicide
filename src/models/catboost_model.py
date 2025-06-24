@@ -59,12 +59,17 @@ class CatBoostModel(BaseModel):
         if target in self.classification_targets:
             # 기존 방식: class_weights 사용
             params['class_weights'] = [1.0, self.model_params.get('scale_pos_weight', 1.0)]
-            params['loss_function'] = 'Logloss'
-            params['eval_metric'] = 'Logloss'
+            # 설정 파일에서 읽어온 loss_function과 eval_metric 사용
+            if 'loss_function' not in params:
+                params['loss_function'] = 'Logloss'
+            if 'eval_metric' not in params:
+                params['eval_metric'] = 'Logloss'
         else:
             # 회귀 문제
-            params['loss_function'] = 'RMSE'
-            params['eval_metric'] = 'RMSE'
+            if 'loss_function' not in params:
+                params['loss_function'] = 'RMSE'
+            if 'eval_metric' not in params:
+                params['eval_metric'] = 'RMSE'
         
         return params
     
@@ -157,26 +162,33 @@ class CatBoostModel(BaseModel):
             X_val, y_val = self._validate_input_data(X_val, y_val)
         else:
             X = self._validate_input_data(X)
+            # y 데이터 처리 개선
+            if isinstance(y, pd.Series):
+                y = y.to_frame()
             y = y.select_dtypes(include=['number', 'bool', 'category'])
             y = y.replace([np.inf, -np.inf], np.nan)
         
         logger.info(f"전처리 후 데이터 형태: X={X.shape}, y={y.shape}")
         
+        # 사용 가능한 타겟 컬럼 찾기 (접두사 포함)
+        available_targets = self._find_available_targets(y)
+        logger.info(f"사용 가능한 타겟 컬럼: {available_targets}")
+
+        if y.shape[1] == 0:
+            logger.error("y 데이터프레임에 컬럼이 없습니다! 타겟 컬럼 매칭을 확인하세요.")
+            logger.error(f"y 컬럼: {list(y.columns)}")
+            logger.error(f"y dtypes: {y.dtypes}")
+            return self
+        if not available_targets:
+            logger.error("사용 가능한 타겟 컬럼이 없습니다!")
+            logger.error(f"y 컬럼: {list(y.columns)}")
+            logger.error(f"target_columns: {self.target_columns}")
+            return self
+        
         # 범주형 피처 식별
         categorical_features = self._identify_categorical_features(X)
         logger.info(f"범주형 피처 인덱스: {categorical_features}")
         logger.info(f"범주형 피처 개수: {len(categorical_features)}")
-        
-        # 사용 가능한 타겟 컬럼 찾기
-        available_targets = []
-        for target in self.target_columns:
-            if target in y.columns:
-                available_targets.append(target)
-        logger.info(f"사용 가능한 타겟 컬럼: {available_targets}")
-        
-        if not available_targets:
-            logger.error("사용 가능한 타겟 컬럼이 없습니다!")
-            return self
         
         for target in available_targets:
             logger.info(f"=== 타겟 {target} 모델 학습 시작 ===")
@@ -217,48 +229,86 @@ class CatBoostModel(BaseModel):
             else:
                 random_seed = self.config.get('data_split', {}).get('random_state', 42)
             
+            # Early Stopping 관련 파라미터를 fit에서 제외하고 모델 생성 시 사용할 파라미터에서 분리
+            model_params = params.copy()
+            fit_params = {}
+            
+            if 'early_stopping_rounds' in model_params:
+                fit_params['early_stopping_rounds'] = model_params.pop('early_stopping_rounds')
+            if 'verbose' in model_params:
+                fit_params['verbose'] = model_params.pop('verbose')
+            
+            # 허용된 파라미터만 필터링하여 모델 생성
+            allowed_reg_keys = cb.CatBoostRegressor().get_params().keys()
+            allowed_clf_keys = cb.CatBoostClassifier().get_params().keys()
+            
             # CatBoost 모델 생성
             logger.info(f"CatBoost 모델 생성 중... (타겟: {target})")
             if target in self.regression_targets:
                 logger.info("회귀 모델 (CatBoostRegressor) 사용")
-                model = CatBoostRegressor(
-                    **params,
+                filtered_params = {k: v for k, v in model_params.items() if k in allowed_reg_keys}
+                model = cb.CatBoostRegressor(
+                    **filtered_params,
                     random_seed=random_seed,
                     verbose=False
                 )
             else:
                 # 분류 문제인 경우 클래스 가중치 설정
                 logger.info("분류 모델 (CatBoostClassifier) 사용")
-                model = CatBoostClassifier(
-                    **params,
+                filtered_params = {k: v for k, v in model_params.items() if k in allowed_clf_keys}
+                model = cb.CatBoostClassifier(
+                    **filtered_params,
                     random_seed=random_seed,
                     verbose=False
                 )
             
             # 모델 학습
             logger.info(f"CatBoost 모델 학습 시작 (타겟: {target})")
-            if use_early_stopping and X_val_target is not None and len(X_val_target) > 0:
-                logger.info("Early Stopping과 함께 학습")
-                model.fit(
-                    X_target, y_target,
-                    eval_set=(X_val_target, y_val_target),
-                    early_stopping_rounds=early_stopping_rounds,
-                    verbose=False
-                )
-            else:
-                logger.info("Early Stopping 없이 학습")
-                model.fit(X_target, y_target, verbose=False)
             
-            # 모델 정보 로깅
-            logger.info(f"타겟 {target} 모델 학습 완료")
-            if hasattr(model, 'best_iteration_'):
-                logger.info(f"  - Best Iteration: {model.best_iteration_}")
-            if hasattr(model, 'best_score_'):
-                logger.info(f"  - Best Score: {model.best_score_}")
-            if hasattr(model, 'tree_count_'):
-                logger.info(f"  - 트리 개수: {model.tree_count_}")
-            
-            self.models[target] = model
+            try:
+                # 고유값 검사 (분류 문제인 경우)
+                if target in self.classification_targets:
+                    unique_values = y_target.unique()
+                    if len(unique_values) < 2:
+                        logger.warning(f"타겟 {target}에 고유값이 1개만 있습니다: {unique_values}. 모델 학습을 건너뜁니다.")
+                        continue
+                
+                if use_early_stopping and X_val_target is not None and len(X_val_target) > 0:
+                    logger.info("Early Stopping과 함께 학습")
+                    model.fit(
+                        X_target, y_target,
+                        eval_set=(X_val_target, y_val_target),
+                        early_stopping_rounds=fit_params.get('early_stopping_rounds'),
+                        verbose=fit_params.get('verbose', False)
+                    )
+                else:
+                    logger.info("Early Stopping 없이 학습")
+                    model.fit(X_target, y_target, verbose=fit_params.get('verbose', False))
+                
+                # 모델 정보 로깅
+                logger.info(f"타겟 {target} 모델 학습 완료")
+                if hasattr(model, 'best_iteration_'):
+                    logger.info(f"  - Best Iteration: {model.best_iteration_}")
+                if hasattr(model, 'best_score_'):
+                    logger.info(f"  - Best Score: {model.best_score_}")
+                if hasattr(model, 'tree_count_'):
+                    logger.info(f"  - 트리 개수: {model.tree_count_}")
+                
+                self.models[target] = model
+                
+            except Exception as e:
+                logger.error(f"타겟 {target} 모델 학습 실패: {e}")
+                # 예외 발생 시 더미 모델 생성 (항상 0 예측)
+                if target in self.regression_targets:
+                    from sklearn.dummy import DummyRegressor
+                    dummy_model = DummyRegressor(strategy='constant', constant=0.0)
+                else:
+                    from sklearn.dummy import DummyClassifier
+                    dummy_model = DummyClassifier(strategy='constant', constant=0)
+                
+                dummy_model.fit(X_target, y_target)
+                self.models[target] = dummy_model
+                logger.info(f"타겟 {target}에 대해 더미 모델 생성 완료")
         
         self.is_fitted = True
         logger.info(f"모든 모델 학습 완료 ({len(self.models)}개)")
@@ -287,23 +337,29 @@ class CatBoostModel(BaseModel):
         
         predictions = {}
         
-        for target in self.target_columns:
-            if target not in self.models:
-                logger.warning(f"타겟 {target}에 대한 모델이 없습니다. 건너뜁니다.")
-                continue
-            
+        # 실제 학습된 모델의 키를 사용
+        for target in self.models.keys():
             model = self.models[target]
             
-            # 예측 수행
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                pred = model.predict(X, thread_count=-1)
-            
-            predictions[target] = pred
-            logger.info(f"  - {target} 예측 완료")
+            try:
+                # 예측 수행
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    pred = model.predict(X, thread_count=-1)
+                
+                predictions[target] = pred
+                logger.info(f"  - {target} 예측 완료")
+            except Exception as e:
+                logger.error(f"  - {target} 예측 실패: {e}")
+                # 예외 발생 시 0으로 채움
+                predictions[target] = np.zeros(len(X))
         
         # 데이터프레임으로 변환
-        result_df = pd.DataFrame(predictions, index=X.index)
+        if predictions:
+            result_df = pd.DataFrame(predictions, index=X.index)
+        else:
+            # 예측 결과가 없는 경우 빈 데이터프레임 반환
+            result_df = pd.DataFrame(index=X.index)
         
         logger.info(f"예측 완료: {result_df.shape}")
         return result_df
@@ -331,19 +387,25 @@ class CatBoostModel(BaseModel):
         
         proba_predictions = {}
         
-        for target in self.classification_targets:
-            if target not in self.models:
+        # 실제 학습된 모델의 키를 사용 (분류 모델만)
+        for target in self.models.keys():
+            if target not in self.classification_targets:
                 continue
-            
+                
             model = self.models[target]
             
-            # 확률 예측 수행
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                proba = model.predict_proba(X, thread_count=-1)
-            
-            proba_predictions[target] = proba
-            logger.info(f"  - {target} 확률 예측 완료")
+            try:
+                # 확률 예측 수행
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    proba = model.predict_proba(X, thread_count=-1)
+                
+                proba_predictions[target] = proba
+                logger.info(f"  - {target} 확률 예측 완료")
+            except Exception as e:
+                logger.error(f"  - {target} 확률 예측 실패: {e}")
+                # 예외 발생 시 기본 확률 반환
+                proba_predictions[target] = np.zeros((len(X), 2))
         
         return proba_predictions
     

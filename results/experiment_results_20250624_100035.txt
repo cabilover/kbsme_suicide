@@ -1,0 +1,16 @@
+실험 결과 - 20250624_100035
+==================================================
+모델 타입: random_forest
+실험 타입: hyperparameter_tuning
+사용 데이터 행 수: 1000
+MLflow Experiment ID: 765186397364671153
+MLflow Run ID: e05f1ce77c554cb48e4685bcee4e4579
+MLflow 링크: http://localhost:5000/#/experiments/765186397364671153/runs/e05f1ce77c554cb48e4685bcee4e4579
+
+최고 성능: -inf
+최적 파라미터:
+  n_estimators: 218
+  max_depth: 20
+  min_samples_split: 15
+  min_samples_leaf: 6
+  max_features: sqrt

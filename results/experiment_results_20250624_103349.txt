@@ -1,0 +1,48 @@
+실험 결과 - 20250624_103349
+==================================================
+모델 타입: catboost
+실험 타입: hyperparameter_tuning
+사용 데이터 행 수: 10000
+MLflow Experiment ID: 765186397364671153
+MLflow Run ID: 9cb823337c844f32bef3c7e8d11c3685
+MLflow 링크: http://localhost:5000/#/experiments/765186397364671153/runs/9cb823337c844f32bef3c7e8d11c3685
+
+=== 데이터 정보 ===
+데이터 파일 경로: N/A
+전체 데이터 크기: 10000 행 × 33 열
+개인 수: 1396명
+데이터 기간: 2015-01-07 ~ 2024-12-31
+
+=== Target 및 Input 정보 ===
+Target 변수: 1개
+  1. suicide_a_next_year
+Input 변수: 6개
+  1. age
+  2. sex
+  3. comp
+  4. anxiety_score
+  5. depress_score
+  6. sleep_score
+
+=== 리샘플링 정보 ===
+리샘플링 정보: N/A
+
+=== 피처엔지니어링 정보 ===
+피처엔지니어링 적용: 아니오
+
+=== 클래스 분포 정보 ===
+훈련 세트 (리샘플링 전):
+  suicide_a_next_year: {0.0: 7278, 1.0: 2}
+테스트 세트:
+  suicide_a_next_year: {0.0: 1325}
+
+=== 실험 결과 ===
+최고 성능: -inf
+최적 파라미터:
+  iterations: 218
+  depth: 10
+  learning_rate: 0.1205712628744377
+  l2_leaf_reg: 3.968793330444372
+  border_count: 66
+  bagging_temperature: 0.2403950683025824
+  random_strength: 0.13066739238053282

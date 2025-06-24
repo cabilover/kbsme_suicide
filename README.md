@@ -89,16 +89,16 @@ python src/data_analysis.py
 ### ConfigManager 기반 하이퍼파라미터 튜닝 실행 (권장)
 ```bash
 # XGBoost 모델 튜닝
-python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type hyperparameter_tuning
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type hyperparameter_tuning --nrows 10000
 
 # CatBoost 모델 튜닝
-python scripts/run_hyperparameter_tuning.py --model-type catboost --experiment-type hyperparameter_tuning
+python scripts/run_hyperparameter_tuning.py --model-type catboost --experiment-type hyperparameter_tuning --nrows 10000
 
 # LightGBM 모델 튜닝
-python scripts/run_hyperparameter_tuning.py --model-type lightgbm --experiment-type hyperparameter_tuning
+python scripts/run_hyperparameter_tuning.py --model-type lightgbm --experiment-type hyperparameter_tuning --nrows 10000
 
 # Random Forest 모델 튜닝
-python scripts/run_hyperparameter_tuning.py --model-type random_forest --experiment-type hyperparameter_tuning
+python scripts/run_hyperparameter_tuning.py --model-type random_forest --experiment-type hyperparameter_tuning --nrows 10000
 ```
 
 ### ConfigManager 기반 리샘플링 비교 실험 실행 (✅ 최신 기능)
@@ -167,6 +167,7 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 
 ### 최신 실험 결과
 - **2025-06-24 기준, XGBoost, CatBoost, LightGBM, Random Forest 4개 모델 모두 ConfigManager 기반 하이퍼파라미터 튜닝 및 전체 파이프라인 정상 동작 확인**
+- **nrows 옵션을 통한 부분 데이터 실험 정상 동작 확인**
 - **타겟 컬럼 매칭 로직 개선**: 전처리 후 컬럼명 변경(pass__, num__, cat__ 접두사)에도 모든 모델에서 타겟 인식 및 학습/예측 정상 동작
 - **분류/회귀 자동 분기 개선**: 모든 모델에서 타겟 타입에 따라 자동으로 분류/회귀 파라미터 적용 (LightGBM: binary/binary_logloss, Random Forest: gini/mse)
 - **모델별 파라미터 처리 최적화**: 
@@ -174,6 +175,7 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
   - Random Forest: sample_weight 분리, 분류/회귀별 파라미터 필터링
 - **MLflow 기록 정상화**: 모든 모델에서 파라미터, 메트릭, 아티팩트 정상 기록 확인
 - **극단적 불균형 데이터**: 자살 시도 0.12%로 인해 F1-score 등 주요 분류 성능은 0.0에 수렴(모델 구조/파이프라인 문제 아님)
+- **nrows 옵션 미지정 시 전체 데이터 사용, 지정 시 부분 데이터만 사용**
 - **파이프라인 구조 안정화**: 실험 결과, 파이프라인/모델 구조/MLflow 연동/결과 저장 등 모든 시스템이 안정적으로 동작
 
 ### 모델별 병렬처리 최적화

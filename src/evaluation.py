@@ -39,14 +39,37 @@ def calculate_regression_metrics(y_true: pd.Series, y_pred: pd.Series) -> Dict[s
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         
-        # 기본 지표 계산
-        mae = mean_absolute_error(y_true, y_pred)
-        mse = mean_squared_error(y_true, y_pred)
-        rmse = np.sqrt(mse)
-        r2 = r2_score(y_true, y_pred)
+        # 기본 지표 계산 - 예외 발생 시 0.0 반환
+        try:
+            mae = mean_absolute_error(y_true, y_pred)
+        except Exception as e:
+            logger.warning(f"MAE 계산 중 예외 발생: {e}, 0.0 반환")
+            mae = 0.0
+            
+        try:
+            mse = mean_squared_error(y_true, y_pred)
+        except Exception as e:
+            logger.warning(f"MSE 계산 중 예외 발생: {e}, 0.0 반환")
+            mse = 0.0
+            
+        try:
+            rmse = np.sqrt(mse)
+        except Exception as e:
+            logger.warning(f"RMSE 계산 중 예외 발생: {e}, 0.0 반환")
+            rmse = 0.0
+            
+        try:
+            r2 = r2_score(y_true, y_pred)
+        except Exception as e:
+            logger.warning(f"R2 계산 중 예외 발생: {e}, 0.0 반환")
+            r2 = 0.0
         
-        # 추가 지표
-        mape = np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100  # MAPE (Mean Absolute Percentage Error)
+        # 추가 지표 - 예외 발생 시 0.0 반환
+        try:
+            mape = np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100  # MAPE (Mean Absolute Percentage Error)
+        except Exception as e:
+            logger.warning(f"MAPE 계산 중 예외 발생: {e}, 0.0 반환")
+            mape = 0.0
         
         metrics = {
             'mae': mae,
@@ -75,28 +98,122 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         
-        # 기본 지표 계산
-        precision = precision_score(y_true, y_pred, zero_division=0)
-        recall = recall_score(y_true, y_pred, zero_division=0)
-        f1 = f1_score(y_true, y_pred, zero_division=0)
+        # === 타입 변환 추가 ===
+        y_true = pd.Series(y_true).astype(int)
+        y_pred = pd.Series(y_pred).astype(int)
+        if y_pred_proba is not None:
+            if len(y_pred_proba.shape) > 1:
+                y_pred_proba = y_pred_proba.astype(float)
+            else:
+                y_pred_proba = y_pred_proba.astype(float)
+        # =====================
+        
+        # 클래스 분포 확인
+        class_counts = y_true.value_counts()
+        total_samples = len(y_true)
+        positive_samples = class_counts.get(1, 0)
+        negative_samples = class_counts.get(0, 0)
+        positive_ratio = positive_samples / total_samples if total_samples > 0 else 0
+        
+        # 예측 분포 확인
+        pred_counts = y_pred.value_counts()
+        pred_positive = pred_counts.get(1, 0)
+        
+        logger.info(f"클래스 분포 - 실제: 0={negative_samples}, 1={positive_samples} (비율: {positive_ratio:.6f})")
+        logger.info(f"예측 분포 - 예측: 0={pred_counts.get(0, 0)}, 1={pred_positive}")
+        
+        # 극도로 불균형한 데이터 처리
+        if positive_samples == 0:
+            logger.warning("양성 클래스가 없습니다. 모든 메트릭을 0.0으로 설정합니다.")
+            return {
+                'precision': 0.0, 'recall': 0.0, 'f1': 0.0, 'accuracy': 1.0,
+                'balanced_accuracy': 0.5, 'roc_auc': 0.0, 'pr_auc': 0.0,
+                'positive_samples': 0, 'negative_samples': total_samples,
+                'total_samples': total_samples, 'positive_ratio': 0.0
+            }
+        
+        # 모든 예측이 0인 경우 처리
+        if pred_positive == 0:
+            logger.warning("모든 예측이 0입니다. 극도로 불균형한 데이터에서 일반적인 현상입니다.")
+            # 기본 지표 계산 - 예외 발생 시 0.0 반환
+            try:
+                precision = 0.0  # 모든 예측이 0이므로 precision은 0
+                recall = 0.0     # 모든 예측이 0이므로 recall은 0
+                f1 = 0.0         # precision과 recall이 모두 0이므로 f1도 0
+            except Exception as e:
+                logger.warning(f"기본 지표 계산 중 예외 발생: {e}, 0.0 반환")
+                precision = recall = f1 = 0.0
+            
+            # 정확도는 높을 수 있음 (대부분이 0이므로)
+            try:
+                accuracy = (y_true == y_pred).mean()
+            except Exception as e:
+                logger.warning(f"Accuracy 계산 중 예외 발생: {e}, 0.0 반환")
+                accuracy = 0.0
+                
+            try:
+                balanced_acc = balanced_accuracy_score(y_true, y_pred)
+            except Exception as e:
+                logger.warning(f"Balanced accuracy 계산 중 예외 발생: {e}, 0.0 반환")
+                balanced_acc = 0.5  # 균형 정확도는 0.5 (랜덤 예측과 동일)
+            
+            metrics = {
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'accuracy': accuracy,
+                'balanced_accuracy': balanced_acc,
+                'positive_samples': positive_samples,
+                'negative_samples': negative_samples,
+                'total_samples': total_samples,
+                'positive_ratio': positive_ratio,
+                'roc_auc': 0.0,  # 모든 예측이 0이므로 ROC-AUC는 의미없음
+                'pr_auc': 0.0    # 모든 예측이 0이므로 PR-AUC는 의미없음
+            }
+            
+            return metrics
+        
+        # 일반적인 경우의 계산
+        # 기본 지표 계산 - 예외 발생 시 0.0 반환
+        try:
+            precision = precision_score(y_true, y_pred, zero_division=0)
+        except Exception as e:
+            logger.warning(f"Precision 계산 중 예외 발생: {e}, 0.0 반환")
+            precision = 0.0
+            
+        try:
+            recall = recall_score(y_true, y_pred, zero_division=0)
+        except Exception as e:
+            logger.warning(f"Recall 계산 중 예외 발생: {e}, 0.0 반환")
+            recall = 0.0
+            
+        try:
+            f1 = f1_score(y_true, y_pred, zero_division=0)
+        except Exception as e:
+            logger.warning(f"F1-score 계산 중 예외 발생: {e}, 0.0 반환")
+            f1 = 0.0
         
         # ROC-AUC 계산 (확률이 제공된 경우)
         roc_auc = None
         if y_pred_proba is not None and len(y_pred_proba.shape) > 1:
             try:
                 roc_auc = roc_auc_score(y_true, y_pred_proba[:, 1])
-            except:
-                roc_auc = None
+            except Exception as e:
+                logger.warning(f"ROC-AUC 계산 중 예외 발생: {e}, 0.0 반환")
+                roc_auc = 0.0
         
-        # 추가 지표
-        accuracy = (y_true == y_pred).mean()
-        balanced_acc = balanced_accuracy_score(y_true, y_pred)
-        
-        # 클래스별 샘플 수
-        class_counts = y_true.value_counts()
-        total_samples = len(y_true)
-        positive_samples = class_counts.get(1, 0)
-        negative_samples = class_counts.get(0, 0)
+        # 추가 지표 - 예외 발생 시 0.0 반환
+        try:
+            accuracy = (y_true == y_pred).mean()
+        except Exception as e:
+            logger.warning(f"Accuracy 계산 중 예외 발생: {e}, 0.0 반환")
+            accuracy = 0.0
+            
+        try:
+            balanced_acc = balanced_accuracy_score(y_true, y_pred)
+        except Exception as e:
+            logger.warning(f"Balanced accuracy 계산 중 예외 발생: {e}, 0.0 반환")
+            balanced_acc = 0.0
         
         metrics = {
             'precision': precision,
@@ -107,7 +224,7 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
             'positive_samples': positive_samples,
             'negative_samples': negative_samples,
             'total_samples': total_samples,
-            'positive_ratio': positive_samples / total_samples if total_samples > 0 else 0
+            'positive_ratio': positive_ratio
         }
         
         if roc_auc is not None:
@@ -116,12 +233,27 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
         # PR-AUC 계산 (확률이 제공된 경우)
         if y_pred_proba is not None:
             try:
-                pr_auc = average_precision_score(y_true, y_pred_proba)
+                # 예측 확률의 형태 확인 및 조정
+                if len(y_pred_proba.shape) > 1:
+                    # 2D 배열인 경우 양성 클래스 확률 사용
+                    if y_pred_proba.shape[1] == 2:
+                        y_pred_proba_positive = y_pred_proba[:, 1]
+                    else:
+                        y_pred_proba_positive = y_pred_proba[:, 0]
+                else:
+                    # 1D 배열인 경우 그대로 사용
+                    y_pred_proba_positive = y_pred_proba
+                
+                pr_auc = average_precision_score(y_true, y_pred_proba_positive)
                 metrics['pr_auc'] = pr_auc
-            except:
-                metrics['pr_auc'] = None
-    
-    return metrics
+                logger.info(f"PR-AUC 계산 완료: {pr_auc:.4f}")
+            except Exception as e:
+                logger.warning(f"PR-AUC 계산 중 예외 발생: {e}, 0.0 반환")
+                metrics['pr_auc'] = 0.0
+        else:
+            metrics['pr_auc'] = 0.0
+        
+        return metrics
 
 
 def calculate_precision_recall_curve(y_true: pd.Series, y_pred_proba: np.ndarray) -> Dict[str, Any]:
@@ -135,15 +267,24 @@ def calculate_precision_recall_curve(y_true: pd.Series, y_pred_proba: np.ndarray
     Returns:
         PR curve 데이터와 AUC
     """
-    precision, recall, thresholds = precision_recall_curve(y_true, y_pred_proba)
-    pr_auc = average_precision_score(y_true, y_pred_proba)
-    
-    return {
-        'precision': precision,
-        'recall': recall, 
-        'thresholds': thresholds,
-        'pr_auc': pr_auc
-    }
+    try:
+        precision, recall, thresholds = precision_recall_curve(y_true, y_pred_proba)
+        pr_auc = average_precision_score(y_true, y_pred_proba)
+        
+        return {
+            'precision': precision,
+            'recall': recall, 
+            'thresholds': thresholds,
+            'pr_auc': pr_auc
+        }
+    except Exception as e:
+        logger.warning(f"Precision-Recall Curve 계산 중 예외 발생: {e}, 기본값 반환")
+        return {
+            'precision': np.array([0.0]),
+            'recall': np.array([0.0]), 
+            'thresholds': np.array([0.5]),
+            'pr_auc': 0.0
+        }
 
 
 def calculate_balanced_accuracy(y_true: pd.Series, y_pred: pd.Series) -> float:
@@ -157,7 +298,11 @@ def calculate_balanced_accuracy(y_true: pd.Series, y_pred: pd.Series) -> float:
     Returns:
         Balanced Accuracy 값
     """
-    return balanced_accuracy_score(y_true, y_pred)
+    try:
+        return balanced_accuracy_score(y_true, y_pred)
+    except Exception as e:
+        logger.warning(f"Balanced Accuracy 계산 중 예외 발생: {e}, 0.0 반환")
+        return 0.0
 
 
 def compare_roc_vs_pr_auc(y_true: pd.Series, y_pred_proba: np.ndarray) -> Dict[str, float]:
@@ -171,17 +316,24 @@ def compare_roc_vs_pr_auc(y_true: pd.Series, y_pred_proba: np.ndarray) -> Dict[s
     Returns:
         ROC-AUC와 PR-AUC 값
     """
-    # ROC-AUC 계산
-    fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
-    roc_auc = np.trapz(tpr, fpr)
-    
-    # PR-AUC 계산
-    pr_auc = average_precision_score(y_true, y_pred_proba)
-    
-    return {
-        'roc_auc': roc_auc,
-        'pr_auc': pr_auc
-    }
+    try:
+        # ROC-AUC 계산
+        fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
+        roc_auc = np.trapz(tpr, fpr)
+        
+        # PR-AUC 계산
+        pr_auc = average_precision_score(y_true, y_pred_proba)
+        
+        return {
+            'roc_auc': roc_auc,
+            'pr_auc': pr_auc
+        }
+    except Exception as e:
+        logger.warning(f"ROC vs PR-AUC 비교 계산 중 예외 발생: {e}, 0.0 반환")
+        return {
+            'roc_auc': 0.0,
+            'pr_auc': 0.0
+        }
 
 
 def optimize_f1_threshold(y_true: pd.Series, y_pred_proba: np.ndarray, 
@@ -197,30 +349,38 @@ def optimize_f1_threshold(y_true: pd.Series, y_pred_proba: np.ndarray,
     Returns:
         최적 임계값과 해당 F1-score
     """
-    if thresholds is None:
-        thresholds = np.arange(0.1, 0.9, 0.05)
-    
-    best_f1 = 0
-    best_threshold = 0.5
-    threshold_results = []
-    
-    for threshold in thresholds:
-        y_pred = (y_pred_proba >= threshold).astype(int)
-        f1 = f1_score(y_true, y_pred, zero_division=0)
-        threshold_results.append({
-            'threshold': threshold,
-            'f1_score': f1
-        })
+    try:
+        if thresholds is None:
+            thresholds = np.arange(0.1, 0.9, 0.05)
         
-        if f1 > best_f1:
-            best_f1 = f1
-            best_threshold = threshold
-    
-    return {
-        'best_threshold': best_threshold,
-        'best_f1_score': best_f1,
-        'all_results': threshold_results
-    }
+        best_f1 = 0
+        best_threshold = 0.5
+        threshold_results = []
+        
+        for threshold in thresholds:
+            y_pred = (y_pred_proba >= threshold).astype(int)
+            f1 = f1_score(y_true, y_pred, zero_division=0)
+            threshold_results.append({
+                'threshold': threshold,
+                'f1_score': f1
+            })
+            
+            if f1 > best_f1:
+                best_f1 = f1
+                best_threshold = threshold
+        
+        return {
+            'best_threshold': best_threshold,
+            'best_f1_score': best_f1,
+            'all_results': threshold_results
+        }
+    except Exception as e:
+        logger.warning(f"F1 threshold 최적화 중 예외 발생: {e}, 기본값 반환")
+        return {
+            'best_threshold': 0.5,
+            'best_f1_score': 0.0,
+            'all_results': []
+        }
 
 
 def create_precision_recall_plot(y_true: pd.Series, y_pred_proba: np.ndarray, 
@@ -395,56 +555,96 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
                          y_pred_proba: Dict[str, np.ndarray] = None,
                          config: Dict[str, Any] = None) -> Dict[str, Any]:
     """
-    모든 타겟에 대한 성능 지표를 계산합니다.
+    모든 타겟에 대한 종합적인 평가 지표를 계산합니다.
     
     Args:
-        y_true: 실제 값 데이터프레임
-        y_pred: 예측 값 데이터프레임
-        y_pred_proba: 예측 확률 딕셔너리 (분류 문제용)
-        config: 설정 딕셔너리
+        y_true: 실제 값 DataFrame
+        y_pred: 예측 값 DataFrame
+        y_pred_proba: 예측 확률 Dictionary (선택사항)
+        config: 설정 딕셔너리 (선택사항)
         
     Returns:
-        모든 성능 지표
+        모든 평가 지표를 포함한 딕셔너리
     """
+    logger.info("=== 종합 평가 지표 계산 시작 ===")
+    logger.info(f"y_true shape: {y_true.shape}, y_pred shape: {y_pred.shape}")
+    logger.info(f"y_true columns: {list(y_true.columns)}")
+    logger.info(f"y_pred columns: {list(y_pred.columns)}")
+    
     all_metrics = {}
     
+    # 각 타겟별로 평가
     for target in y_true.columns:
-        if target not in y_pred.columns:
-            logger.warning(f"타겟 {target}에 대한 예측값이 없습니다.")
+        logger.info(f"타겟 '{target}' 평가 중...")
+        
+        # 예측 컬럼 찾기
+        pred_col = None
+        for col in y_pred.columns:
+            if target in col or col.replace('remainder__', '') == target.replace('remainder__', ''):
+                pred_col = col
+                break
+        
+        if pred_col is None:
+            logger.warning(f"타겟 '{target}'에 대한 예측 컬럼을 찾을 수 없습니다.")
             continue
         
-        true_vals = y_true[target]
-        pred_vals = y_pred[target]
+        logger.info(f"타겟 '{target}' -> 예측 컬럼 '{pred_col}'")
         
-        # 회귀 문제인지 분류 문제인지 판단
-        if target.endswith('_next_year'):
-            base_target = target.replace('_next_year', '')
+        true_vals = y_true[target]
+        pred_vals = y_pred[pred_col]
+        
+        # 결측치 제거
+        valid_mask = true_vals.notna() & pred_vals.notna()
+        true_vals_clean = true_vals[valid_mask]
+        pred_vals_clean = pred_vals[valid_mask]
+        
+        logger.info(f"타겟 '{target}' - 유효한 샘플 수: {len(true_vals_clean)}")
+        logger.info(f"타겟 '{target}' - true_vals unique: {true_vals_clean.unique()}")
+        logger.info(f"타겟 '{target}' - pred_vals unique: {pred_vals_clean.unique()}")
+        
+        if len(true_vals_clean) == 0:
+            logger.warning(f"타겟 '{target}'에 대한 유효한 샘플이 없습니다.")
+            continue
+        
+        # 타겟 타입 판단
+        target_original = target.replace('remainder__', '')
+        if target_original.endswith('_next_year'):
+            base_target = target_original.replace('_next_year', '')
+            
             if base_target in ['anxiety_score', 'depress_score', 'sleep_score']:
                 # 회귀 문제
-                target_metrics = calculate_regression_metrics(true_vals, pred_vals)
-                all_metrics[target] = {
-                    'type': 'regression',
-                    'metrics': target_metrics
-                }
+                logger.info(f"타겟 '{target}' - 회귀 문제로 처리")
+                target_metrics = calculate_regression_metrics(true_vals_clean, pred_vals_clean)
+                all_metrics[target] = target_metrics
+                for metric_name, value in target_metrics.items():
+                    logger.info(f"  {metric_name}: {value}")
             elif base_target in ['suicide_t', 'suicide_a']:
                 # 분류 문제
+                logger.info(f"타겟 '{target}' - 분류 문제로 처리")
                 pred_proba = None
                 if y_pred_proba and target in y_pred_proba:
                     pred_proba = y_pred_proba[target]
-                
-                target_metrics = calculate_classification_metrics(true_vals, pred_vals, pred_proba)
-                all_metrics[target] = {
-                    'type': 'classification',
-                    'metrics': target_metrics
-                }
+                    logger.info(f"타겟 '{target}' - 예측 확률 사용 가능")
+                target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean, pred_proba)
+                # 빈 메트릭도 0.0으로 채움
+                for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                    if m not in target_metrics:
+                        target_metrics[m] = 0.0
+                all_metrics[target] = target_metrics
+                for metric_name, value in target_metrics.items():
+                    logger.info(f"  {metric_name}: {value}")
         else:
-            # 타겟 이름이 _next_year로 끝나지 않는 경우 기본적으로 회귀로 처리
-            target_metrics = calculate_regression_metrics(true_vals, pred_vals)
-            all_metrics[target] = {
-                'type': 'regression',
-                'metrics': target_metrics
-            }
+            # 기본적으로 분류로 처리
+            logger.info(f"타겟 '{target}' - 기본 분류 문제로 처리")
+            target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
+            for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                if m not in target_metrics:
+                    target_metrics[m] = 0.0
+            all_metrics[target] = target_metrics
+            for metric_name, value in target_metrics.items():
+                logger.info(f"  {metric_name}: {value}")
     
+    logger.info(f"=== 종합 평가 지표 계산 완료 - {len(all_metrics)}개 타겟 ===")
     return all_metrics
 
 

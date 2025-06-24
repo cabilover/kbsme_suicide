@@ -107,19 +107,14 @@ class XGBoostModel(BaseModel):
             y = y.select_dtypes(include=['number', 'bool', 'category'])
             y = y.replace([np.inf, -np.inf], np.nan)
             logger.info(f"[DEBUG] _validate_input_data 호출 후 y 컬럼: {list(y.columns)}")
-        
-        # 사용 가능한 타겟 컬럼 찾기 (전처리된 컬럼명 고려)
-        available_targets = []
-        for target in self.target_columns:
-            # 원본 컬럼명, pass__ 접두사, remainder__ 접두사 모두 확인
-            possible_names = [target, f"pass__{target}", f"remainder__{target}"]
-            for name in possible_names:
-                if name in y.columns:
-                    available_targets.append(name)
-                    break
-        
+
+        # 사용 가능한 타겟 컬럼 찾기 (접두사 포함)
+        available_targets = self._find_available_targets(y)
         logger.info(f"사용 가능한 타겟 컬럼: {available_targets}")
-        
+
+        if y.shape[1] == 0:
+            logger.error("y 데이터프레임에 컬럼이 없습니다! 타겟 컬럼 매칭을 확인하세요.")
+            return self
         if not available_targets:
             logger.warning("사용 가능한 타겟 컬럼이 없습니다. 데이터를 확인해주세요.")
             logger.info(f"y 컬럼들: {list(y.columns)}")

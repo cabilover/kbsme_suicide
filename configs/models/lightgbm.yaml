@@ -21,7 +21,7 @@ model:
     lambda_l2: 0.1
     
     # 성능 최적화
-    num_threads: -1  # 모든 CPU 코어 사용
+    num_threads: 28   # 병렬처리 코어 수
     verbose: -1      # 로그 출력 최소화
     
     # Early Stopping

@@ -13,6 +13,10 @@ model:
     learning_rate: 0.1
     l2_leaf_reg: 3
     
+    # 분류를 위한 loss function과 eval_metric 설정
+    loss_function: "Logloss"  # 분류용 loss function
+    eval_metric: "Logloss"    # 분류용 평가 지표
+    
     # 범주형 변수 처리
     cat_features: []  # 자동 감지
     cat_l2: 10.0
@@ -33,9 +37,9 @@ model:
     verbose: false
     
     # 불균형 데이터 처리
-    class_weights: [1, 1]  # 기본값, 나중에 계산
+    # class_weights: [1, 1]  # (사용하지 않음)
     auto_class_weights: "Balanced"
-    scale_pos_weight: 1.0  # 자동 계산됨
+    scale_pos_weight: 1.0  # (사용하지 않음)
     
     # Focal Loss 설정 (CatBoost는 직접 지원하지 않지만 설정을 인식)
     use_focal_loss: false  # Focal Loss 사용 여부 (true/false)
@@ -93,6 +97,7 @@ model:
     gradient_iterations: 1
     sampling_unit: "Object"
     mvs_reg: 0.1
+    thread_count: 28   # 병렬처리 코어 수
 
 # 불균형 데이터 처리 설정
 imbalanced_data:

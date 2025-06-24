@@ -70,10 +70,21 @@ class LightGBMModel(BaseModel):
             for prefix in ['pass__', 'num__', 'cat__'] if t.startswith(prefix) or prefix == 'pass__'
         ]
         if clean_target in clean_classification_targets:
-            params['scale_pos_weight'] = self.model_params.get('scale_pos_weight', 1.0)
+            # 분류 문제인 경우
+            # 설정 파일에서 scale_pos_weight 가져오기 (기본값 1.0)
+            scale_pos_weight = self.model_params.get('scale_pos_weight', 1.0)
+            
+            # 만약 scale_pos_weight가 1.0이면 자동 계산을 위해 None으로 설정
+            # (LightGBM이 자동으로 클래스 비율에 따라 계산)
+            if scale_pos_weight == 1.0:
+                params['scale_pos_weight'] = None
+            else:
+                params['scale_pos_weight'] = scale_pos_weight
+            
             params['objective'] = 'binary'
             params['metric'] = 'binary_logloss'
         else:
+            # 회귀 문제
             params['objective'] = 'regression'
             params['metric'] = 'rmse'
         return params

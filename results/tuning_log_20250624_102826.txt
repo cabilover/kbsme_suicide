@@ -1,0 +1,551 @@
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO - MLflow 실험 설정: hyperparameter_tuning (ID: 765186397364671153)
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO - 전달받은 데이터 사용: (85094, 33)
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO - 모델 타입: random_forest
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO - 튜닝 설정 - 시도 횟수: 1, 타임아웃: 3600초
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO - 하이퍼파라미터 튜너 초기화 완료
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO -   - 튜닝 설정: {'data': {'file_path': 'data/processed/processed_data_with_features.csv', 'encoding': 'utf-8', 'na_values': ['', 'nan', 'NaN', 'NULL', 'null']}, 'features': {'target_columns': ['suicide_a_next_year'], 'exclude_columns': ['id', 'patient_id', 'visit_date', 'visit_year'], 'categorical_columns': ['gender', 'marital_status', 'education_level', 'income_level', 'residence_type', 'insurance_type', 'primary_diagnosis', 'comorbidity', 'medication_type', 'treatment_type', 'follow_up_status'], 'selected_features': ['age', 'sex', 'comp', 'anxiety_score', 'depress_score', 'sleep_score'], 'validation': {'scope': 'sample', 'sample_size': 10}, 'enable_feature_engineering': False, 'enable_lagged_features': False, 'lag_periods': [1, 2, 3], 'lagged_features': {'columns': ['anxiety_score', 'depress_score', 'sleep_score', 'comp']}, 'enable_rolling_stats': False, 'rolling_stats': {'window_sizes': [2, 3], 'columns': ['anxiety_score', 'depress_score', 'sleep_score', 'comp']}}, 'preprocessing': {'time_series_imputation': {'columns': ['anxiety_score', 'depress_score', 'sleep_score', 'comp'], 'fallback_strategy': 'mean'}, 'numerical_imputation': {'strategy': 'mean', 'columns': ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']}, 'categorical_imputation': {'strategy': 'most_frequent', 'columns': ['sex']}, 'categorical_encoding': {'method': 'onehot', 'drop_first': True, 'sparse': False}, 'missing_value_strategy': 'median', 'outlier_detection': {'method': 'iqr', 'threshold': 1.5}, 'scaling': {'method': 'none', 'with_mean': False, 'with_std': False}, 'feature_selection': {'method': 'variance_threshold', 'threshold': 0.01}}, 'data_split': {'test_ids_ratio': 0.15, 'random_state': 42, 'method': 'stratified_kfold', 'n_splits': 5, 'test_size': 0.2, 'val_size': 0.2}, 'validation': {'strategy': 'group_kfold', 'num_cv_folds': 3, 'test_size': 0.15, 'random_state': 42, 'val_ids_ratio': 0.15, 'validation_start_year': 2021, 'min_train_years': 3, 'max_train_years': 8}, 'time_series': {'date_column': 'dov', 'year_column': 'yov', 'id_column': 'id'}, 'evaluation': {'regression_metrics': ['mae', 'rmse', 'r2'], 'classification_metrics': ['precision', 'recall', 'f1', 'roc_auc', 'balanced_accuracy'], 'cv_metrics': ['accuracy', 'f1', 'auc', 'rmse', 'r2'], 'save_predictions': True, 'save_feature_importance': True, 'save_confusion_matrix': True, 'save_roc_curve': True, 'save_precision_recall_curve': True, 'primary_metric': 'pr_auc', 'secondary_metrics': ['recall', 'precision', 'balanced_accuracy', 'roc_auc'], 'metrics': {'classification_metrics': ['precision', 'recall', 'f1', 'roc_auc', 'balanced_accuracy', 'pr_auc'], 'regression_metrics': ['mae', 'rmse', 'r2'], 'cv_metrics': ['accuracy', 'f1', 'auc', 'rmse', 'r2', 'pr_auc']}}, 'training': {'early_stopping': True, 'patience': 10, 'handle_imbalance': True, 'save_best_model': True, 'model_save_path': 'models/'}, 'logging': {'log_splits_info': True, 'log_fold_details': True, 'level': 'INFO', 'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s', 'file': 'logs/experiment.log'}, 'output': {'directory': 'results', 'save_model': True, 'save_predictions': True, 'save_feature_importance': True, 'save_confusion_matrix': True, 'save_roc_curve': True, 'save_precision_recall_curve': True}, 'mlflow': {'experiment_name': 'hyperparameter_tuning', 'experiment_description': '자살 위험 예측 모델 실험', 'tags': ['suicide_prediction', 'healthcare', 'classification', 'regression'], 'nested_runs': True, 'save_artifacts': True, 'log_params': True, 'log_metrics': True, 'log_model': True, 'tracking': {'tracking_uri': 'file:./mlruns', 'experiment_name': 'suicide_prediction', 'nested_runs': True, 'artifact_location': './mlruns'}, 'logging': {'param_logging_level': 'INFO', 'metric_logging_level': 'INFO', 'artifact_logging_level': 'INFO', 'log_experiment_info': True, 'log_fold_results': True, 'log_model_info': True}, 'log_optimization': True}, 'model': {'model_type': 'random_forest', 'random_forest': {'n_estimators': 100, 'max_depth': 10, 'min_samples_split': 2, 'min_samples_leaf': 1, 'max_features': 'sqrt', 'bootstrap': True, 'oob_score': True, 'max_samples': 0.8, 'class_weight': 'balanced', 'sample_weight': 'auto', 'n_jobs': 28, 'random_state': 42, 'min_impurity_decrease': 0.0, 'min_weight_fraction_leaf': 0.0, 'max_leaf_nodes': None, 'ccp_alpha': 0.0, 'criterion': 'gini', 'max_features_regression': 'sqrt', 'min_impurity_decrease_regression': 0.0, 'use_focal_loss': False, 'focal_loss': {'alpha': 0.25, 'gamma': 2.0}}}, 'imbalanced_data': {'resampling': {'enabled': False, 'method': 'smote', 'smote': {'k_neighbors': 5, 'sampling_strategy': 'auto'}, 'borderline_smote': {'k_neighbors': 5, 'sampling_strategy': 'auto', 'm_neighbors': 10}, 'adasyn': {'k_neighbors': 5, 'sampling_strategy': 'auto', 'n_neighbors': 5}, 'under_sampling': {'strategy': 'random', 'sampling_strategy': 'auto'}}, 'class_weight': 'balanced', 'sample_weight': 'auto'}, 'experiment': {'name': 'hyperparameter_tuning_experiment', 'description': 'Optuna 기반 하이퍼파라미터 최적화 실험', 'tags': ['hyperparameter_tuning', 'optuna', 'optimization']}, 'tuning': {'direction': 'maximize', 'n_trials': 1, 'n_jobs': 1, 'early_stopping': {'enabled': True, 'patience': 20, 'min_trials': 30}}, 'sampler': {'type': 'tpe', 'tpe': {'n_startup_trials': 10, 'n_ei_candidates': 24, 'multivariate': True, 'group': False}, 'cmaes': {'x0': {'n_estimators': 100, 'max_depth': 6, 'learning_rate': 0.1, 'subsample': 0.8, 'colsample_bytree': 0.8, 'min_child_weight': 1, 'reg_alpha': 0.1, 'reg_lambda': 1.0}, 'sigma0': 0.1}}, 'xgboost_params': {'n_estimators': {'type': 'int', 'low': 50, 'high': 1000, 'log': False}, 'max_depth': {'type': 'int', 'low': 3, 'high': 15, 'log': False}, 'learning_rate': {'type': 'float', 'low': 0.01, 'high': 0.3, 'log': True}, 'subsample': {'type': 'float', 'low': 0.6, 'high': 1.0, 'log': False}, 'colsample_bytree': {'type': 'float', 'low': 0.6, 'high': 1.0, 'log': False}, 'min_child_weight': {'type': 'int', 'low': 1, 'high': 10, 'log': False}, 'reg_alpha': {'type': 'float', 'low': '1e-8', 'high': 10.0, 'log': True}, 'reg_lambda': {'type': 'float', 'low': '1e-8', 'high': 10.0, 'log': True}, 'scale_pos_weight': {'type': 'float', 'low': 0.5, 'high': 10.0, 'log': True}}, 'lightgbm_params': {'n_estimators': {'type': 'int', 'low': 50, 'high': 1000, 'log': False}, 'max_depth': {'type': 'int', 'low': 3, 'high': 12, 'log': False}, 'learning_rate': {'type': 'float', 'low': 0.01, 'high': 0.3, 'log': True}, 'subsample': {'type': 'float', 'low': 0.6, 'high': 1.0, 'log': False}, 'colsample_bytree': {'type': 'float', 'low': 0.6, 'high': 1.0, 'log': False}, 'min_child_weight': {'type': 'int', 'low': 1, 'high': 10, 'log': False}, 'reg_alpha': {'type': 'float', 'low': '1e-8', 'high': 10.0, 'log': True}, 'reg_lambda': {'type': 'float', 'low': '1e-8', 'high': 10.0, 'log': True}}, 'catboost_params': {'iterations': {'type': 'int', 'low': 50, 'high': 500, 'log': False}, 'depth': {'type': 'int', 'low': 3, 'high': 10, 'log': False}, 'learning_rate': {'type': 'float', 'low': 0.01, 'high': 0.3, 'log': True}, 'l2_leaf_reg': {'type': 'float', 'low': 1, 'high': 10, 'log': True}, 'border_count': {'type': 'int', 'low': 32, 'high': 255, 'log': False}, 'bagging_temperature': {'type': 'float', 'low': 0.1, 'high': 1.0, 'log': False}, 'random_strength': {'type': 'float', 'low': 0.1, 'high': 10.0, 'log': True}}, 'random_forest_params': {'n_estimators': {'type': 'int', 'low': 50, 'high': 500, 'log': False}, 'max_depth': {'type': 'int', 'low': 3, 'high': 20, 'log': False}, 'min_samples_split': {'type': 'int', 'low': 2, 'high': 20, 'log': False}, 'min_samples_leaf': {'type': 'int', 'low': 1, 'high': 10, 'log': False}, 'max_features': {'type': 'categorical', 'choices': ['sqrt', 'log2', 'auto']}}, 'cv': {'strategy': 'group_kfold', 'n_folds': 5, 'shuffle': False}, 'results': {'save_best_model': True, 'model_save_path': 'models/best_tuned_model.joblib', 'save_study': True, 'study_save_path': 'models/optuna_study.pkl', 'create_plots': True, 'plots_save_path': 'data/tuning_results/'}}
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO -   - 튜닝 횟수: 1
+2025-06-24 10:28:26,682 - src.hyperparameter_tuning - INFO -   - 타임아웃: 3600초
+2025-06-24 10:28:26,720 - __main__ - INFO - MLflow Run 시작: c87917b619254e1dad7887cc07eb7083
+2025-06-24 10:28:26,723 - __main__ - INFO - 튜닝 파라미터 로깅 완료: 6개 파라미터
+2025-06-24 10:28:26,723 - src.hyperparameter_tuning - INFO - 하이퍼파라미터 최적화 시작
+2025-06-24 10:28:26,728 - src.hyperparameter_tuning - INFO - Trial 0: 모델 타입 = random_forest
+2025-06-24 10:28:28,598 - src.splits - INFO - 데이터 분할 완료:
+2025-06-24 10:28:28,598 - src.splits - INFO -   - 전체 데이터: 1,569,071 행
+2025-06-24 10:28:28,598 - src.splits - INFO -   - 훈련/검증 데이터: 1,333,765 행
+2025-06-24 10:28:28,598 - src.splits - INFO -   - 테스트 데이터: 235,306 행
+2025-06-24 10:28:28,598 - src.splits - INFO -   - 테스트 ID 수: 40,401개
+2025-06-24 10:28:28,599 - src.training - INFO - 교차 검증 시작
+2025-06-24 10:28:28,599 - src.splits - INFO - 순수 그룹 기반 K-Fold 검증 전략 사용
+2025-06-24 10:28:28,616 - src.splits - INFO - 그룹 K-Fold 분할: 228,938개 ID를 3개 폴드로 분할
+2025-06-24 10:28:29,058 - src.splits - INFO - 그룹 K-Fold 폴드 1 생성 완료
+2025-06-24 10:28:29,058 - src.splits - INFO -   - 훈련 데이터: 889,176 행 (152,625개 ID)
+2025-06-24 10:28:29,058 - src.splits - INFO -   - 검증 데이터: 444,589 행 (76,313개 ID)
+2025-06-24 10:28:29,058 - src.splits - INFO -   - 훈련 연도 범위: (2015, 2024)
+2025-06-24 10:28:29,058 - src.splits - INFO -   - 검증 연도 범위: (2015, 2024)
+2025-06-24 10:28:29,058 - src.training - INFO - === 폴드 1 학습 ===
+2025-06-24 10:28:29,058 - src.preprocessing - INFO - 전처리 파이프라인 피팅 시작
+2025-06-24 10:28:29,058 - src.preprocessing - INFO - 시계열 보간 적용: ['anxiety_score', 'depress_score', 'sleep_score', 'comp']
+2025-06-24 10:28:29,058 - src.preprocessing - INFO - Fallback 전략: mean
+2025-06-24 10:28:29,218 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:28:29,218 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:28:29,218 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:28:29,218 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:28:29,218 - src.preprocessing - INFO - 통과시킬 컬럼: ['suicide_t', 'suicide_a', 'suicide_c', 'suicide_y', 'psychia_cate', 'check', 'age_group', 'anxiety_score_next_year', 'depress_score_next_year', 'sleep_score_next_year', 'suicide_t_next_year', 'suicide_a_next_year', 'month', 'day_of_week', 'day_of_year', 'anxiety_score_rolling_mean_2y', 'anxiety_score_rolling_std_2y', 'anxiety_score_yoy_change', 'depress_score_rolling_mean_2y', 'depress_score_rolling_std_2y', 'depress_score_yoy_change', 'sleep_score_rolling_mean_2y', 'sleep_score_rolling_std_2y', 'sleep_score_yoy_change']
+2025-06-24 10:28:29,218 - src.preprocessing - INFO - 전처리 파이프라인 생성 완료
+2025-06-24 10:28:29,218 - src.preprocessing - INFO -   - 수치형 전략: mean
+2025-06-24 10:28:29,218 - src.preprocessing - INFO -   - 범주형 전략: most_frequent
+2025-06-24 10:28:29,218 - src.preprocessing - INFO -   - 범주형 인코딩: onehot
+2025-06-24 10:28:29,218 - src.preprocessing - INFO - 전처리 파이프라인 피팅 중...
+2025-06-24 10:28:30,357 - src.preprocessing - INFO - 데이터 변환 중...
+2025-06-24 10:28:31,196 - src.preprocessing - INFO - 데이터 변환 완료: (889176, 33)
+2025-06-24 10:28:31,196 - src.preprocessing - INFO - 전처리 파이프라인 피팅 완료
+2025-06-24 10:28:31,200 - src.feature_engineering - INFO - 피처 엔지니어링 비활성화 - 기본 피처만 사용
+2025-06-24 10:28:31,225 - src.feature_engineering - INFO - 피처 엔지니어링 완료: 33개 피처
+2025-06-24 10:28:31,225 - src.feature_engineering - INFO -   - 원본 피처: 33개
+2025-06-24 10:28:31,225 - src.feature_engineering - INFO -   - 새로 생성된 피처: 0개 (비활성화)
+2025-06-24 10:28:31,225 - src.feature_engineering - INFO - [DEBUG] 피처 엔지니어링 직후 컬럼 목록: ['id', 'yov', 'dov', 'age', 'sex', 'comp', 'anxiety_score', 'depress_score', 'sleep_score', 'suicide_t', 'suicide_a', 'suicide_c', 'suicide_y', 'psychia_cate', 'check', 'age_group', 'anxiety_score_next_year', 'depress_score_next_year', 'sleep_score_next_year', 'suicide_t_next_year', 'suicide_a_next_year', 'month', 'day_of_week', 'day_of_year', 'anxiety_score_rolling_mean_2y', 'anxiety_score_rolling_std_2y', 'anxiety_score_yoy_change', 'depress_score_rolling_mean_2y', 'depress_score_rolling_std_2y', 'depress_score_yoy_change', 'sleep_score_rolling_mean_2y', 'sleep_score_rolling_std_2y', 'sleep_score_yoy_change']
+2025-06-24 10:28:32,232 - src.preprocessing - INFO - 데이터 변환 완료: (889176, 33)
+2025-06-24 10:28:32,658 - src.preprocessing - INFO - 데이터 변환 완료: (444589, 33)
+2025-06-24 10:28:32,658 - src.feature_engineering - INFO - 피처 엔지니어링 적용 (기본 피처만 사용)
+2025-06-24 10:28:32,788 - src.feature_engineering - INFO - 피처 엔지니어링 적용 완료: 33개 피처
+2025-06-24 10:28:32,788 - src.feature_engineering - INFO - 피처 엔지니어링 적용 (기본 피처만 사용)
+2025-06-24 10:28:32,854 - src.feature_engineering - INFO - 피처 엔지니어링 적용 완료: 33개 피처
+2025-06-24 10:28:32,855 - src.training - INFO - [DEBUG] train_engineered 컬럼: ['num__anxiety_score', 'num__depress_score', 'num__sleep_score', 'num__comp', 'num__age', 'cat__sex_여자', 'pass__suicide_t', 'pass__suicide_a', 'pass__suicide_c', 'pass__suicide_y', 'pass__psychia_cate', 'pass__check', 'pass__age_group', 'pass__anxiety_score_next_year', 'pass__depress_score_next_year', 'pass__sleep_score_next_year', 'pass__suicide_t_next_year', 'pass__suicide_a_next_year', 'pass__month', 'pass__day_of_week', 'pass__day_of_year', 'pass__anxiety_score_rolling_mean_2y', 'pass__anxiety_score_rolling_std_2y', 'pass__anxiety_score_yoy_change', 'pass__depress_score_rolling_mean_2y', 'pass__depress_score_rolling_std_2y', 'pass__depress_score_yoy_change', 'pass__sleep_score_rolling_mean_2y', 'pass__sleep_score_rolling_std_2y', 'pass__sleep_score_yoy_change', 'id', 'yov', 'dov']
+2025-06-24 10:28:32,855 - src.training - INFO - [DEBUG] val_engineered 컬럼: ['num__anxiety_score', 'num__depress_score', 'num__sleep_score', 'num__comp', 'num__age', 'cat__sex_여자', 'pass__suicide_t', 'pass__suicide_a', 'pass__suicide_c', 'pass__suicide_y', 'pass__psychia_cate', 'pass__check', 'pass__age_group', 'pass__anxiety_score_next_year', 'pass__depress_score_next_year', 'pass__sleep_score_next_year', 'pass__suicide_t_next_year', 'pass__suicide_a_next_year', 'pass__month', 'pass__day_of_week', 'pass__day_of_year', 'pass__anxiety_score_rolling_mean_2y', 'pass__anxiety_score_rolling_std_2y', 'pass__anxiety_score_yoy_change', 'pass__depress_score_rolling_mean_2y', 'pass__depress_score_rolling_std_2y', 'pass__depress_score_yoy_change', 'pass__sleep_score_rolling_mean_2y', 'pass__sleep_score_rolling_std_2y', 'pass__sleep_score_yoy_change', 'id', 'yov', 'dov']
+2025-06-24 10:28:32,855 - src.feature_engineering - WARNING - 피처를 찾을 수 없습니다: sex
+2025-06-24 10:28:32,855 - src.feature_engineering - INFO - selected_features 기반 피처 컬럼 선택(타겟 제외): 5개
+2025-06-24 10:28:32,855 - src.training - INFO - [DEBUG] feature_columns: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:32,855 - src.training - INFO - [DEBUG] target_columns: ['pass__suicide_a_next_year']
+2025-06-24 10:28:32,907 - src.training - INFO - [DEBUG] X_train shape: (889176, 5), y_train shape: (889176, 1)
+2025-06-24 10:28:32,907 - src.training - INFO - [DEBUG] X_val shape: (444589, 5), y_val shape: (444589, 1)
+2025-06-24 10:28:32,907 - src.training - INFO - [DEBUG] y_train 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:32,907 - src.training - INFO - [DEBUG] y_val 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:32,907 - src.preprocessing - INFO - 리샘플링이 비활성화되어 있습니다.
+2025-06-24 10:28:32,907 - src.training - INFO - [DEBUG] X_train_resampled shape: (889176, 5), y_train_resampled shape: (889176, 1)
+2025-06-24 10:28:32,907 - src.training - INFO - [DEBUG] y_train_resampled 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:32,958 - src.training - INFO - 폴드 1 - 리샘플링 전 클래스 분포: {(0.0,): 735631, (1.0,): 846}
+2025-06-24 10:28:32,958 - src.training - INFO - 폴드 1 - 리샘플링 후 클래스 분포: {(0.0,): 735631, (1.0,): 846}
+2025-06-24 10:28:32,958 - src.training - INFO - 모델 학습 시작
+2025-06-24 10:28:33,072 - src.training - INFO - 결측 타겟 제거: train 889176->736477, val 444589->368238
+2025-06-24 10:28:33,072 - src.training - INFO - 모델 타입: random_forest
+2025-06-24 10:28:33,072 - src.models.model_factory - INFO - 모델 타입 'random_forest'으로 모델을 생성합니다.
+2025-06-24 10:28:33,072 - src.models.base_model - INFO - RANDOMFOREST 모델 초기화 완료
+2025-06-24 10:28:33,072 - src.models.base_model - INFO -   - 회귀 타겟: []
+2025-06-24 10:28:33,072 - src.models.base_model - INFO -   - 분류 타겟: ['suicide_a_next_year']
+2025-06-24 10:28:33,072 - src.models.random_forest_model - INFO -   - Focal Loss 사용: False
+2025-06-24 10:28:33,072 - src.models.random_forest_model - INFO - Random Forest 모델 학습 시작
+2025-06-24 10:28:33,072 - src.models.random_forest_model - INFO - 입력 데이터 형태: X=(736477, 5), y=(736477, 1)
+2025-06-24 10:28:33,072 - src.models.random_forest_model - INFO - 입력 데이터 검증 및 전처리 중...
+2025-06-24 10:28:33,072 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (736477, 5)
+2025-06-24 10:28:33,073 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:33,073 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:28:33,139 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:28:33,187 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:28:33,233 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:28:33,283 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:28:33,340 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:28:33,350 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (736477, 5)
+2025-06-24 10:28:33,350 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:33,411 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (736477, 5), y shape: (736477, 1)
+2025-06-24 10:28:33,411 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 y 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:33,411 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (368238, 5)
+2025-06-24 10:28:33,411 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:33,412 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:28:33,444 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:28:33,468 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:28:33,491 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:28:33,515 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:28:33,543 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:28:33,547 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (368238, 5)
+2025-06-24 10:28:33,547 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:33,571 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (368238, 5), y shape: (368238, 1)
+2025-06-24 10:28:33,571 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 y 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:33,571 - src.models.random_forest_model - INFO - 전처리 후 데이터 형태: X=(736477, 5), y=(736477, 1)
+2025-06-24 10:28:33,571 - src.models.random_forest_model - INFO - 사용 가능한 타겟 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:33,571 - src.models.random_forest_model - INFO - === 타겟 pass__suicide_a_next_year 모델 학습 시작 ===
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO - 타겟 pass__suicide_a_next_year 데이터 정리 후: X=(736477, 5), y=736477
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO - === pass__suicide_a_next_year 모델 파라미터 ===
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   n_estimators: 218
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   max_depth: 20
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   min_samples_split: 15
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   min_samples_leaf: 6
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   max_features: sqrt
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   bootstrap: True
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   oob_score: True
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   max_samples: 0.8
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   class_weight: balanced
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   n_jobs: 28
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   min_impurity_decrease: 0.0
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   min_weight_fraction_leaf: 0.0
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   max_leaf_nodes: None
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   ccp_alpha: 0.0
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO -   criterion: gini
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO - Random Forest 모델 생성 중... (타겟: pass__suicide_a_next_year)
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO - 분류 모델 (RandomForestClassifier) 사용
+2025-06-24 10:28:33,580 - src.models.random_forest_model - INFO - Random Forest 모델 학습 시작 (타겟: pass__suicide_a_next_year)
+2025-06-24 10:28:47,949 - src.models.random_forest_model - INFO - 타겟 pass__suicide_a_next_year 모델 학습 완료
+2025-06-24 10:28:47,949 - src.models.random_forest_model - INFO -   - 트리 개수: 218
+2025-06-24 10:28:47,949 - src.models.random_forest_model - INFO -   - 피처 개수: 5
+2025-06-24 10:28:47,949 - src.models.random_forest_model - INFO -   - 클래스: [0. 1.]
+2025-06-24 10:28:47,949 - src.models.random_forest_model - INFO - 모든 모델 학습 완료 (1개)
+2025-06-24 10:28:47,949 - src.models.random_forest_model - INFO - Random Forest 모델 예측 시작
+2025-06-24 10:28:47,949 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (368238, 5)
+2025-06-24 10:28:47,949 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:47,950 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:28:47,979 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:28:48,004 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:28:48,027 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:28:48,051 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:28:48,080 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:28:48,084 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (368238, 5)
+2025-06-24 10:28:48,084 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:48,088 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (368238, 5)
+2025-06-24 10:28:48,088 - src.models.random_forest_model - WARNING - 타겟 suicide_a_next_year에 대한 모델이 없습니다. 건너뜁니다.
+2025-06-24 10:28:48,088 - src.models.random_forest_model - INFO - 예측 완료: (368238, 0)
+2025-06-24 10:28:48,088 - src.training - INFO - === 예측 결과 평가 시작 ===
+2025-06-24 10:28:48,088 - src.training - INFO - y_true shape: (368238, 1), y_pred shape: (368238, 0)
+2025-06-24 10:28:48,088 - src.training - INFO - y_true columns: ['pass__suicide_a_next_year']
+2025-06-24 10:28:48,088 - src.training - INFO - y_pred columns: []
+2025-06-24 10:28:48,088 - src.training - INFO - 타겟 'pass__suicide_a_next_year' 평가 중...
+2025-06-24 10:28:48,088 - src.training - WARNING -   예측 컬럼을 찾을 수 없음: pass__suicide_a_next_year
+2025-06-24 10:28:48,088 - src.training - WARNING -   사용 가능한 예측 컬럼: []
+2025-06-24 10:28:48,088 - src.training - INFO - === 예측 결과 평가 완료 - 0개 타겟 ===
+2025-06-24 10:28:48,088 - src.training - INFO - 피처 검증은 원본 데이터에서 수행되어야 하므로 건너뜁니다.
+2025-06-24 10:28:48,088 - src.models.random_forest_model - WARNING - 타겟 suicide_a_next_year에 대한 모델이 없습니다. 건너뜁니다.
+2025-06-24 10:28:48,088 - src.training - INFO - 모델 학습 완료
+2025-06-24 10:28:48,088 - src.training - INFO - 검증 성능: {}
+2025-06-24 10:28:48,088 - src.training - INFO - [DEBUG] train_model 진입 - X_train 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:48,088 - src.training - INFO - [DEBUG] train_model 진입 - y_train 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:48,088 - src.training - INFO - [DEBUG] train_model 진입 - X_val 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:48,088 - src.training - INFO - [DEBUG] train_model 진입 - y_val 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:48,105 - src.training - INFO - 폴드 1 학습 결과 MLflow 로깅 완료
+2025-06-24 10:28:48,106 - src.training - INFO - 폴드 1 완료
+2025-06-24 10:28:48,250 - src.splits - INFO - 그룹 K-Fold 폴드 2 생성 완료
+2025-06-24 10:28:48,250 - src.splits - INFO -   - 훈련 데이터: 889,177 행 (152,626개 ID)
+2025-06-24 10:28:48,250 - src.splits - INFO -   - 검증 데이터: 444,588 행 (76,312개 ID)
+2025-06-24 10:28:48,250 - src.splits - INFO -   - 훈련 연도 범위: (2015, 2024)
+2025-06-24 10:28:48,250 - src.splits - INFO -   - 검증 연도 범위: (2015, 2024)
+2025-06-24 10:28:48,257 - src.training - INFO - === 폴드 2 학습 ===
+2025-06-24 10:28:48,257 - src.preprocessing - INFO - 전처리 파이프라인 피팅 시작
+2025-06-24 10:28:48,257 - src.preprocessing - INFO - 시계열 보간 적용: ['anxiety_score', 'depress_score', 'sleep_score', 'comp']
+2025-06-24 10:28:48,257 - src.preprocessing - INFO - Fallback 전략: mean
+2025-06-24 10:28:48,408 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:28:48,408 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:28:48,408 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:28:48,408 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:28:48,408 - src.preprocessing - INFO - 통과시킬 컬럼: ['suicide_t', 'suicide_a', 'suicide_c', 'suicide_y', 'psychia_cate', 'check', 'age_group', 'anxiety_score_next_year', 'depress_score_next_year', 'sleep_score_next_year', 'suicide_t_next_year', 'suicide_a_next_year', 'month', 'day_of_week', 'day_of_year', 'anxiety_score_rolling_mean_2y', 'anxiety_score_rolling_std_2y', 'anxiety_score_yoy_change', 'depress_score_rolling_mean_2y', 'depress_score_rolling_std_2y', 'depress_score_yoy_change', 'sleep_score_rolling_mean_2y', 'sleep_score_rolling_std_2y', 'sleep_score_yoy_change']
+2025-06-24 10:28:48,408 - src.preprocessing - INFO - 전처리 파이프라인 생성 완료
+2025-06-24 10:28:48,408 - src.preprocessing - INFO -   - 수치형 전략: mean
+2025-06-24 10:28:48,408 - src.preprocessing - INFO -   - 범주형 전략: most_frequent
+2025-06-24 10:28:48,408 - src.preprocessing - INFO -   - 범주형 인코딩: onehot
+2025-06-24 10:28:48,408 - src.preprocessing - INFO - 전처리 파이프라인 피팅 중...
+2025-06-24 10:28:49,462 - src.preprocessing - INFO - 데이터 변환 중...
+2025-06-24 10:28:50,311 - src.preprocessing - INFO - 데이터 변환 완료: (889177, 33)
+2025-06-24 10:28:50,311 - src.preprocessing - INFO - 전처리 파이프라인 피팅 완료
+2025-06-24 10:28:50,318 - src.feature_engineering - INFO - 피처 엔지니어링 비활성화 - 기본 피처만 사용
+2025-06-24 10:28:50,343 - src.feature_engineering - INFO - 피처 엔지니어링 완료: 33개 피처
+2025-06-24 10:28:50,344 - src.feature_engineering - INFO -   - 원본 피처: 33개
+2025-06-24 10:28:50,344 - src.feature_engineering - INFO -   - 새로 생성된 피처: 0개 (비활성화)
+2025-06-24 10:28:50,344 - src.feature_engineering - INFO - [DEBUG] 피처 엔지니어링 직후 컬럼 목록: ['id', 'yov', 'dov', 'age', 'sex', 'comp', 'anxiety_score', 'depress_score', 'sleep_score', 'suicide_t', 'suicide_a', 'suicide_c', 'suicide_y', 'psychia_cate', 'check', 'age_group', 'anxiety_score_next_year', 'depress_score_next_year', 'sleep_score_next_year', 'suicide_t_next_year', 'suicide_a_next_year', 'month', 'day_of_week', 'day_of_year', 'anxiety_score_rolling_mean_2y', 'anxiety_score_rolling_std_2y', 'anxiety_score_yoy_change', 'depress_score_rolling_mean_2y', 'depress_score_rolling_std_2y', 'depress_score_yoy_change', 'sleep_score_rolling_mean_2y', 'sleep_score_rolling_std_2y', 'sleep_score_yoy_change']
+2025-06-24 10:28:51,346 - src.preprocessing - INFO - 데이터 변환 완료: (889177, 33)
+2025-06-24 10:28:51,827 - src.preprocessing - INFO - 데이터 변환 완료: (444588, 33)
+2025-06-24 10:28:51,856 - src.feature_engineering - INFO - 피처 엔지니어링 적용 (기본 피처만 사용)
+2025-06-24 10:28:51,988 - src.feature_engineering - INFO - 피처 엔지니어링 적용 완료: 33개 피처
+2025-06-24 10:28:52,134 - src.feature_engineering - INFO - 피처 엔지니어링 적용 (기본 피처만 사용)
+2025-06-24 10:28:52,201 - src.feature_engineering - INFO - 피처 엔지니어링 적용 완료: 33개 피처
+2025-06-24 10:28:52,264 - src.training - INFO - [DEBUG] train_engineered 컬럼: ['num__anxiety_score', 'num__depress_score', 'num__sleep_score', 'num__comp', 'num__age', 'cat__sex_여자', 'pass__suicide_t', 'pass__suicide_a', 'pass__suicide_c', 'pass__suicide_y', 'pass__psychia_cate', 'pass__check', 'pass__age_group', 'pass__anxiety_score_next_year', 'pass__depress_score_next_year', 'pass__sleep_score_next_year', 'pass__suicide_t_next_year', 'pass__suicide_a_next_year', 'pass__month', 'pass__day_of_week', 'pass__day_of_year', 'pass__anxiety_score_rolling_mean_2y', 'pass__anxiety_score_rolling_std_2y', 'pass__anxiety_score_yoy_change', 'pass__depress_score_rolling_mean_2y', 'pass__depress_score_rolling_std_2y', 'pass__depress_score_yoy_change', 'pass__sleep_score_rolling_mean_2y', 'pass__sleep_score_rolling_std_2y', 'pass__sleep_score_yoy_change', 'id', 'yov', 'dov']
+2025-06-24 10:28:52,265 - src.training - INFO - [DEBUG] val_engineered 컬럼: ['num__anxiety_score', 'num__depress_score', 'num__sleep_score', 'num__comp', 'num__age', 'cat__sex_여자', 'pass__suicide_t', 'pass__suicide_a', 'pass__suicide_c', 'pass__suicide_y', 'pass__psychia_cate', 'pass__check', 'pass__age_group', 'pass__anxiety_score_next_year', 'pass__depress_score_next_year', 'pass__sleep_score_next_year', 'pass__suicide_t_next_year', 'pass__suicide_a_next_year', 'pass__month', 'pass__day_of_week', 'pass__day_of_year', 'pass__anxiety_score_rolling_mean_2y', 'pass__anxiety_score_rolling_std_2y', 'pass__anxiety_score_yoy_change', 'pass__depress_score_rolling_mean_2y', 'pass__depress_score_rolling_std_2y', 'pass__depress_score_yoy_change', 'pass__sleep_score_rolling_mean_2y', 'pass__sleep_score_rolling_std_2y', 'pass__sleep_score_yoy_change', 'id', 'yov', 'dov']
+2025-06-24 10:28:52,265 - src.feature_engineering - WARNING - 피처를 찾을 수 없습니다: sex
+2025-06-24 10:28:52,265 - src.feature_engineering - INFO - selected_features 기반 피처 컬럼 선택(타겟 제외): 5개
+2025-06-24 10:28:52,265 - src.training - INFO - [DEBUG] feature_columns: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:52,265 - src.training - INFO - [DEBUG] target_columns: ['pass__suicide_a_next_year']
+2025-06-24 10:28:52,323 - src.training - INFO - [DEBUG] X_train shape: (889177, 5), y_train shape: (889177, 1)
+2025-06-24 10:28:52,323 - src.training - INFO - [DEBUG] X_val shape: (444588, 5), y_val shape: (444588, 1)
+2025-06-24 10:28:52,323 - src.training - INFO - [DEBUG] y_train 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:52,323 - src.training - INFO - [DEBUG] y_val 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:52,323 - src.preprocessing - INFO - 리샘플링이 비활성화되어 있습니다.
+2025-06-24 10:28:52,358 - src.training - INFO - [DEBUG] X_train_resampled shape: (889177, 5), y_train_resampled shape: (889177, 1)
+2025-06-24 10:28:52,358 - src.training - INFO - [DEBUG] y_train_resampled 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:52,409 - src.training - INFO - 폴드 2 - 리샘플링 전 클래스 분포: {(0.0,): 735585, (1.0,): 885}
+2025-06-24 10:28:52,409 - src.training - INFO - 폴드 2 - 리샘플링 후 클래스 분포: {(0.0,): 735585, (1.0,): 885}
+2025-06-24 10:28:52,409 - src.training - INFO - 모델 학습 시작
+2025-06-24 10:28:52,520 - src.training - INFO - 결측 타겟 제거: train 889177->736470, val 444588->368245
+2025-06-24 10:28:52,520 - src.training - INFO - 모델 타입: random_forest
+2025-06-24 10:28:52,520 - src.models.model_factory - INFO - 모델 타입 'random_forest'으로 모델을 생성합니다.
+2025-06-24 10:28:52,520 - src.models.base_model - INFO - RANDOMFOREST 모델 초기화 완료
+2025-06-24 10:28:52,520 - src.models.base_model - INFO -   - 회귀 타겟: []
+2025-06-24 10:28:52,520 - src.models.base_model - INFO -   - 분류 타겟: ['suicide_a_next_year']
+2025-06-24 10:28:52,520 - src.models.random_forest_model - INFO -   - Focal Loss 사용: False
+2025-06-24 10:28:52,520 - src.models.random_forest_model - INFO - Random Forest 모델 학습 시작
+2025-06-24 10:28:52,520 - src.models.random_forest_model - INFO - 입력 데이터 형태: X=(736470, 5), y=(736470, 1)
+2025-06-24 10:28:52,520 - src.models.random_forest_model - INFO - 입력 데이터 검증 및 전처리 중...
+2025-06-24 10:28:52,520 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (736470, 5)
+2025-06-24 10:28:52,520 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:52,521 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:28:52,582 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:28:52,631 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:28:52,677 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:28:52,725 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:28:52,780 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:28:52,788 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (736470, 5)
+2025-06-24 10:28:52,789 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:52,844 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (736470, 5), y shape: (736470, 1)
+2025-06-24 10:28:52,844 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 y 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:52,844 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (368245, 5)
+2025-06-24 10:28:52,844 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:52,845 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:28:52,874 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:28:52,899 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:28:52,921 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:28:52,945 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:28:52,973 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:28:52,976 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (368245, 5)
+2025-06-24 10:28:52,976 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:28:52,999 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (368245, 5), y shape: (368245, 1)
+2025-06-24 10:28:52,999 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 y 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:53,000 - src.models.random_forest_model - INFO - 전처리 후 데이터 형태: X=(736470, 5), y=(736470, 1)
+2025-06-24 10:28:53,000 - src.models.random_forest_model - INFO - 사용 가능한 타겟 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:28:53,000 - src.models.random_forest_model - INFO - === 타겟 pass__suicide_a_next_year 모델 학습 시작 ===
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO - 타겟 pass__suicide_a_next_year 데이터 정리 후: X=(736470, 5), y=736470
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO - === pass__suicide_a_next_year 모델 파라미터 ===
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   n_estimators: 218
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   max_depth: 20
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   min_samples_split: 15
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   min_samples_leaf: 6
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   max_features: sqrt
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   bootstrap: True
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   oob_score: True
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   max_samples: 0.8
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   class_weight: balanced
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   n_jobs: 28
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   min_impurity_decrease: 0.0
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   min_weight_fraction_leaf: 0.0
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   max_leaf_nodes: None
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   ccp_alpha: 0.0
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO -   criterion: gini
+2025-06-24 10:28:53,008 - src.models.random_forest_model - INFO - Random Forest 모델 생성 중... (타겟: pass__suicide_a_next_year)
+2025-06-24 10:28:53,009 - src.models.random_forest_model - INFO - 분류 모델 (RandomForestClassifier) 사용
+2025-06-24 10:28:53,009 - src.models.random_forest_model - INFO - Random Forest 모델 학습 시작 (타겟: pass__suicide_a_next_year)
+2025-06-24 10:29:07,821 - src.models.random_forest_model - INFO - 타겟 pass__suicide_a_next_year 모델 학습 완료
+2025-06-24 10:29:07,821 - src.models.random_forest_model - INFO -   - 트리 개수: 218
+2025-06-24 10:29:07,821 - src.models.random_forest_model - INFO -   - 피처 개수: 5
+2025-06-24 10:29:07,821 - src.models.random_forest_model - INFO -   - 클래스: [0. 1.]
+2025-06-24 10:29:07,821 - src.models.random_forest_model - INFO - 모든 모델 학습 완료 (1개)
+2025-06-24 10:29:07,821 - src.models.random_forest_model - INFO - Random Forest 모델 예측 시작
+2025-06-24 10:29:07,821 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (368245, 5)
+2025-06-24 10:29:07,821 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:07,821 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:29:07,853 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:29:07,883 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:29:07,910 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:29:07,936 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:29:07,965 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:29:07,969 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (368245, 5)
+2025-06-24 10:29:07,969 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:07,974 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (368245, 5)
+2025-06-24 10:29:07,974 - src.models.random_forest_model - WARNING - 타겟 suicide_a_next_year에 대한 모델이 없습니다. 건너뜁니다.
+2025-06-24 10:29:07,974 - src.models.random_forest_model - INFO - 예측 완료: (368245, 0)
+2025-06-24 10:29:07,974 - src.training - INFO - === 예측 결과 평가 시작 ===
+2025-06-24 10:29:07,974 - src.training - INFO - y_true shape: (368245, 1), y_pred shape: (368245, 0)
+2025-06-24 10:29:07,974 - src.training - INFO - y_true columns: ['pass__suicide_a_next_year']
+2025-06-24 10:29:07,974 - src.training - INFO - y_pred columns: []
+2025-06-24 10:29:07,974 - src.training - INFO - 타겟 'pass__suicide_a_next_year' 평가 중...
+2025-06-24 10:29:07,974 - src.training - WARNING -   예측 컬럼을 찾을 수 없음: pass__suicide_a_next_year
+2025-06-24 10:29:07,974 - src.training - WARNING -   사용 가능한 예측 컬럼: []
+2025-06-24 10:29:07,974 - src.training - INFO - === 예측 결과 평가 완료 - 0개 타겟 ===
+2025-06-24 10:29:07,974 - src.models.random_forest_model - WARNING - 타겟 suicide_a_next_year에 대한 모델이 없습니다. 건너뜁니다.
+2025-06-24 10:29:07,974 - src.training - INFO - 모델 학습 완료
+2025-06-24 10:29:07,974 - src.training - INFO - 검증 성능: {}
+2025-06-24 10:29:07,974 - src.training - INFO - [DEBUG] train_model 진입 - X_train 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:07,974 - src.training - INFO - [DEBUG] train_model 진입 - y_train 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:07,974 - src.training - INFO - [DEBUG] train_model 진입 - X_val 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:07,974 - src.training - INFO - [DEBUG] train_model 진입 - y_val 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:07,990 - src.training - INFO - 폴드 2 학습 결과 MLflow 로깅 완료
+2025-06-24 10:29:07,990 - src.training - INFO - 폴드 2 완료
+2025-06-24 10:29:08,138 - src.splits - INFO - 그룹 K-Fold 폴드 3 생성 완료
+2025-06-24 10:29:08,138 - src.splits - INFO -   - 훈련 데이터: 889,177 행 (152,625개 ID)
+2025-06-24 10:29:08,138 - src.splits - INFO -   - 검증 데이터: 444,588 행 (76,313개 ID)
+2025-06-24 10:29:08,138 - src.splits - INFO -   - 훈련 연도 범위: (2015, 2024)
+2025-06-24 10:29:08,138 - src.splits - INFO -   - 검증 연도 범위: (2015, 2024)
+2025-06-24 10:29:08,144 - src.training - INFO - === 폴드 3 학습 ===
+2025-06-24 10:29:08,144 - src.preprocessing - INFO - 전처리 파이프라인 피팅 시작
+2025-06-24 10:29:08,144 - src.preprocessing - INFO - 시계열 보간 적용: ['anxiety_score', 'depress_score', 'sleep_score', 'comp']
+2025-06-24 10:29:08,144 - src.preprocessing - INFO - Fallback 전략: mean
+2025-06-24 10:29:08,291 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:29:08,291 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:29:08,291 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:29:08,291 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:29:08,291 - src.preprocessing - INFO - 통과시킬 컬럼: ['suicide_t', 'suicide_a', 'suicide_c', 'suicide_y', 'psychia_cate', 'check', 'age_group', 'anxiety_score_next_year', 'depress_score_next_year', 'sleep_score_next_year', 'suicide_t_next_year', 'suicide_a_next_year', 'month', 'day_of_week', 'day_of_year', 'anxiety_score_rolling_mean_2y', 'anxiety_score_rolling_std_2y', 'anxiety_score_yoy_change', 'depress_score_rolling_mean_2y', 'depress_score_rolling_std_2y', 'depress_score_yoy_change', 'sleep_score_rolling_mean_2y', 'sleep_score_rolling_std_2y', 'sleep_score_yoy_change']
+2025-06-24 10:29:08,291 - src.preprocessing - INFO - 전처리 파이프라인 생성 완료
+2025-06-24 10:29:08,291 - src.preprocessing - INFO -   - 수치형 전략: mean
+2025-06-24 10:29:08,291 - src.preprocessing - INFO -   - 범주형 전략: most_frequent
+2025-06-24 10:29:08,291 - src.preprocessing - INFO -   - 범주형 인코딩: onehot
+2025-06-24 10:29:08,291 - src.preprocessing - INFO - 전처리 파이프라인 피팅 중...
+2025-06-24 10:29:09,439 - src.preprocessing - INFO - 데이터 변환 중...
+2025-06-24 10:29:10,324 - src.preprocessing - INFO - 데이터 변환 완료: (889177, 33)
+2025-06-24 10:29:10,324 - src.preprocessing - INFO - 전처리 파이프라인 피팅 완료
+2025-06-24 10:29:10,330 - src.feature_engineering - INFO - 피처 엔지니어링 비활성화 - 기본 피처만 사용
+2025-06-24 10:29:10,359 - src.feature_engineering - INFO - 피처 엔지니어링 완료: 33개 피처
+2025-06-24 10:29:10,359 - src.feature_engineering - INFO -   - 원본 피처: 33개
+2025-06-24 10:29:10,359 - src.feature_engineering - INFO -   - 새로 생성된 피처: 0개 (비활성화)
+2025-06-24 10:29:10,359 - src.feature_engineering - INFO - [DEBUG] 피처 엔지니어링 직후 컬럼 목록: ['id', 'yov', 'dov', 'age', 'sex', 'comp', 'anxiety_score', 'depress_score', 'sleep_score', 'suicide_t', 'suicide_a', 'suicide_c', 'suicide_y', 'psychia_cate', 'check', 'age_group', 'anxiety_score_next_year', 'depress_score_next_year', 'sleep_score_next_year', 'suicide_t_next_year', 'suicide_a_next_year', 'month', 'day_of_week', 'day_of_year', 'anxiety_score_rolling_mean_2y', 'anxiety_score_rolling_std_2y', 'anxiety_score_yoy_change', 'depress_score_rolling_mean_2y', 'depress_score_rolling_std_2y', 'depress_score_yoy_change', 'sleep_score_rolling_mean_2y', 'sleep_score_rolling_std_2y', 'sleep_score_yoy_change']
+2025-06-24 10:29:11,426 - src.preprocessing - INFO - 데이터 변환 완료: (889177, 33)
+2025-06-24 10:29:11,933 - src.preprocessing - INFO - 데이터 변환 완료: (444588, 33)
+2025-06-24 10:29:11,961 - src.feature_engineering - INFO - 피처 엔지니어링 적용 (기본 피처만 사용)
+2025-06-24 10:29:12,096 - src.feature_engineering - INFO - 피처 엔지니어링 적용 완료: 33개 피처
+2025-06-24 10:29:12,229 - src.feature_engineering - INFO - 피처 엔지니어링 적용 (기본 피처만 사용)
+2025-06-24 10:29:12,301 - src.feature_engineering - INFO - 피처 엔지니어링 적용 완료: 33개 피처
+2025-06-24 10:29:12,373 - src.training - INFO - [DEBUG] train_engineered 컬럼: ['num__anxiety_score', 'num__depress_score', 'num__sleep_score', 'num__comp', 'num__age', 'cat__sex_여자', 'pass__suicide_t', 'pass__suicide_a', 'pass__suicide_c', 'pass__suicide_y', 'pass__psychia_cate', 'pass__check', 'pass__age_group', 'pass__anxiety_score_next_year', 'pass__depress_score_next_year', 'pass__sleep_score_next_year', 'pass__suicide_t_next_year', 'pass__suicide_a_next_year', 'pass__month', 'pass__day_of_week', 'pass__day_of_year', 'pass__anxiety_score_rolling_mean_2y', 'pass__anxiety_score_rolling_std_2y', 'pass__anxiety_score_yoy_change', 'pass__depress_score_rolling_mean_2y', 'pass__depress_score_rolling_std_2y', 'pass__depress_score_yoy_change', 'pass__sleep_score_rolling_mean_2y', 'pass__sleep_score_rolling_std_2y', 'pass__sleep_score_yoy_change', 'id', 'yov', 'dov']
+2025-06-24 10:29:12,373 - src.training - INFO - [DEBUG] val_engineered 컬럼: ['num__anxiety_score', 'num__depress_score', 'num__sleep_score', 'num__comp', 'num__age', 'cat__sex_여자', 'pass__suicide_t', 'pass__suicide_a', 'pass__suicide_c', 'pass__suicide_y', 'pass__psychia_cate', 'pass__check', 'pass__age_group', 'pass__anxiety_score_next_year', 'pass__depress_score_next_year', 'pass__sleep_score_next_year', 'pass__suicide_t_next_year', 'pass__suicide_a_next_year', 'pass__month', 'pass__day_of_week', 'pass__day_of_year', 'pass__anxiety_score_rolling_mean_2y', 'pass__anxiety_score_rolling_std_2y', 'pass__anxiety_score_yoy_change', 'pass__depress_score_rolling_mean_2y', 'pass__depress_score_rolling_std_2y', 'pass__depress_score_yoy_change', 'pass__sleep_score_rolling_mean_2y', 'pass__sleep_score_rolling_std_2y', 'pass__sleep_score_yoy_change', 'id', 'yov', 'dov']
+2025-06-24 10:29:12,373 - src.feature_engineering - WARNING - 피처를 찾을 수 없습니다: sex
+2025-06-24 10:29:12,373 - src.feature_engineering - INFO - selected_features 기반 피처 컬럼 선택(타겟 제외): 5개
+2025-06-24 10:29:12,373 - src.training - INFO - [DEBUG] feature_columns: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:12,373 - src.training - INFO - [DEBUG] target_columns: ['pass__suicide_a_next_year']
+2025-06-24 10:29:12,432 - src.training - INFO - [DEBUG] X_train shape: (889177, 5), y_train shape: (889177, 1)
+2025-06-24 10:29:12,433 - src.training - INFO - [DEBUG] X_val shape: (444588, 5), y_val shape: (444588, 1)
+2025-06-24 10:29:12,433 - src.training - INFO - [DEBUG] y_train 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:12,433 - src.training - INFO - [DEBUG] y_val 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:12,433 - src.preprocessing - INFO - 리샘플링이 비활성화되어 있습니다.
+2025-06-24 10:29:12,466 - src.training - INFO - [DEBUG] X_train_resampled shape: (889177, 5), y_train_resampled shape: (889177, 1)
+2025-06-24 10:29:12,466 - src.training - INFO - [DEBUG] y_train_resampled 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:12,519 - src.training - INFO - 폴드 3 - 리샘플링 전 클래스 분포: {(0.0,): 735610, (1.0,): 873}
+2025-06-24 10:29:12,519 - src.training - INFO - 폴드 3 - 리샘플링 후 클래스 분포: {(0.0,): 735610, (1.0,): 873}
+2025-06-24 10:29:12,519 - src.training - INFO - 모델 학습 시작
+2025-06-24 10:29:12,617 - src.training - INFO - 결측 타겟 제거: train 889177->736483, val 444588->368232
+2025-06-24 10:29:12,617 - src.training - INFO - 모델 타입: random_forest
+2025-06-24 10:29:12,617 - src.models.model_factory - INFO - 모델 타입 'random_forest'으로 모델을 생성합니다.
+2025-06-24 10:29:12,617 - src.models.base_model - INFO - RANDOMFOREST 모델 초기화 완료
+2025-06-24 10:29:12,617 - src.models.base_model - INFO -   - 회귀 타겟: []
+2025-06-24 10:29:12,617 - src.models.base_model - INFO -   - 분류 타겟: ['suicide_a_next_year']
+2025-06-24 10:29:12,617 - src.models.random_forest_model - INFO -   - Focal Loss 사용: False
+2025-06-24 10:29:12,617 - src.models.random_forest_model - INFO - Random Forest 모델 학습 시작
+2025-06-24 10:29:12,617 - src.models.random_forest_model - INFO - 입력 데이터 형태: X=(736483, 5), y=(736483, 1)
+2025-06-24 10:29:12,617 - src.models.random_forest_model - INFO - 입력 데이터 검증 및 전처리 중...
+2025-06-24 10:29:12,617 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (736483, 5)
+2025-06-24 10:29:12,617 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:12,618 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:29:12,681 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:29:12,738 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:29:12,815 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:29:12,865 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:29:12,928 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:29:12,935 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (736483, 5)
+2025-06-24 10:29:12,935 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:12,992 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (736483, 5), y shape: (736483, 1)
+2025-06-24 10:29:12,992 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 y 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:12,992 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (368232, 5)
+2025-06-24 10:29:12,992 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:12,993 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:29:13,022 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:29:13,046 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:29:13,068 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:29:13,092 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:29:13,120 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:29:13,124 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (368232, 5)
+2025-06-24 10:29:13,124 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:13,149 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (368232, 5), y shape: (368232, 1)
+2025-06-24 10:29:13,149 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 y 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:13,149 - src.models.random_forest_model - INFO - 전처리 후 데이터 형태: X=(736483, 5), y=(736483, 1)
+2025-06-24 10:29:13,149 - src.models.random_forest_model - INFO - 사용 가능한 타겟 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:13,149 - src.models.random_forest_model - INFO - === 타겟 pass__suicide_a_next_year 모델 학습 시작 ===
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO - 타겟 pass__suicide_a_next_year 데이터 정리 후: X=(736483, 5), y=736483
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO - === pass__suicide_a_next_year 모델 파라미터 ===
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   n_estimators: 218
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   max_depth: 20
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   min_samples_split: 15
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   min_samples_leaf: 6
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   max_features: sqrt
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   bootstrap: True
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   oob_score: True
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   max_samples: 0.8
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   class_weight: balanced
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   n_jobs: 28
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   min_impurity_decrease: 0.0
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   min_weight_fraction_leaf: 0.0
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   max_leaf_nodes: None
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   ccp_alpha: 0.0
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO -   criterion: gini
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO - Random Forest 모델 생성 중... (타겟: pass__suicide_a_next_year)
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO - 분류 모델 (RandomForestClassifier) 사용
+2025-06-24 10:29:13,157 - src.models.random_forest_model - INFO - Random Forest 모델 학습 시작 (타겟: pass__suicide_a_next_year)
+2025-06-24 10:29:28,135 - src.models.random_forest_model - INFO - 타겟 pass__suicide_a_next_year 모델 학습 완료
+2025-06-24 10:29:28,135 - src.models.random_forest_model - INFO -   - 트리 개수: 218
+2025-06-24 10:29:28,135 - src.models.random_forest_model - INFO -   - 피처 개수: 5
+2025-06-24 10:29:28,136 - src.models.random_forest_model - INFO -   - 클래스: [0. 1.]
+2025-06-24 10:29:28,136 - src.models.random_forest_model - INFO - 모든 모델 학습 완료 (1개)
+2025-06-24 10:29:28,136 - src.models.random_forest_model - INFO - Random Forest 모델 예측 시작
+2025-06-24 10:29:28,136 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (368232, 5)
+2025-06-24 10:29:28,136 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:28,136 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:29:28,169 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:29:28,199 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:29:28,232 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:29:28,263 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:29:28,295 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:29:28,298 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (368232, 5)
+2025-06-24 10:29:28,298 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:28,304 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (368232, 5)
+2025-06-24 10:29:28,304 - src.models.random_forest_model - WARNING - 타겟 suicide_a_next_year에 대한 모델이 없습니다. 건너뜁니다.
+2025-06-24 10:29:28,304 - src.models.random_forest_model - INFO - 예측 완료: (368232, 0)
+2025-06-24 10:29:28,304 - src.training - INFO - === 예측 결과 평가 시작 ===
+2025-06-24 10:29:28,304 - src.training - INFO - y_true shape: (368232, 1), y_pred shape: (368232, 0)
+2025-06-24 10:29:28,304 - src.training - INFO - y_true columns: ['pass__suicide_a_next_year']
+2025-06-24 10:29:28,304 - src.training - INFO - y_pred columns: []
+2025-06-24 10:29:28,304 - src.training - INFO - 타겟 'pass__suicide_a_next_year' 평가 중...
+2025-06-24 10:29:28,304 - src.training - WARNING -   예측 컬럼을 찾을 수 없음: pass__suicide_a_next_year
+2025-06-24 10:29:28,304 - src.training - WARNING -   사용 가능한 예측 컬럼: []
+2025-06-24 10:29:28,304 - src.training - INFO - === 예측 결과 평가 완료 - 0개 타겟 ===
+2025-06-24 10:29:28,304 - src.models.random_forest_model - WARNING - 타겟 suicide_a_next_year에 대한 모델이 없습니다. 건너뜁니다.
+2025-06-24 10:29:28,304 - src.training - INFO - 모델 학습 완료
+2025-06-24 10:29:28,304 - src.training - INFO - 검증 성능: {}
+2025-06-24 10:29:28,304 - src.training - INFO - [DEBUG] train_model 진입 - X_train 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:28,304 - src.training - INFO - [DEBUG] train_model 진입 - y_train 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:28,304 - src.training - INFO - [DEBUG] train_model 진입 - X_val 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:28,304 - src.training - INFO - [DEBUG] train_model 진입 - y_val 컬럼: ['pass__suicide_a_next_year']
+2025-06-24 10:29:28,319 - src.training - INFO - 폴드 3 학습 결과 MLflow 로깅 완료
+2025-06-24 10:29:28,319 - src.training - INFO - 폴드 3 완료
+2025-06-24 10:29:28,320 - src.training - INFO - 교차 검증 완료: 3개 폴드
+2025-06-24 10:29:28,320 - src.training - INFO - 집계 성능: {}
+2025-06-24 10:29:28,320 - src.training - INFO - 최고 성능 폴드: None (점수: -inf)
+2025-06-24 10:29:28,320 - src.training - INFO - 리샘플링 사용: False
+2025-06-24 10:29:28,684 - src.hyperparameter_tuning - WARNING - 주요 지표 pr_auc을 찾을 수 없습니다. fallback 지표를 사용합니다.
+2025-06-24 10:29:28,684 - src.hyperparameter_tuning - WARNING - 주요 지표 pr_auc을 찾을 수 없습니다. fallback 지표를 사용합니다.
+2025-06-24 10:29:28,684 - src.hyperparameter_tuning - WARNING - 주요 지표 pr_auc을 찾을 수 없습니다. fallback 지표를 사용합니다.
+2025-06-24 10:29:28,689 - src.hyperparameter_tuning - INFO - Trial 0: pr_auc = 0.0000 ± 0.0000
+2025-06-24 10:29:28,689 - src.hyperparameter_tuning - WARNING - Trial 0: 유효한 메트릭을 찾을 수 없습니다. 기본값 반환
+2025-06-24 10:29:28,733 - src.hyperparameter_tuning - WARNING - 유효하지 않은 best_score: -inf
+2025-06-24 10:29:28,733 - src.hyperparameter_tuning - INFO - 최적화 완료!
+2025-06-24 10:29:28,734 - src.hyperparameter_tuning - INFO -   - 최고 성능: -inf
+2025-06-24 10:29:28,734 - src.hyperparameter_tuning - INFO -   - 최적 파라미터: {'n_estimators': 218, 'max_depth': 20, 'min_samples_split': 15, 'min_samples_leaf': 6, 'max_features': 'sqrt'}
+2025-06-24 10:29:30,717 - src.splits - INFO - 데이터 분할 완료:
+2025-06-24 10:29:30,717 - src.splits - INFO -   - 전체 데이터: 1,569,071 행
+2025-06-24 10:29:30,717 - src.splits - INFO -   - 훈련/검증 데이터: 1,333,765 행
+2025-06-24 10:29:30,717 - src.splits - INFO -   - 테스트 데이터: 235,306 행
+2025-06-24 10:29:30,717 - src.splits - INFO -   - 테스트 ID 수: 40,401개
+2025-06-24 10:29:30,717 - src.preprocessing - INFO - 전처리 파이프라인 피팅 시작
+2025-06-24 10:29:30,717 - src.preprocessing - INFO - 시계열 보간 적용: ['anxiety_score', 'depress_score', 'sleep_score', 'comp']
+2025-06-24 10:29:30,717 - src.preprocessing - INFO - Fallback 전략: mean
+2025-06-24 10:29:30,920 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:29:30,920 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:29:30,920 - src.preprocessing - INFO - 수치형 컬럼: ['anxiety_score', 'depress_score', 'sleep_score', 'comp', 'age']
+2025-06-24 10:29:30,920 - src.preprocessing - INFO - 범주형 컬럼: ['sex']
+2025-06-24 10:29:30,920 - src.preprocessing - INFO - 통과시킬 컬럼: ['suicide_t', 'suicide_a', 'suicide_c', 'suicide_y', 'psychia_cate', 'check', 'age_group', 'anxiety_score_next_year', 'depress_score_next_year', 'sleep_score_next_year', 'suicide_t_next_year', 'suicide_a_next_year', 'month', 'day_of_week', 'day_of_year', 'anxiety_score_rolling_mean_2y', 'anxiety_score_rolling_std_2y', 'anxiety_score_yoy_change', 'depress_score_rolling_mean_2y', 'depress_score_rolling_std_2y', 'depress_score_yoy_change', 'sleep_score_rolling_mean_2y', 'sleep_score_rolling_std_2y', 'sleep_score_yoy_change']
+2025-06-24 10:29:30,920 - src.preprocessing - INFO - 전처리 파이프라인 생성 완료
+2025-06-24 10:29:30,920 - src.preprocessing - INFO -   - 수치형 전략: mean
+2025-06-24 10:29:30,920 - src.preprocessing - INFO -   - 범주형 전략: most_frequent
+2025-06-24 10:29:30,920 - src.preprocessing - INFO -   - 범주형 인코딩: onehot
+2025-06-24 10:29:30,920 - src.preprocessing - INFO - 전처리 파이프라인 피팅 중...
+2025-06-24 10:29:32,660 - src.preprocessing - INFO - 데이터 변환 중...
+2025-06-24 10:29:34,033 - src.preprocessing - INFO - 데이터 변환 완료: (1333765, 33)
+2025-06-24 10:29:34,033 - src.preprocessing - INFO - 전처리 파이프라인 피팅 완료
+2025-06-24 10:29:35,376 - src.preprocessing - INFO - 데이터 변환 완료: (1333765, 33)
+2025-06-24 10:29:35,377 - src.feature_engineering - INFO - 피처 엔지니어링 비활성화 - 기본 피처만 사용
+2025-06-24 10:29:35,580 - src.feature_engineering - INFO - 피처 엔지니어링 완료: 33개 피처
+2025-06-24 10:29:35,580 - src.feature_engineering - INFO -   - 원본 피처: 33개
+2025-06-24 10:29:35,580 - src.feature_engineering - INFO -   - 새로 생성된 피처: 0개 (비활성화)
+2025-06-24 10:29:35,580 - src.feature_engineering - INFO - [DEBUG] 피처 엔지니어링 직후 컬럼 목록: ['num__anxiety_score', 'num__depress_score', 'num__sleep_score', 'num__comp', 'num__age', 'cat__sex_여자', 'pass__suicide_t', 'pass__suicide_a', 'pass__suicide_c', 'pass__suicide_y', 'pass__psychia_cate', 'pass__check', 'pass__age_group', 'pass__anxiety_score_next_year', 'pass__depress_score_next_year', 'pass__sleep_score_next_year', 'pass__suicide_t_next_year', 'pass__suicide_a_next_year', 'pass__month', 'pass__day_of_week', 'pass__day_of_year', 'pass__anxiety_score_rolling_mean_2y', 'pass__anxiety_score_rolling_std_2y', 'pass__anxiety_score_yoy_change', 'pass__depress_score_rolling_mean_2y', 'pass__depress_score_rolling_std_2y', 'pass__depress_score_yoy_change', 'pass__sleep_score_rolling_mean_2y', 'pass__sleep_score_rolling_std_2y', 'pass__sleep_score_yoy_change', 'id', 'yov', 'dov']
+2025-06-24 10:29:35,580 - src.feature_engineering - INFO - 피처 엔지니어링 적용 (기본 피처만 사용)
+2025-06-24 10:29:35,781 - src.feature_engineering - INFO - 피처 엔지니어링 적용 완료: 33개 피처
+2025-06-24 10:29:35,782 - src.feature_engineering - WARNING - 피처를 찾을 수 없습니다: sex
+2025-06-24 10:29:35,782 - src.feature_engineering - INFO - selected_features 기반 피처 컬럼 선택(타겟 제외): 5개
+2025-06-24 10:29:35,824 - src.models.model_factory - INFO - 모델 타입 'random_forest'으로 모델을 생성합니다.
+2025-06-24 10:29:35,824 - src.models.base_model - INFO - RANDOMFOREST 모델 초기화 완료
+2025-06-24 10:29:35,824 - src.models.base_model - INFO -   - 회귀 타겟: []
+2025-06-24 10:29:35,824 - src.models.base_model - INFO -   - 분류 타겟: ['suicide_a_next_year']
+2025-06-24 10:29:35,824 - src.models.random_forest_model - INFO -   - Focal Loss 사용: False
+2025-06-24 10:29:35,824 - src.models.random_forest_model - INFO - Random Forest 모델 학습 시작
+2025-06-24 10:29:35,824 - src.models.random_forest_model - INFO - 입력 데이터 형태: X=(1333765, 5), y=(1333765, 1)
+2025-06-24 10:29:35,824 - src.models.random_forest_model - INFO - 입력 데이터 검증 및 전처리 중...
+2025-06-24 10:29:35,824 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X shape: (1333765, 5)
+2025-06-24 10:29:35,824 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:35,824 - src.models.base_model - INFO - [DEBUG] _validate_input_data 입력 X dtypes: object    5
+Name: count, dtype: int64
+2025-06-24 10:29:35,959 - src.models.base_model - INFO - [DEBUG] 컬럼 num__age을 숫자로 변환 성공
+2025-06-24 10:29:36,059 - src.models.base_model - INFO - [DEBUG] 컬럼 num__anxiety_score을 숫자로 변환 성공
+2025-06-24 10:29:36,154 - src.models.base_model - INFO - [DEBUG] 컬럼 num__comp을 숫자로 변환 성공
+2025-06-24 10:29:36,253 - src.models.base_model - INFO - [DEBUG] 컬럼 num__depress_score을 숫자로 변환 성공
+2025-06-24 10:29:36,361 - src.models.base_model - INFO - [DEBUG] 컬럼 num__sleep_score을 숫자로 변환 성공
+2025-06-24 10:29:36,380 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X shape: (1333765, 5)
+2025-06-24 10:29:36,380 - src.models.base_model - INFO - [DEBUG] select_dtypes 후 X 컬럼: ['num__age', 'num__anxiety_score', 'num__comp', 'num__depress_score', 'num__sleep_score']
+2025-06-24 10:29:36,401 - src.models.base_model - INFO - [DEBUG] _validate_input_data 출력 X shape: (1333765, 5)
+2025-06-24 10:29:36,402 - src.models.random_forest_model - INFO - 전처리 후 데이터 형태: X=(1333765, 5), y=(1333765, 0)
+2025-06-24 10:29:36,402 - src.models.random_forest_model - INFO - 사용 가능한 타겟 컬럼: []
+2025-06-24 10:29:36,402 - src.models.random_forest_model - ERROR - y 데이터프레임에 컬럼이 없습니다! 타겟 컬럼 매칭을 확인하세요.
+2025-06-24 10:29:36,403 - src.models.base_model - INFO - 모델이 models/best_tuned_model.joblib에 저장되었습니다.
+2025-06-24 10:29:36,403 - src.hyperparameter_tuning - INFO - 최고 모델 저장 완료: models/best_tuned_model.joblib
+2025-06-24 10:29:37,125 - src.hyperparameter_tuning - INFO - Study 저장 완료: models/optuna_study.pkl
+2025-06-24 10:29:37,344 - matplotlib.legend - WARNING - No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+2025-06-24 10:29:37,552 - __main__ - INFO - === 하이퍼파라미터 튜닝 완료 ===
+2025-06-24 10:29:37,552 - __main__ - INFO - 최고 성능: -inf
+2025-06-24 10:29:37,552 - __main__ - INFO - 최적 파라미터:
+2025-06-24 10:29:37,552 - __main__ - INFO -   n_estimators: 218
+2025-06-24 10:29:37,552 - __main__ - INFO -   max_depth: 20
+2025-06-24 10:29:37,552 - __main__ - INFO -   min_samples_split: 15
+2025-06-24 10:29:37,552 - __main__ - INFO -   min_samples_leaf: 6
+2025-06-24 10:29:37,552 - __main__ - INFO -   max_features: sqrt
+
+==================================================
+튜닝 결과 요약
+==================================================
+모델 타입: random_forest
+실험 타입: hyperparameter_tuning
+사용 데이터 행 수: 100,000
+MLflow 링크: http://localhost:5000/#/experiments/765186397364671153/runs/c87917b619254e1dad7887cc07eb7083
+최고 성능: -inf
+최적 파라미터: {'n_estimators': 218, 'max_depth': 20, 'min_samples_split': 15, 'min_samples_leaf': 6, 'max_features': 'sqrt'}
+튜닝 시간: N/A
+==================================================
+2025-06-24 10:29:37,552 - __main__ - INFO - 실험 결과가 /home/junhyung/Documents/simcare/kbsmc_suicide/results/experiment_results_20250624_102937.txt에 저장되었습니다.
+2025-06-24 10:29:37,552 - __main__ - INFO - MLflow Experiment ID: 765186397364671153
+2025-06-24 10:29:37,553 - __main__ - INFO - MLflow Run ID: c87917b619254e1dad7887cc07eb7083
+2025-06-24 10:29:37,553 - __main__ - INFO - MLflow 링크: http://localhost:5000/#/experiments/765186397364671153/runs/c87917b619254e1dad7887cc07eb7083

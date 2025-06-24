@@ -218,6 +218,9 @@ class BaseModel(ABC):
             
             # y 데이터 처리: 타겟 컬럼은 그대로 유지하되 inf 값만 처리
             y_cleaned = y.copy()
+            
+            # y 데이터에서 숫자형이 아닌 컬럼도 유지 (타겟 컬럼은 보존)
+            # select_dtypes를 적용하지 않고 inf 값만 처리
             y_cleaned = y_cleaned.replace([np.inf, -np.inf], np.nan)
             
             logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}, y shape: {y_cleaned.shape}")
@@ -268,6 +271,9 @@ class BaseModel(ABC):
         다양한 접두사와 원본명을 모두 고려하여 y에서 사용 가능한 타겟 컬럼을 찾습니다.
         """
         all_columns = list(y.columns)
+        logger.info(f"[DEBUG] _find_available_targets - y 컬럼: {all_columns}")
+        logger.info(f"[DEBUG] _find_available_targets - target_columns: {self.target_columns}")
+        
         available_targets = []
         for target in self.target_columns:
             candidates = [
@@ -277,8 +283,15 @@ class BaseModel(ABC):
                 f"num__{target}",
                 f"cat__{target}"
             ]
+            logger.info(f"[DEBUG] 타겟 {target} 후보: {candidates}")
+            
             for cand in candidates:
                 if cand in all_columns:
                     available_targets.append(cand)
+                    logger.info(f"[DEBUG] 타겟 {target} 매칭됨: {cand}")
                     break
+            else:
+                logger.warning(f"[DEBUG] 타겟 {target} 매칭 실패. 후보: {candidates}")
+        
+        logger.info(f"[DEBUG] 최종 사용 가능한 타겟: {available_targets}")
         return available_targets 

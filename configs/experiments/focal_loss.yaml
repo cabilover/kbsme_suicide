@@ -27,9 +27,9 @@ overrides:
   
   # 평가 설정 오버라이드
   evaluation:
-    # 불균형 데이터에 특화된 메트릭
-    classification_metrics: ["precision", "recall", "f1", "roc_auc", "balanced_accuracy", "average_precision"]
-    cv_metrics: ["f1", "recall", "balanced_accuracy", "roc_auc"]
+    # 극도 불균형 데이터에 적합한 평가 지표
+    primary_metric: "pr_auc"  # Precision-Recall AUC (불균형 데이터에 적합)
+    secondary_metrics: ["recall", "precision", "balanced_accuracy", "roc_auc"]
   
   # MLflow 설정 오버라이드
   mlflow:
