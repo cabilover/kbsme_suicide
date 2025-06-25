@@ -27,7 +27,8 @@ kbsmc_suicide/
 │   │   └── loss_functions.py         # 손실 함수 모듈 (Focal Loss 포함)
 │   ├── training.py                   # 훈련 파이프라인 (품질 개선 완료)
 │   ├── evaluation.py                 # 평가 모듈 (고급 평가 기능 포함)
-│   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝 (Optuna 기반)
+│   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝 (Optuna 기반, ✅ 숫자 검증 유틸리티 추가)
+│   ├── utils.py                      # 공통 유틸리티 함수 (✅ 숫자 변환/검증 함수 추가)
 │   └── reference/                    # 참고 자료
 ├── configs/
 │   ├── base/                         # 기본 설정 (✅ 계층적 구조)
@@ -165,7 +166,12 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 ### 불균형 데이터 처리
 - **클래스 가중치, scale_pos_weight**: XGBoost 등에서 불균형 데이터 처리를 위한 가중치 옵션 지원
 
+### 유틸리티 함수 (✅ 최신 추가)
+- **숫자 변환 및 검증**: `safe_float_conversion()`, `is_valid_number()` 함수로 하이퍼파라미터 튜닝 과정에서 안전한 숫자 처리
+- **데이터 품질 보장**: NaN/Inf 값 자동 감지 및 처리로 튜닝 과정의 안정성 향상
+
 ### 최신 실험 결과
+- **2025-06-25 기준, 숫자 검증 유틸리티 함수 추가로 하이퍼파라미터 튜닝 안정성 향상**
 - **2025-06-24 기준, XGBoost, CatBoost, LightGBM, Random Forest 4개 모델 모두 ConfigManager 기반 하이퍼파라미터 튜닝 및 전체 파이프라인 정상 동작 확인**
 - **nrows 옵션을 통한 부분 데이터 실험 정상 동작 확인**
 - **타겟 컬럼 매칭 로직 개선**: 전처리 후 컬럼명 변경(pass__, num__, cat__ 접두사)에도 모든 모델에서 타겟 인식 및 학습/예측 정상 동작
@@ -245,6 +251,7 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
 ## 코드 품질 및 안정성
 
 ### 최근 개선사항
+- **숫자 검증 유틸리티 추가**: `safe_float_conversion()`, `is_valid_number()` 함수로 하이퍼파라미터 튜닝 과정에서 안전한 숫자 처리 및 NaN/Inf 값 자동 감지
 - **모든 고급 모델 구현 완료**: CatBoost, LightGBM, Random Forest 모델 클래스 구현 및 테스트 완료
 - **모델 아키텍처 표준화**: BaseModel 추상 클래스와 ModelFactory를 통한 일관된 모델 인터페이스 구축
 - **통합 실험 파이프라인**: 다양한 모델을 동일한 파이프라인에서 실험 가능한 구조 완성
@@ -281,6 +288,7 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
 현재 Phase 5-4 (고급 모델 개발 및 확장) 진행 중 ✅
 - **완료**: CatBoost, LightGBM, Random Forest 모델 구현 및 테스트 (4개 모델 완료)
 - **완료**: ConfigManager 기반 리샘플링 비교 실험 구현 및 모든 모델 테스트 완료
+- **완료**: 숫자 검증 유틸리티 함수 추가로 하이퍼파라미터 튜닝 안정성 향상
 - **진행 중**: 앙상블 모델 개발 (Stacking, Blending, Voting)
 - **예정**: 피처 엔지니어링 고도화, 모델 해석 및 설명 가능성 확보
 
