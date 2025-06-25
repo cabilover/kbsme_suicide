@@ -608,19 +608,31 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
         
         # 타겟 타입 판단
         target_original = target.replace('remainder__', '')
-        if target_original.endswith('_next_year'):
-            base_target = target_original.replace('_next_year', '')
+        
+        # 설정에서 타겟 타입 정의 가져오기
+        target_types = config.get('features', {}).get('target_types', {}) if config else {}
+        regression_targets_config = target_types.get('regression_targets', [])
+        classification_targets_config = target_types.get('classification_targets', [])
+        
+        # 설정에 타겟 타입이 정의되어 있으면 사용
+        if regression_targets_config or classification_targets_config:
+            # 전처리 과정에서 추가된 접두사 제거
+            clean_target = target_original
+            for prefix in ['pass__', 'num__', 'cat__']:
+                if target_original.startswith(prefix):
+                    clean_target = target_original[len(prefix):]
+                    break
             
-            if base_target in ['anxiety_score', 'depress_score', 'sleep_score']:
+            if clean_target in regression_targets_config:
                 # 회귀 문제
-                logger.info(f"타겟 '{target}' - 회귀 문제로 처리")
+                logger.info(f"타겟 '{target}' - 설정 기반 회귀 문제로 처리")
                 target_metrics = calculate_regression_metrics(true_vals_clean, pred_vals_clean)
                 all_metrics[target] = target_metrics
                 for metric_name, value in target_metrics.items():
                     logger.info(f"  {metric_name}: {value}")
-            elif base_target in ['suicide_t', 'suicide_a']:
+            elif clean_target in classification_targets_config:
                 # 분류 문제
-                logger.info(f"타겟 '{target}' - 분류 문제로 처리")
+                logger.info(f"타겟 '{target}' - 설정 기반 분류 문제로 처리")
                 pred_proba = None
                 if y_pred_proba and target in y_pred_proba:
                     pred_proba = y_pred_proba[target]
@@ -633,16 +645,56 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
                 all_metrics[target] = target_metrics
                 for metric_name, value in target_metrics.items():
                     logger.info(f"  {metric_name}: {value}")
+            else:
+                # 설정에 없는 타겟은 기본적으로 분류로 처리
+                logger.warning(f"타겟 '{target}' - 설정에 미정의 (기본 분류로 처리)")
+                target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
+                for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                    if m not in target_metrics:
+                        target_metrics[m] = 0.0
+                all_metrics[target] = target_metrics
+                for metric_name, value in target_metrics.items():
+                    logger.info(f"  {metric_name}: {value}")
+        
         else:
-            # 기본적으로 분류로 처리
-            logger.info(f"타겟 '{target}' - 기본 분류 문제로 처리")
-            target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
-            for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
-                if m not in target_metrics:
-                    target_metrics[m] = 0.0
-            all_metrics[target] = target_metrics
-            for metric_name, value in target_metrics.items():
-                logger.info(f"  {metric_name}: {value}")
+            # 설정에 타겟 타입이 정의되어 있지 않으면 기존 로직 사용 (하위 호환성)
+            logger.warning("설정 파일에 target_types가 정의되지 않아 기존 로직 사용")
+            
+            if target_original.endswith('_next_year'):
+                base_target = target_original.replace('_next_year', '')
+                
+                if base_target in ['anxiety_score', 'depress_score', 'sleep_score']:
+                    # 회귀 문제
+                    logger.info(f"타겟 '{target}' - 기존 로직 회귀 문제로 처리")
+                    target_metrics = calculate_regression_metrics(true_vals_clean, pred_vals_clean)
+                    all_metrics[target] = target_metrics
+                    for metric_name, value in target_metrics.items():
+                        logger.info(f"  {metric_name}: {value}")
+                elif base_target in ['suicide_t', 'suicide_a']:
+                    # 분류 문제
+                    logger.info(f"타겟 '{target}' - 기존 로직 분류 문제로 처리")
+                    pred_proba = None
+                    if y_pred_proba and target in y_pred_proba:
+                        pred_proba = y_pred_proba[target]
+                        logger.info(f"타겟 '{target}' - 예측 확률 사용 가능")
+                    target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean, pred_proba)
+                    # 빈 메트릭도 0.0으로 채움
+                    for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                        if m not in target_metrics:
+                            target_metrics[m] = 0.0
+                    all_metrics[target] = target_metrics
+                    for metric_name, value in target_metrics.items():
+                        logger.info(f"  {metric_name}: {value}")
+                else:
+                    # 기본적으로 분류로 처리
+                    logger.info(f"타겟 '{target}' - 기본 분류 문제로 처리")
+                    target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
+                    for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                        if m not in target_metrics:
+                            target_metrics[m] = 0.0
+                    all_metrics[target] = target_metrics
+                    for metric_name, value in target_metrics.items():
+                        logger.info(f"  {metric_name}: {value}")
     
     logger.info(f"=== 종합 평가 지표 계산 완료 - {len(all_metrics)}개 타겟 ===")
     return all_metrics

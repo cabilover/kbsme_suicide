@@ -13,6 +13,19 @@ features:
   target_columns:
     - "suicide_a_next_year"
   
+  # 타겟 타입 정의 (자동 판단 대신 명시적 정의)
+  target_types:
+    # 회귀 타겟 (연속형 값 예측)
+    regression_targets:
+      - "anxiety_score_next_year"
+      - "depress_score_next_year" 
+      - "sleep_score_next_year"
+    
+    # 분류 타겟 (이진 분류)
+    classification_targets:
+      - "suicide_t_next_year"
+      - "suicide_a_next_year"
+  
   # 제외할 컬럼들
   exclude_columns:
     - "id"

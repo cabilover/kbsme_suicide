@@ -14,7 +14,7 @@
   - CatBoost/LightGBM/Random Forest: 범주형 변수 보존 (모델 자체 처리)
 - **평가 로직 중앙화**: `evaluation.py`의 `calculate_all_metrics`가 모든 평가의 단일 진입점
 - **복잡한 컬럼 매칭 개선**: 전처리 후 컬럼명 변경(`remainder__`, `pass__`, `num__`, `cat__` 접두사)에도 안정적 매칭
-- **자동 문제 타입 판단**: 타겟 접미사(`_next_year`)를 통한 회귀/분류 자동 구분
+- **설정 기반 타겟 타입 정의**: 하드코딩된 로직 대신 `configs/base/common.yaml`의 `target_types` 섹션에서 명시적 정의
 - **타겟별 메트릭 구조**: 평면화된 메트릭에서 타겟별 구조화된 메트릭으로 개선
 - **코드 구조 개선**: 중복 제거, 책임 분리, 유지보수성 향상
 

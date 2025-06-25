@@ -46,28 +46,63 @@ class BaseModel(ABC):
         logger.info(f"  - 분류 타겟: {self.classification_targets}")
     
     def _classify_targets(self):
-        """타겟을 회귀와 분류로 분류합니다."""
-        for target in self.target_columns:
-            # 전처리 과정에서 추가된 접두사 제거
-            clean_target = target
-            for prefix in ['pass__', 'num__', 'cat__']:
-                if target.startswith(prefix):
-                    clean_target = target[len(prefix):]
-                    break
+        """
+        설정 파일의 target_types를 기반으로 타겟을 회귀/분류로 분류합니다.
+        """
+        # 설정에서 타겟 타입 정의 가져오기
+        target_types = self.config.get('features', {}).get('target_types', {})
+        regression_targets_config = target_types.get('regression_targets', [])
+        classification_targets_config = target_types.get('classification_targets', [])
+        
+        # 설정에 타겟 타입이 정의되어 있으면 사용
+        if regression_targets_config or classification_targets_config:
+            logger.info("설정 파일의 target_types를 사용하여 타겟 분류")
             
-            # _next_year 접미사가 있는 경우와 없는 경우 모두 처리
-            if clean_target.endswith('_next_year'):
-                base_target = clean_target.replace('_next_year', '')
-                if base_target in ['anxiety_score', 'depress_score', 'sleep_score']:
+            for target in self.target_columns:
+                # 전처리 과정에서 추가된 접두사 제거
+                clean_target = target
+                for prefix in ['pass__', 'num__', 'cat__', 'remainder__']:
+                    if target.startswith(prefix):
+                        clean_target = target[len(prefix):]
+                        break
+                
+                # 설정된 타겟 타입에 따라 분류
+                if clean_target in regression_targets_config:
                     self.regression_targets.append(target)
-                elif base_target in ['suicide_t', 'suicide_a']:
+                    logger.info(f"  - 회귀 타겟: {target}")
+                elif clean_target in classification_targets_config:
                     self.classification_targets.append(target)
-            else:
-                # _next_year 접미사가 없는 경우도 처리
-                if clean_target in ['anxiety_score', 'depress_score', 'sleep_score']:
-                    self.regression_targets.append(target)
-                elif clean_target in ['suicide_t', 'suicide_a']:
+                    logger.info(f"  - 분류 타겟: {target}")
+                else:
+                    # 설정에 없는 타겟은 기본적으로 분류로 처리
                     self.classification_targets.append(target)
+                    logger.warning(f"  - 미정의 타겟 (기본 분류): {target}")
+        
+        else:
+            # 설정에 타겟 타입이 정의되어 있지 않으면 기존 로직 사용 (하위 호환성)
+            logger.warning("설정 파일에 target_types가 정의되지 않아 기존 로직 사용")
+            
+            for target in self.target_columns:
+                # 전처리 과정에서 추가된 접두사 제거
+                clean_target = target
+                for prefix in ['pass__', 'num__', 'cat__', 'remainder__']:
+                    if target.startswith(prefix):
+                        clean_target = target[len(prefix):]
+                        break
+                
+                # _next_year 접미사가 있는 경우와 없는 경우 모두 처리
+                if clean_target.endswith('_next_year'):
+                    base_target = clean_target.replace('_next_year', '')
+                    if base_target in ['anxiety_score', 'depress_score', 'sleep_score']:
+                        self.regression_targets.append(target)
+                    elif base_target in ['suicide_t', 'suicide_a']:
+                        self.classification_targets.append(target)
+                else:
+                    # _next_year 접미사가 없는 경우도 처리
+                    if clean_target in ['anxiety_score', 'depress_score', 'sleep_score']:
+                        self.regression_targets.append(target)
+                    elif clean_target in ['suicide_t', 'suicide_a']:
+                        self.classification_targets.append(target)
     
     @abstractmethod
     def _get_model_params(self, target: str) -> Dict[str, Any]:
