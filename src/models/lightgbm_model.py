@@ -372,6 +372,45 @@ class LightGBMModel(BaseModel):
         
         return {'aggregated': aggregated_df}
 
+    def _validate_input_data(self, X: pd.DataFrame, y: pd.DataFrame = None) -> pd.DataFrame:
+        """
+        LightGBM에 최적화된 입력 데이터 검증 및 전처리
+        
+        Args:
+            X: 피처 데이터프레임
+            y: 타겟 데이터프레임 (선택사항)
+            
+        Returns:
+            전처리된 피처 데이터프레임 (또는 튜플)
+        """
+        logger.info(f"[DEBUG] LightGBM _validate_input_data 입력 X shape: {X.shape}")
+        logger.info(f"[DEBUG] LightGBM _validate_input_data 입력 X 컬럼: {list(X.columns)}")
+        logger.info(f"[DEBUG] LightGBM _validate_input_data 입력 X dtypes: {X.dtypes.value_counts()}")
+        
+        # LightGBM은 범주형 변수를 지원하므로 object 타입을 그대로 유지
+        X_cleaned = X.copy()
+        
+        # inf 값만 처리 (범주형 변수는 보존)
+        X_cleaned = X_cleaned.replace([np.inf, -np.inf], np.nan)
+        
+        if y is not None:
+            # y가 Series면 DataFrame으로 변환
+            if isinstance(y, pd.Series):
+                y = y.to_frame()
+            
+            # y 데이터 처리: 타겟 컬럼은 그대로 유지하되 inf 값만 처리
+            y_cleaned = y.copy()
+            y_cleaned = y_cleaned.replace([np.inf, -np.inf], np.nan)
+            
+            logger.info(f"[DEBUG] LightGBM _validate_input_data 출력 X shape: {X_cleaned.shape}, y shape: {y_cleaned.shape}")
+            logger.info(f"[DEBUG] LightGBM _validate_input_data 출력 y 컬럼: {list(y_cleaned.columns)}")
+            logger.info(f"[DEBUG] LightGBM _validate_input_data 출력 X dtypes: {X_cleaned.dtypes.value_counts()}")
+            return X_cleaned, y_cleaned
+        
+        logger.info(f"[DEBUG] LightGBM _validate_input_data 출력 X shape: {X_cleaned.shape}")
+        logger.info(f"[DEBUG] LightGBM _validate_input_data 출력 X dtypes: {X_cleaned.dtypes.value_counts()}")
+        return X_cleaned
+
 
 def main():
     """테스트용 메인 함수"""

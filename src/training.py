@@ -36,9 +36,9 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
     Returns:
         학습된 모델과 학습 결과
     """
-    from src.models import ModelFactory
-    
-    logger.info("모델 학습 시작")
+    logger.info("=== 모델 학습 시작 ===")
+    logger.info(f"훈련 데이터: {X_train.shape}")
+    logger.info(f"검증 데이터: {X_val.shape}")
     
     # === 타겟 결측치가 있는 샘플 제거 ===
     train_targets = get_target_columns_from_data(y_train, config)
@@ -73,9 +73,10 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
         else:
             model.fit(X_train, y_train)
     
-    # 검증 성능 평가
+    # 검증 성능 평가 - evaluation.py의 calculate_all_metrics 사용
+    from src.evaluation import calculate_all_metrics
     val_predictions = model.predict(X_val)
-    val_metrics = evaluate_predictions(y_val, val_predictions, config)
+    val_metrics = calculate_all_metrics(y_val, val_predictions, config=config)
     
     # 피처 검증 결과 (첫 번째 폴드만, 원본 데이터에서 수행)
     feature_validation_results = None
@@ -116,82 +117,14 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
 
 def strip_prefix_and_suffix(col):
     # 접두사 제거
-    for prefix in ['pass__', 'num__', 'cat__', 'remainder__']:
-        if col.startswith(prefix):
-            col = col[len(prefix):]
-    # 불필요한 접미사 제거
+    if col.startswith('remainder__'):
+        col = col[11:]  # 'remainder__' 제거
+    
+    # 접미사 제거
+    if col.endswith('_next_year'):
+        col = col[:-10]  # '_next_year' 제거
+    
     return col
-
-def evaluate_predictions(y_true: pd.DataFrame, y_pred: pd.DataFrame, 
-                        config: Dict[str, Any]) -> Dict[str, float]:
-    """
-    예측 결과를 평가합니다.
-    """
-    from src.evaluation import calculate_regression_metrics, calculate_classification_metrics
-    
-    logger.info("=== 예측 결과 평가 시작 ===")
-    logger.info(f"y_true shape: {y_true.shape}, y_pred shape: {y_pred.shape}")
-    logger.info(f"y_true columns: {list(y_true.columns)}")
-    logger.info(f"y_pred columns: {list(y_pred.columns)}")
-    
-    metrics = {}
-    all_pred_columns = list(y_pred.columns)
-    
-    for target in y_true.columns:
-        logger.info(f"타겟 '{target}' 평가 중...")
-        # 1. 정확한 매칭
-        pred_col = None
-        if target in all_pred_columns:
-            pred_col = target
-            logger.info(f"  정확한 매칭: {target}")
-        else:
-            # 2. 접두사 제거 후 매칭
-            target_clean = strip_prefix_and_suffix(target)
-            for col in all_pred_columns:
-                col_clean = strip_prefix_and_suffix(col)
-                if col_clean == target_clean:
-                    pred_col = col
-                    logger.info(f"  접두사 제거 매칭: {col}")
-                    break
-            # 3. 부분 일치 허용 (ex. _next_year 등)
-            if pred_col is None:
-                for col in all_pred_columns:
-                    col_clean = strip_prefix_and_suffix(col)
-                    if target_clean in col_clean or col_clean in target_clean:
-                        pred_col = col
-                        logger.info(f"  부분 일치 매칭: {col}")
-                        break
-        if pred_col is None:
-            logger.warning(f"  예측 컬럼을 찾을 수 없음: {target}")
-            logger.warning(f"  사용 가능한 예측 컬럼: {all_pred_columns}")
-            continue
-        true_vals = y_true[target]
-        pred_vals = y_pred[pred_col]
-        valid_mask = true_vals.notna() & pred_vals.notna()
-        true_vals_clean = true_vals[valid_mask]
-        pred_vals_clean = pred_vals[valid_mask]
-        logger.info(f"타겟 '{target}' - 유효한 샘플 수: {len(true_vals_clean)}")
-        logger.info(f"타겟 '{target}' - true_vals unique: {true_vals_clean.unique()}")
-        logger.info(f"타겟 '{target}' - pred_vals unique: {pred_vals_clean.unique()}")
-        if len(true_vals_clean) == 0:
-            logger.warning(f"  유효한 샘플 없음: {target}")
-            continue
-        if true_vals_clean.dtype.kind in 'if' and len(true_vals_clean.unique()) > 10:
-            logger.info(f"타겟 '{target}' - 회귀 문제로 처리")
-            target_metrics = calculate_regression_metrics(true_vals_clean, pred_vals_clean)
-            for metric_name, value in target_metrics.items():
-                logger.info(f"  {metric_name}: {value}")
-        else:
-            logger.info(f"타겟 '{target}' - 분류 문제로 처리")
-            target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
-            for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
-                if m not in target_metrics:
-                    target_metrics[m] = 0.0
-            for metric_name, value in target_metrics.items():
-                logger.info(f"  {metric_name}: {value}")
-        metrics[target] = target_metrics
-    logger.info(f"=== 예측 결과 평가 완료 - {len(metrics)}개 타겟 ===")
-    return metrics
 
 
 def log_training_results(training_results: Dict[str, Any], fold_count: int):
@@ -202,14 +135,21 @@ def log_training_results(training_results: Dict[str, Any], fold_count: int):
         training_results: 학습 결과
         fold_count: 폴드 번호
     """
-    # 검증 메트릭 로깅
+    # 검증 메트릭 로깅 - calculate_all_metrics의 반환 형식에 맞게 처리
     val_metrics = training_results['val_metrics']
-    for metric_name, value in val_metrics.items():
-        if isinstance(value, (int, float)) and not np.isnan(value) and not np.isinf(value):
-            try:
-                mlflow.log_metric(f"fold_{fold_count}_{metric_name}", value)
-            except Exception as e:
-                logger.warning(f"MLflow 메트릭 로깅 실패 (fold_{fold_count}_{metric_name}): {e}")
+    
+    # val_metrics는 타겟별 메트릭 딕셔너리 형태
+    for target_name, target_metrics in val_metrics.items():
+        for metric_name, value in target_metrics.items():
+            if isinstance(value, (int, float)) and not np.isnan(value) and not np.isinf(value):
+                try:
+                    # 타겟명과 메트릭명을 조합하여 고유한 메트릭 이름 생성
+                    safe_target_name = target_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                    safe_metric_name = metric_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                    mlflow_metric_name = f"fold_{fold_count}_{safe_target_name}_{safe_metric_name}"
+                    mlflow.log_metric(mlflow_metric_name, value)
+                except Exception as e:
+                    logger.warning(f"MLflow 메트릭 로깅 실패 ({mlflow_metric_name}): {e}")
     
     # Early Stopping 정보 로깅
     if training_results.get('early_stopping_used'):
@@ -394,15 +334,30 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         
         # 최고 성능 모델 추적 (평균 성능을 기준으로)
         if training_results['val_metrics']:
-            # 모든 메트릭의 평균을 계산하여 성능 지표로 사용
-            metric_values = list(training_results['val_metrics'].values())
-            avg_score = np.mean([v for v in metric_values if not np.isnan(v)])
+            # 각 타겟별로 성능을 계산하여 최고 성능 모델 추적
+            target_scores = {}
+            for target_name, target_metrics in training_results['val_metrics'].items():
+                # 각 타겟의 주요 메트릭들의 평균을 계산
+                if 'f1' in target_metrics:
+                    target_scores[target_name] = target_metrics['f1']
+                elif 'r2' in target_metrics:
+                    target_scores[target_name] = target_metrics['r2']
+                elif 'accuracy' in target_metrics:
+                    target_scores[target_name] = target_metrics['accuracy']
+                else:
+                    # 기본적으로 첫 번째 메트릭 사용
+                    first_metric = next(iter(target_metrics.values()))
+                    target_scores[target_name] = first_metric
+            
+            # 전체 타겟의 평균 성능 계산
+            avg_score = np.mean(list(target_scores.values()))
             
             if avg_score > cv_results['best_score']:
                 cv_results['best_score'] = avg_score
                 cv_results['best_fold'] = fold_count
                 cv_results['best_model'] = model
                 logger.info(f"새로운 최고 성능 모델 발견: 폴드 {fold_count} (점수: {avg_score:.4f})")
+                logger.info(f"타겟별 성능: {target_scores}")
         
         logger.info(f"폴드 {fold_count} 완료")
     
@@ -475,7 +430,7 @@ def aggregate_cv_metrics(all_metrics: list) -> Dict[str, float]:
     교차 검증 메트릭을 집계합니다.
     
     Args:
-        all_metrics: 모든 폴드의 메트릭 리스트
+        all_metrics: 모든 폴드의 메트릭 리스트 (타겟별 메트릭 딕셔너리들의 리스트)
         
     Returns:
         집계된 메트릭
@@ -483,21 +438,34 @@ def aggregate_cv_metrics(all_metrics: list) -> Dict[str, float]:
     if not all_metrics:
         return {}
     
-    # 모든 메트릭 이름 수집
+    # 모든 타겟과 메트릭 이름 수집
+    all_targets = set()
     all_metric_names = set()
-    for metrics in all_metrics:
-        all_metric_names.update(metrics.keys())
     
-    # 각 메트릭별로 평균과 표준편차 계산
+    for fold_metrics in all_metrics:
+        for target_name, target_metrics in fold_metrics.items():
+            all_targets.add(target_name)
+            all_metric_names.update(target_metrics.keys())
+    
+    # 각 타겟의 각 메트릭별로 평균과 표준편차 계산
     aggregate_metrics = {}
     
-    for metric_name in all_metric_names:
-        values = [metrics.get(metric_name, np.nan) for metrics in all_metrics]
-        values = [v for v in values if not np.isnan(v)]
-        
-        if values:
-            aggregate_metrics[f"{metric_name}_mean"] = np.mean(values)
-            aggregate_metrics[f"{metric_name}_std"] = np.std(values)
+    for target_name in all_targets:
+        for metric_name in all_metric_names:
+            values = []
+            for fold_metrics in all_metrics:
+                if target_name in fold_metrics and metric_name in fold_metrics[target_name]:
+                    value = fold_metrics[target_name][metric_name]
+                    if not np.isnan(value):
+                        values.append(value)
+            
+            if values:
+                # 타겟명과 메트릭명을 조합하여 고유한 키 생성
+                safe_target_name = target_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                safe_metric_name = metric_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                
+                aggregate_metrics[f"{safe_target_name}_{safe_metric_name}_mean"] = np.mean(values)
+                aggregate_metrics[f"{safe_target_name}_{safe_metric_name}_std"] = np.std(values)
     
     return aggregate_metrics
 

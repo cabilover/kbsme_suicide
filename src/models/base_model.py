@@ -170,45 +170,28 @@ class BaseModel(ABC):
         """
         입력 데이터를 검증하고 전처리합니다.
         
+        주의: 이 메서드는 각 모델 클래스에서 오버라이드되어야 합니다.
+        - XGBoost: 범주형 변수를 숫자로 변환
+        - CatBoost: 범주형 변수 보존
+        - LightGBM: 범주형 변수 보존  
+        - Random Forest: 범주형 변수 보존
+        
+        기본 구현: 최소한의 데이터 검증만 수행
+        
         Args:
             X: 피처 데이터프레임
             y: 타겟 데이터프레임 (선택사항)
             
         Returns:
-            전처리된 피처 데이터프레임
+            전처리된 피처 데이터프레임 (또는 튜플)
         """
-        logger.info(f"[DEBUG] _validate_input_data 입력 X shape: {X.shape}")
-        logger.info(f"[DEBUG] _validate_input_data 입력 X 컬럼: {list(X.columns)}")
-        logger.info(f"[DEBUG] _validate_input_data 입력 X dtypes: {X.dtypes.value_counts()}")
+        logger.info(f"[DEBUG] BaseModel _validate_input_data 입력 X shape: {X.shape}")
+        logger.info(f"[DEBUG] BaseModel _validate_input_data 입력 X dtypes: {X.dtypes.value_counts()}")
         
-        # XGBoost 입력에 object 컬럼이 포함되지 않도록 처리
-        # 하지만 category 타입은 유지 (XGBoost에서 지원)
-        # object 타입도 유지하되, 숫자로 변환 가능한 경우 변환
+        # 기본적인 데이터 검증만 수행 (각 모델에서 오버라이드 권장)
         X_cleaned = X.copy()
         
-        # object 타입 컬럼들을 숫자로 변환 시도
-        for col in X_cleaned.columns:
-            if X_cleaned[col].dtype == 'object':
-                try:
-                    # 숫자로 변환 가능한지 확인
-                    pd.to_numeric(X_cleaned[col], errors='raise')
-                    X_cleaned[col] = pd.to_numeric(X_cleaned[col], errors='coerce')
-                    logger.info(f"[DEBUG] 컬럼 {col}을 숫자로 변환 성공")
-                except (ValueError, TypeError):
-                    # 숫자로 변환할 수 없는 경우 그대로 유지
-                    logger.info(f"[DEBUG] 컬럼 {col}은 숫자로 변환 불가, 그대로 유지")
-        
-        # 이제 select_dtypes 적용
-        X_cleaned = X_cleaned.select_dtypes(include=['number', 'bool', 'category'])
-        
-        logger.info(f"[DEBUG] select_dtypes 후 X shape: {X_cleaned.shape}")
-        logger.info(f"[DEBUG] select_dtypes 후 X 컬럼: {list(X_cleaned.columns)}")
-        
-        # 제거된 컬럼 확인
-        removed_columns = set(X.columns) - set(X_cleaned.columns)
-        if removed_columns:
-            logger.warning(f"제거된 컬럼들: {removed_columns}")
-        
+        # inf 값 처리 (모든 모델에서 공통적으로 필요한 처리)
         X_cleaned = X_cleaned.replace([np.inf, -np.inf], np.nan)
         
         if y is not None:
@@ -218,16 +201,12 @@ class BaseModel(ABC):
             
             # y 데이터 처리: 타겟 컬럼은 그대로 유지하되 inf 값만 처리
             y_cleaned = y.copy()
-            
-            # y 데이터에서 숫자형이 아닌 컬럼도 유지 (타겟 컬럼은 보존)
-            # select_dtypes를 적용하지 않고 inf 값만 처리
             y_cleaned = y_cleaned.replace([np.inf, -np.inf], np.nan)
             
-            logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}, y shape: {y_cleaned.shape}")
-            logger.info(f"[DEBUG] _validate_input_data 출력 y 컬럼: {list(y_cleaned.columns)}")
+            logger.info(f"[DEBUG] BaseModel _validate_input_data 출력 X shape: {X_cleaned.shape}, y shape: {y_cleaned.shape}")
             return X_cleaned, y_cleaned
         
-        logger.info(f"[DEBUG] _validate_input_data 출력 X shape: {X_cleaned.shape}")
+        logger.info(f"[DEBUG] BaseModel _validate_input_data 출력 X shape: {X_cleaned.shape}")
         return X_cleaned
     
     def _calculate_scale_pos_weight(self, y: pd.Series) -> float:

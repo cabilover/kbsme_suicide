@@ -20,14 +20,15 @@ kbsmc_suicide/
 │   ├── preprocessing.py              # 전처리 파이프라인
 │   ├── feature_engineering.py        # 피처 엔지니어링
 │   ├── models/
-│   │   ├── xgboost_model.py          # XGBoost 모델 클래스 (안정화 완료)
-│   │   ├── catboost_model.py         # CatBoost 모델 클래스 (✅ 구현 완료)
-│   │   ├── lightgbm_model.py         # LightGBM 모델 클래스 (✅ 구현 완료)
-│   │   ├── random_forest_model.py    # Random Forest 모델 클래스 (✅ 구현 완료)
+│   │   ├── base_model.py             # BaseModel 추상 클래스 (✅ 모델별 데이터 검증 최적화)
+│   │   ├── xgboost_model.py          # XGBoost 모델 클래스 (✅ 범주형 변수 숫자 변환)
+│   │   ├── catboost_model.py         # CatBoost 모델 클래스 (✅ 범주형 변수 보존)
+│   │   ├── lightgbm_model.py         # LightGBM 모델 클래스 (✅ 범주형 변수 보존)
+│   │   ├── random_forest_model.py    # Random Forest 모델 클래스 (✅ 범주형 변수 보존)
 │   │   └── loss_functions.py         # 손실 함수 모듈 (Focal Loss 포함)
-│   ├── training.py                   # 훈련 파이프라인 (품질 개선 완료)
-│   ├── evaluation.py                 # 평가 모듈 (고급 평가 기능 포함)
-│   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝 (Optuna 기반, ✅ 숫자 검증 유틸리티 추가)
+│   ├── training.py                   # 훈련 파이프라인 (✅ 평가 로직 중앙화)
+│   ├── evaluation.py                 # 평가 모듈 (✅ 통합 평가 진입점)
+│   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝 (✅ 평가 로직 중앙화)
 │   ├── utils.py                      # 공통 유틸리티 함수 (✅ 숫자 변환/검증 함수 추가)
 │   └── reference/                    # 참고 자료
 ├── configs/
@@ -162,6 +163,16 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **LightGBM 모델**: 빠른 학습 속도와 높은 성능 (정확도 84%, AUC-ROC 0.90)
 - **Random Forest 모델**: 해석 가능성과 안정성 (정확도 83%, AUC-ROC 0.89)
 - **모델 아키텍처 표준화**: BaseModel 추상 클래스와 ModelFactory를 통한 일관된 인터페이스
+- **모델별 데이터 검증 최적화**: 각 모델의 특성에 맞는 `_validate_input_data` 메서드 오버라이드
+  - XGBoost: 범주형 변수를 숫자로 변환 (XGBoost 호환성)
+  - CatBoost/LightGBM/Random Forest: 범주형 변수 보존 (모델 자체 처리)
+
+### 평가 시스템 개선 (✅ 최신 업데이트)
+- **중앙화된 평가 로직**: `evaluation.py`의 `calculate_all_metrics`가 모든 평가의 단일 진입점
+- **복잡한 컬럼 매칭**: 전처리 후 컬럼명 변경(`remainder__`, `pass__`, `num__`, `cat__` 접두사)에도 안정적 매칭
+- **자동 문제 타입 판단**: 타겟 접미사(`_next_year`)를 통한 회귀/분류 자동 구분
+- **다중 타겟 지원**: 각 타겟별로 개별 평가 수행 후 통합 결과 반환
+- **타겟별 메트릭 구조**: 평면화된 메트릭에서 타겟별 구조화된 메트릭으로 개선
 
 ### 불균형 데이터 처리
 - **클래스 가중치, scale_pos_weight**: XGBoost 등에서 불균형 데이터 처리를 위한 가중치 옵션 지원
@@ -171,6 +182,7 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **데이터 품질 보장**: NaN/Inf 값 자동 감지 및 처리로 튜닝 과정의 안정성 향상
 
 ### 최신 실험 결과
+- **2025-01-XX 기준, 모델별 데이터 검증 최적화 및 평가 로직 중앙화 완료**
 - **2025-06-25 기준, 숫자 검증 유틸리티 함수 추가로 하이퍼파라미터 튜닝 안정성 향상**
 - **2025-06-24 기준, XGBoost, CatBoost, LightGBM, Random Forest 4개 모델 모두 ConfigManager 기반 하이퍼파라미터 튜닝 및 전체 파이프라인 정상 동작 확인**
 - **nrows 옵션을 통한 부분 데이터 실험 정상 동작 확인**

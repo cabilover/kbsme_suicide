@@ -305,34 +305,42 @@ class HyperparameterTuner:
             valid_metrics_found = False
             
             for fold_idx, fold_result in enumerate(fold_results):
-                metrics = fold_result.get('training_results', {}).get('val_metrics', {})
+                # calculate_all_metrics의 반환 형식에 맞게 처리
+                fold_metrics = fold_result.get('training_results', {}).get('val_metrics', {})
                 
-                # 기본 지표 추출
-                if primary_metric in metrics:
-                    score = metrics[primary_metric]
-                    # 안전한 float 변환
-                    score = safe_float_conversion(score)
-                    
-                    # 유효한 숫자인지 확인
-                    if not is_valid_number(score):
-                        logger.warning(f"Trial {trial.number} - 유효하지 않은 score 타입: {type(score)}, 값: {score}")
-                        score = 0.0
-                    
-                    # NaN/Inf 체크 (이미 float이므로 안전)
-                    if np.isnan(score) or np.isinf(score):
-                        logger.warning(f"Trial {trial.number} - NaN/Inf score: {score}")
-                        score = 0.0
-                    
-                    cv_scores.append(score)
-                    valid_metrics_found = True
-                    
-                    # MLflow 로깅
-                    try:
-                        mlflow.log_metric(f"fold_{fold_idx}_{primary_metric}", score)
-                    except Exception as e:
-                        logger.warning(f"MLflow 로깅 실패: {e}")
-                else:
-                    logger.warning(f"Trial {trial.number} - primary_metric '{primary_metric}' not found in metrics")
+                # 타겟별 메트릭에서 primary_metric 찾기
+                found_metric = False
+                for target_name, target_metrics in fold_metrics.items():
+                    if primary_metric in target_metrics:
+                        score = target_metrics[primary_metric]
+                        # 안전한 float 변환
+                        score = safe_float_conversion(score)
+                        
+                        # 유효한 숫자인지 확인
+                        if not is_valid_number(score):
+                            logger.warning(f"Trial {trial.number} - 유효하지 않은 score 타입: {type(score)}, 값: {score}")
+                            score = 0.0
+                        
+                        # NaN/Inf 체크 (이미 float이므로 안전)
+                        if np.isnan(score) or np.isinf(score):
+                            logger.warning(f"Trial {trial.number} - NaN/Inf score: {score}")
+                            score = 0.0
+                        
+                        cv_scores.append(score)
+                        valid_metrics_found = True
+                        found_metric = True
+                        
+                        # MLflow 로깅 - 타겟명과 메트릭명을 조합
+                        safe_target_name = target_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                        safe_metric_name = primary_metric.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                        try:
+                            mlflow.log_metric(f"fold_{fold_idx}_{safe_target_name}_{safe_metric_name}", score)
+                        except Exception as e:
+                            logger.warning(f"MLflow 로깅 실패: {e}")
+                        break  # 첫 번째 타겟에서 찾으면 중단
+                
+                if not found_metric:
+                    logger.warning(f"Trial {trial.number} - primary_metric '{primary_metric}' not found in any target metrics")
                     cv_scores.append(0.0)
             
             # CV 스코어 계산
