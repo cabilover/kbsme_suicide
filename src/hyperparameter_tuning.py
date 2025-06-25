@@ -304,7 +304,7 @@ class HyperparameterTuner:
             valid_metrics_found = False
             
             for fold_idx, fold_result in enumerate(fold_results):
-                metrics = fold_result.get('metrics', {})
+                metrics = fold_result.get('training_results', {}).get('val_metrics', {})
                 
                 # 기본 지표 추출
                 if primary_metric in metrics:
