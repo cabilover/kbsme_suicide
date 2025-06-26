@@ -6,6 +6,8 @@ from pathlib import Path
 import mlflow
 from datetime import datetime
 import warnings
+import yaml
+import logging
 
 # Configure warnings for EDA - suppress common plotting and pandas warnings
 # while keeping important ones visible
@@ -30,6 +32,96 @@ PROCESSED_DIR = Path(__file__).parent.parent / "data" / "processed"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def load_config():
+    """설정 파일을 로드합니다."""
+    config_path = Path("configs/base/common.yaml")
+    
+    if not config_path.exists():
+        logger.error("설정 파일을 찾을 수 없습니다!")
+        logger.error("해결 방법:")
+        logger.error("1. configs/base/common.yaml 파일이 존재하는지 확인하세요")
+        logger.error("2. 파일이 없다면 다음 구조로 생성하세요:")
+        logger.error("""
+features:
+  target_variables:
+    original_targets:
+      score_targets: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+      binary_targets: ["suicide_t", "suicide_a"]
+    next_year_targets:
+      score_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+      binary_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_types:
+    regression_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+    classification_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_columns: ["suicide_a_next_year"]
+        """)
+        raise SystemExit(1)
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"설정 파일 로드 중 오류 발생: {e}")
+        logger.error("해결 방법:")
+        logger.error("1. configs/base/common.yaml 파일의 YAML 문법을 확인하세요")
+        logger.error("2. 들여쓰기가 올바른지 확인하세요 (탭 대신 스페이스 사용)")
+        logger.error("3. 콜론(:) 뒤에 공백이 있는지 확인하세요")
+        raise SystemExit(1)
+    
+    # 필수 설정 검증
+    required_sections = ['features']
+    for section in required_sections:
+        if section not in config:
+            logger.error(f"설정 파일에 필수 섹션 '{section}'이 없습니다!")
+            logger.error("해결 방법:")
+            logger.error(f"configs/base/common.yaml 파일에 '{section}' 섹션을 추가하세요")
+            raise SystemExit(1)
+    
+    features_config = config.get('features', {})
+    required_feature_sections = ['target_variables', 'target_types']
+    missing_sections = [section for section in required_feature_sections if section not in features_config]
+    
+    if missing_sections:
+        logger.error(f"설정 파일에 필수 피처 섹션이 없습니다: {missing_sections}")
+        logger.error("해결 방법:")
+        logger.error("configs/base/common.yaml 파일의 features 섹션에 다음을 추가하세요:")
+        logger.error("""
+  target_variables:
+    original_targets:
+      score_targets: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+      binary_targets: ["suicide_t", "suicide_a"]
+    next_year_targets:
+      score_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+      binary_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_types:
+    regression_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+    classification_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+        """)
+        raise SystemExit(1)
+    
+    return config
+
+def get_target_variables(config):
+    """설정에서 타겟 변수명들을 가져옵니다."""
+    target_vars = config.get('features', {}).get('target_variables', {})
+    
+    # 기본값 설정 (설정이 없을 경우)
+    default_score_targets = ['anxiety_score', 'depress_score', 'sleep_score', 'comp']
+    default_binary_targets = ['suicide_t', 'suicide_a']
+    
+    original_targets = target_vars.get('original_targets', {})
+    score_targets = original_targets.get('score_targets', default_score_targets)
+    binary_targets = original_targets.get('binary_targets', default_binary_targets)
+    
+    return score_targets, binary_targets
 
 def load_data():
     """Load the raw data and perform initial inspection."""
@@ -69,10 +161,13 @@ def analyze_missing_values(df):
     
     return missing_df
 
-def analyze_outliers(df):
+def analyze_outliers(df, config=None):
     """Analyze outliers in score variables."""
     print("\n=== Outlier Analysis ===")
-    score_columns = ['anxiety_score', 'depress_score', 'sleep_score', 'comp']
+    
+    # 설정에서 점수 컬럼 가져오기
+    score_targets, _ = get_target_variables(config or load_config())
+    score_columns = score_targets
     
     outlier_report = {}
     
@@ -158,14 +253,21 @@ def analyze_time_series_length(df):
     
     return ts_length
 
-def analyze_target_distribution(df):
+def analyze_target_distribution(df, config=None):
     """Analyze the distribution of target variables."""
     print("\n=== Target Variable Distribution Analysis ===")
     
+    # 설정에서 타겟 변수명 가져오기
+    score_targets, binary_targets = get_target_variables(config or load_config())
+    
     # Analyze continuous targets
-    continuous_targets = ['anxiety_score', 'depress_score', 'sleep_score']
+    continuous_targets = score_targets
     
     for target in continuous_targets:
+        if target not in df.columns:
+            logger.warning(f"타겟 변수 {target}가 데이터에 없습니다. 건너뜁니다.")
+            continue
+            
         print(f"\n{target} statistics:")
         print(df[target].describe())
         
@@ -223,9 +325,11 @@ def analyze_target_distribution(df):
         plt.close()
     
     # Analyze binary targets
-    binary_targets = ['suicide_t', 'suicide_a']
-    
     for target in binary_targets:
+        if target not in df.columns:
+            logger.warning(f"타겟 변수 {target}가 데이터에 없습니다. 건너뜁니다.")
+            continue
+            
         print(f"\n{target} distribution:")
         print(df[target].value_counts(normalize=True))
         
@@ -276,12 +380,14 @@ def analyze_target_distribution(df):
         # Correlation with continuous scores
         plt.subplot(2, 3, 6)
         correlations = []
-        score_cols = ['anxiety_score', 'depress_score', 'sleep_score']
-        for score_col in score_cols:
-            corr = df[target].corr(df[score_col])
-            correlations.append(corr)
+        for score_col in score_targets:
+            if score_col in df.columns:
+                corr = df[target].corr(df[score_col])
+                correlations.append(corr)
+            else:
+                correlations.append(0.0)
         
-        plt.bar(score_cols, correlations)
+        plt.bar(score_targets, correlations)
         plt.title(f'Correlation with {target}')
         plt.xlabel('Score Variables')
         plt.ylabel('Correlation Coefficient')
@@ -323,16 +429,18 @@ def analyze_data_types_and_conversion(df):
     
     return df
 
-def create_target_variables(df):
+def create_target_variables(df, config=None):
     """Create target variables for next year prediction."""
     print("\n=== Target Variable Creation ===")
+    
+    # 설정에서 타겟 변수명 가져오기
+    score_targets, binary_targets = get_target_variables(config or load_config())
+    target_cols = score_targets + binary_targets
     
     # Sort by id and yov
     df = df.sort_values(['id', 'yov'])
     
     # Create target variables (next year's values)
-    target_cols = ['anxiety_score', 'depress_score', 'sleep_score', 'suicide_t', 'suicide_a']
-    
     for col in target_cols:
         if col in df.columns:
             df[f'{col}_next_year'] = df.groupby('id')[col].shift(-1)
@@ -356,9 +464,12 @@ def create_target_variables(df):
     
     return df
 
-def feature_engineering_analysis(df):
+def feature_engineering_analysis(df, config=None):
     """Analyze potential features for engineering."""
     print("\n=== Feature Engineering Analysis ===")
+    
+    # 설정에서 점수 타겟 가져오기
+    score_targets, _ = get_target_variables(config or load_config())
     
     # Time-based features from dov
     if 'dov' in df.columns and df['dov'].dtype == 'datetime64[ns]':
@@ -377,7 +488,7 @@ def feature_engineering_analysis(df):
     # Calculate rolling statistics for each individual
     historical_features = {}
     
-    for col in ['anxiety_score', 'depress_score', 'sleep_score']:
+    for col in score_targets:
         if col in df.columns:
             # Calculate rolling mean over past 2 years
             df[f'{col}_rolling_mean_2y'] = df.groupby('id')[col].rolling(window=2, min_periods=1).mean().reset_index(0, drop=True)
@@ -402,6 +513,9 @@ def feature_engineering_analysis(df):
 
 def main():
     """Main function to run all analysis."""
+    # 설정 로드
+    config = load_config()
+    
     # Start MLflow run
     with mlflow.start_run(run_name="comprehensive_data_analysis"):
         # Load data
@@ -418,7 +532,7 @@ def main():
         mlflow.log_artifact(str(FIGURES_DIR / "missing_values_analysis.png"))
         
         # Analyze outliers
-        outlier_report = analyze_outliers(df)
+        outlier_report = analyze_outliers(df, config)
         mlflow.log_artifact(str(REPORTS_DIR / "outlier_analysis.txt"))
         
         # Analyze time series length
@@ -427,18 +541,18 @@ def main():
         mlflow.log_artifact(str(REPORTS_DIR / "time_series_length_stats.txt"))
         
         # Analyze target distributions
-        analyze_target_distribution(df)
+        analyze_target_distribution(df, config)
         
         # Data type analysis and conversion
         df = analyze_data_types_and_conversion(df)
         mlflow.log_artifact(str(REPORTS_DIR / "data_type_analysis.txt"))
         
         # Create target variables
-        df = create_target_variables(df)
+        df = create_target_variables(df, config)
         mlflow.log_artifact(str(REPORTS_DIR / "target_variable_analysis.txt"))
         
         # Feature engineering analysis
-        df = feature_engineering_analysis(df)
+        df = feature_engineering_analysis(df, config)
         mlflow.log_artifact(str(REPORTS_DIR / "feature_engineering_analysis.txt"))
         
         # Save processed data in the correct location

@@ -221,7 +221,7 @@ def run_resampling_tuning_comparison(tuning_config_path: str, base_config_path: 
             
             try:
                 # 하이퍼파라미터 튜너 생성
-                tuner = HyperparameterTuner(temp_base_config_path, temp_base_config_path)
+                tuner = HyperparameterTuner(temp_base_config_path, temp_base_config_path, nrows=nrows)
                 
                 # 최적화 실행
                 logger.info(f"{method} 하이퍼파라미터 최적화 실행 중...")
@@ -377,7 +377,7 @@ def run_resampling_tuning_comparison_with_configmanager(
                 log_tuning_params(config, config)
                 
                 # 튜너 생성 및 튜닝 실행
-                tuner = HyperparameterTuner(config, train_val_df)
+                tuner = HyperparameterTuner(config, train_val_df, nrows=nrows)
                 result = tuner.optimize(start_mlflow_run=False)
                 
                 # 결과 추출
@@ -521,7 +521,7 @@ def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str
     experiment_id = setup_mlflow_experiment(experiment_name)
     
     # 튜너 생성
-    tuner = HyperparameterTuner(config, train_val_df)
+    tuner = HyperparameterTuner(config, train_val_df, nrows=nrows)
     
     # 튜닝 실행
     with mlflow.start_run(experiment_id=experiment_id) as run:
@@ -760,6 +760,15 @@ def save_experiment_results(result, model_type, experiment_type, nrows=None, exp
             f.write("최적 파라미터:\n")
             for param, value in best_params.items():
                 f.write(f"  {param}: {value}\n")
+            
+            # 상세 메트릭 정보 추가 (MLflow에서 가져온 정보가 있다면)
+            f.write("\n=== 상세 성능 지표 ===\n")
+            f.write("(MLflow에서 확인 가능한 상세 메트릭들)\n")
+            f.write("- 기본 지표: precision, recall, f1, accuracy, balanced_accuracy\n")
+            f.write("- 확장 지표: f1_beta, mcc, kappa, specificity, sensitivity\n")
+            f.write("- 예측 지표: ppv, npv, fpr, fnr, tpr, tnr\n")
+            f.write("- 곡선 지표: roc_auc, pr_auc\n")
+            f.write("- 데이터 지표: positive_samples, negative_samples, positive_ratio\n")
         else:
             # 리샘플링 비교 결과
             f.write("리샘플링 비교 결과:\n")
@@ -905,14 +914,42 @@ def main():
     parser.add_argument("--resampling-comparison", action="store_true", help="리샘플링 기법 비교 실험 실행")
     parser.add_argument("--resampling-methods", nargs="+", choices=['none', 'smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid'], default=None, help="비교할 리샘플링 기법들")
     parser.add_argument("--mlflow_ui", action="store_true", help="튜닝 완료 후 MLflow UI 실행")
+    
+    # 자동화된 실험을 위한 추가 인자들
+    parser.add_argument("--split-strategy", type=str, choices=['group_kfold', 'time_series_walk_forward', 'time_series_group_kfold'], default=None, help="데이터 분할 전략")
+    parser.add_argument("--cv-folds", type=int, default=None, help="교차 검증 폴드 수")
+    parser.add_argument("--n-trials", type=int, default=None, help="하이퍼파라미터 튜닝 시도 횟수")
+    parser.add_argument("--tuning-direction", type=str, choices=['maximize', 'minimize'], default=None, help="튜닝 방향 (maximize/minimize)")
+    parser.add_argument("--primary-metric", type=str, default=None, help="주요 평가 지표 (f1, precision, recall, mcc, roc_auc, pr_auc 등)")
+    parser.add_argument("--test-size", type=float, default=None, help="테스트 세트 비율 (0.0-1.0)")
+    parser.add_argument("--random-state", type=int, default=None, help="랜덤 시드")
+    parser.add_argument("--n-jobs", type=int, default=None, help="병렬 처리 작업 수")
+    parser.add_argument("--timeout", type=int, default=None, help="튜닝 타임아웃 (초)")
+    parser.add_argument("--early-stopping", action="store_true", help="Early stopping 활성화")
+    parser.add_argument("--early-stopping-rounds", type=int, default=None, help="Early stopping 라운드 수")
+    parser.add_argument("--feature-selection", action="store_true", help="피처 선택 활성화")
+    parser.add_argument("--feature-selection-method", type=str, choices=['mutual_info', 'chi2', 'f_classif', 'recursive'], default=None, help="피처 선택 방법")
+    parser.add_argument("--feature-selection-k", type=int, default=None, help="선택할 피처 수")
+    parser.add_argument("--resampling-enabled", action="store_true", help="리샘플링 활성화")
+    parser.add_argument("--resampling-method", type=str, choices=['smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid'], default=None, help="리샘플링 방법")
+    parser.add_argument("--resampling-ratio", type=float, default=None, help="리샘플링 후 양성 클래스 비율")
+    parser.add_argument("--experiment-name", type=str, default=None, help="MLflow 실험 이름 (기본값: model_type_experiment_type)")
+    parser.add_argument("--save-model", action="store_true", help="최적 모델 저장")
+    parser.add_argument("--save-predictions", action="store_true", help="예측 결과 저장")
+    parser.add_argument("--verbose", type=int, choices=[0, 1, 2], default=1, help="로그 레벨 (0: 최소, 1: 기본, 2: 상세)")
     args = parser.parse_args()
     try:
         if args.model_type:
             # ConfigManager 기반 계층적 config 병합
             config_manager = ConfigManager()
             config = config_manager.create_experiment_config(args.model_type, args.experiment_type)
-            if args.data_path:
-                config['data']['data_path'] = args.data_path
+            
+            # 명령행 인자를 config에 적용
+            config = config_manager.apply_command_line_args(config, args)
+            
+            # 설정 요약 출력
+            config_manager.print_config_summary(config)
+            
             result = run_hyperparameter_tuning_with_config(
                 config,
                 data_path=args.data_path,

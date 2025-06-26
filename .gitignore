@@ -134,6 +134,15 @@ mlruns/
 # Data files (excluded as requested)
 data/
 
+# Model files (excluded as requested)
+models/
+
+# Results files (excluded as requested)
+results/
+
+# CatBoost training files (excluded as requested)
+catboost_info/
+
 # IDE files
 .vscode/
 .idea/

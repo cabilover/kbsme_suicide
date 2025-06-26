@@ -14,6 +14,7 @@ import logging
 from datetime import datetime
 import warnings
 from src.utils import find_column_with_remainder
+from pathlib import Path
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -29,39 +30,35 @@ def validate_existing_features(df: pd.DataFrame, config: Dict[str, Any]) -> Dict
         config: 설정 딕셔너리
         
     Returns:
-        피처별 유효성 검증 결과
+        피처별 검증 결과 딕셔너리
     """
-    # 전처리 후 컬럼 이름 찾기 (여러 가능성 시도)
-    id_column = find_column_with_remainder(df.columns, config['time_series']['id_column'])
-    year_column = find_column_with_remainder(df.columns, config['time_series']['year_column'])
-    
-    # 컬럼을 찾지 못한 경우 원본 이름도 시도
-    if id_column is None:
-        id_column = config['time_series']['id_column']
-    if year_column is None:
-        year_column = config['time_series']['year_column']
-    
-    # 검증 설정 가져오기
-    validation_config = config['features'].get('validation', {})
-    validation_scope = validation_config.get('scope', 'sample')  # 'sample', 'full', 'none'
-    sample_size = validation_config.get('sample_size', 10)
-    
     validation_results = {}
     
-    # 검증할 피처 목록
-    features_to_validate = [
-        'anxiety_score_rolling_mean_2y',
-        'anxiety_score_rolling_std_2y', 
-        'anxiety_score_yoy_change',
-        'depress_score_rolling_mean_2y',
-        'depress_score_rolling_std_2y',
-        'depress_score_yoy_change',
-        'sleep_score_rolling_mean_2y',
-        'sleep_score_rolling_std_2y',
-        'sleep_score_yoy_change'
-    ]
+    # 검증 설정 가져오기
+    validation_config = config['features']['validation']
+    validation_scope = validation_config['scope']
+    sample_size = validation_config['sample_size']
+    
+    # 시계열 설정 가져오기
+    id_column = config['time_series']['id_column']
+    year_column = config['time_series']['year_column']
+    
+    # 설정에서 점수 타겟 가져오기
+    target_vars = config.get('features', {}).get('target_variables', {})
+    original_targets = target_vars.get('original_targets', {})
+    score_targets = original_targets.get('score_targets', ['anxiety_score', 'depress_score', 'sleep_score', 'comp'])
+    
+    # 검증할 피처 목록 동적 생성
+    features_to_validate = []
+    for score_target in score_targets:
+        features_to_validate.extend([
+            f'{score_target}_rolling_mean_2y',
+            f'{score_target}_rolling_std_2y',
+            f'{score_target}_yoy_change'
+        ])
     
     logger.info(f"기존 피처 데이터 유출 검증 시작 (범위: {validation_scope})")
+    logger.info(f"검증할 피처: {features_to_validate}")
     
     # 검증할 ID 목록 결정
     if id_column not in df.columns:
@@ -487,22 +484,124 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
 
 
 def main(config=None):
-    """
-    테스트용 메인 함수
-    """
-    import yaml
+    """피처 엔지니어링 메인 함수"""
     if config is None:
-        print("[WARNING] config 인자가 전달되지 않았습니다. 외부에서 config를 넘겨주세요.")
-        return
-    # 테스트 데이터 로드
-    data_path = "data/processed/processed_data_with_features.csv"
-    df = pd.read_csv(data_path, nrows=1000)
-    logger.info(f"테스트 데이터 로드: {len(df):,} 행")
-    # 피처 엔지니어링 수행
+        # 설정 파일 로드
+        config_path = Path("configs/base/common.yaml")
+        
+        if not config_path.exists():
+            logger.error("설정 파일을 찾을 수 없습니다!")
+            logger.error("해결 방법:")
+            logger.error("1. configs/base/common.yaml 파일이 존재하는지 확인하세요")
+            logger.error("2. 파일이 없다면 다음 구조로 생성하세요:")
+            logger.error("""
+features:
+  target_variables:
+    original_targets:
+      score_targets: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+      binary_targets: ["suicide_t", "suicide_a"]
+    next_year_targets:
+      score_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+      binary_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_types:
+    regression_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+    classification_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_columns: ["suicide_a_next_year"]
+  
+  validation:
+    scope: "sample"
+    sample_size: 1000
+  
+  enable_lagged_features: true
+  lag_periods: [1, 2]
+  lagged_features:
+    columns: ["anxiety_score", "depress_score", "sleep_score"]
+  
+  enable_rolling_features: true
+  rolling_features:
+    windows: [2, 3]
+    columns: ["anxiety_score", "depress_score", "sleep_score"]
+    functions: ["mean", "std"]
+
+time_series:
+  id_column: "id"
+  year_column: "yov"
+  date_column: "date"
+            """)
+            raise SystemExit(1)
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                import yaml
+                config = yaml.safe_load(f)
+        except Exception as e:
+            logger.error(f"설정 파일 로드 중 오류 발생: {e}")
+            logger.error("해결 방법:")
+            logger.error("1. configs/base/common.yaml 파일의 YAML 문법을 확인하세요")
+            logger.error("2. 들여쓰기가 올바른지 확인하세요 (탭 대신 스페이스 사용)")
+            logger.error("3. 콜론(:) 뒤에 공백이 있는지 확인하세요")
+            raise SystemExit(1)
+        
+        # 필수 설정 검증
+        required_sections = ['features']
+        for section in required_sections:
+            if section not in config:
+                logger.error(f"설정 파일에 필수 섹션 '{section}'이 없습니다!")
+                logger.error("해결 방법:")
+                logger.error(f"configs/base/common.yaml 파일에 '{section}' 섹션을 추가하세요")
+                raise SystemExit(1)
+        
+        features_config = config.get('features', {})
+        required_feature_sections = ['target_variables', 'target_types']
+        missing_sections = [section for section in required_feature_sections if section not in features_config]
+        
+        if missing_sections:
+            logger.error(f"설정 파일에 필수 피처 섹션이 없습니다: {missing_sections}")
+            logger.error("해결 방법:")
+            logger.error("configs/base/common.yaml 파일의 features 섹션에 다음을 추가하세요:")
+            logger.error("""
+  target_variables:
+    original_targets:
+      score_targets: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+      binary_targets: ["suicide_t", "suicide_a"]
+    next_year_targets:
+      score_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+      binary_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_types:
+    regression_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+    classification_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+            """)
+            raise SystemExit(1)
+    
+    # 데이터 로드
+    data_path = Path("data/processed/processed_data_with_features.csv")
+    if not data_path.exists():
+        logger.error("전처리된 데이터 파일을 찾을 수 없습니다!")
+        logger.error("해결 방법:")
+        logger.error("1. data/processed/processed_data_with_features.csv 파일이 존재하는지 확인하세요")
+        logger.error("2. 파일이 없다면 먼저 src/data_analysis.py를 실행하여 데이터를 전처리하세요")
+        raise SystemExit(1)
+    
+    df = pd.read_csv(data_path)
+    logger.info(f"데이터 로드 완료: {df.shape}")
+    
+    # 피처 엔지니어링 실행
     df_engineered, feature_info = fit_feature_engineering(df, config)
-    # 피처 컬럼 확인
-    feature_columns = get_feature_columns(df_engineered, config)
-    logger.info("피처 엔지니어링 테스트 완료!")
+    
+    # 결과 저장
+    output_path = Path("data/processed/processed_data_with_features.csv")
+    df_engineered.to_csv(output_path, index=False)
+    logger.info(f"피처 엔지니어링 완료: {df_engineered.shape}")
+    logger.info(f"결과 저장: {output_path}")
+    
+    # 타겟 컬럼 정보 출력
+    target_columns = get_target_columns(config)
+    logger.info(f"타겟 컬럼: {target_columns}")
+    
+    print("✅ 설정 파일 검증 완료 - 피처 엔지니어링이 정상적으로 완료되었습니다.")
 
 
 if __name__ == "__main__":

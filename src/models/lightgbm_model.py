@@ -14,6 +14,7 @@ import warnings
 from src.utils import find_column_with_remainder
 from .base_model import BaseModel
 from .model_factory import register_model
+from pathlib import Path
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -122,7 +123,9 @@ class LightGBMModel(BaseModel):
             X_val, y_val = self._validate_input_data(X_val, y_val)
         else:
             X = self._validate_input_data(X)
-            y = y.select_dtypes(include=['number', 'bool', 'category'])
+            # y 데이터는 타겟이므로 컬럼을 제거하지 않음 (중요!)
+            if isinstance(y, pd.Series):
+                y = y.to_frame()
             y = y.replace([np.inf, -np.inf], np.nan)
         
         logger.info(f"전처리 후 데이터 형태: X={X.shape}, y={y.shape}")
@@ -414,22 +417,84 @@ class LightGBMModel(BaseModel):
 
 def main():
     """테스트용 메인 함수"""
-    # 설정 예시
-    config = {
-        'features': {
-            'target_columns': ['suicide_a_next_year']
-        },
-        'model': {
-            'model_type': 'lightgbm',
-            'lightgbm': {
-                'num_leaves': 31,
-                'learning_rate': 0.1,
-                'feature_fraction': 0.9,
-                'bagging_fraction': 0.8,
-                'bagging_freq': 5,
-                'verbose': -1,
-                'early_stopping_rounds': 10
-            }
+    # 설정 파일 로드
+    config_path = Path("configs/base/common.yaml")
+    
+    if not config_path.exists():
+        logger.error("설정 파일을 찾을 수 없습니다!")
+        logger.error("해결 방법:")
+        logger.error("1. configs/base/common.yaml 파일이 존재하는지 확인하세요")
+        logger.error("2. 파일이 없다면 다음 구조로 생성하세요:")
+        logger.error("""
+features:
+  target_variables:
+    original_targets:
+      score_targets: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+      binary_targets: ["suicide_t", "suicide_a"]
+    next_year_targets:
+      score_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+      binary_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_types:
+    regression_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+    classification_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_columns: ["suicide_a_next_year"]
+        """)
+        raise SystemExit(1)
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            import yaml
+            config = yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"설정 파일 로드 중 오류 발생: {e}")
+        logger.error("해결 방법:")
+        logger.error("1. configs/base/common.yaml 파일의 YAML 문법을 확인하세요")
+        logger.error("2. 들여쓰기가 올바른지 확인하세요 (탭 대신 스페이스 사용)")
+        logger.error("3. 콜론(:) 뒤에 공백이 있는지 확인하세요")
+        raise SystemExit(1)
+    
+    # 필수 설정 검증
+    required_sections = ['features']
+    for section in required_sections:
+        if section not in config:
+            logger.error(f"설정 파일에 필수 섹션 '{section}'이 없습니다!")
+            logger.error("해결 방법:")
+            logger.error(f"configs/base/common.yaml 파일에 '{section}' 섹션을 추가하세요")
+            raise SystemExit(1)
+    
+    features_config = config.get('features', {})
+    required_feature_sections = ['target_columns', 'target_variables', 'target_types']
+    missing_sections = [section for section in required_feature_sections if section not in features_config]
+    
+    if missing_sections:
+        logger.error(f"설정 파일에 필수 피처 섹션이 없습니다: {missing_sections}")
+        logger.error("해결 방법:")
+        logger.error("configs/base/common.yaml 파일의 features 섹션에 다음을 추가하세요:")
+        logger.error("""
+  target_columns: ["suicide_a_next_year"]
+  target_variables:
+    original_targets:
+      score_targets: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+      binary_targets: ["suicide_t", "suicide_a"]
+    next_year_targets:
+      score_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+      binary_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_types:
+    regression_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+    classification_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+        """)
+        raise SystemExit(1)
+    
+    # 모델 설정 추가
+    config['model'] = {
+        'model_type': 'lightgbm',
+        'lightgbm': {
+            'n_estimators': 100,
+            'max_depth': 6,
+            'learning_rate': 0.1,
         }
     }
     
@@ -438,6 +503,7 @@ def main():
     print(f"모델 타입: {model.model_type}")
     print(f"회귀 타겟: {model.regression_targets}")
     print(f"분류 타겟: {model.classification_targets}")
+    print("✅ 설정 파일 검증 완료 - 모델이 정상적으로 초기화되었습니다.")
 
 
 if __name__ == "__main__":

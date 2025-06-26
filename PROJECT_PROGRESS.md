@@ -24,6 +24,15 @@
 - **데이터 품질 보장**: NaN/Inf 값 자동 감지 및 처리로 튜닝 과정의 안정성 향상
 - **코드 품질 개선**: 하이퍼파라미터 튜닝 과정에서 발생할 수 있는 숫자 관련 오류 방지
 
+### ✅ 2025-06-26 기준 최신 업데이트: 자동화된 실험 시스템 구축
+- **명령행 인자 기반 실험 제어**: 20개 이상의 인자로 실험 완전 자동화
+- **ConfigManager 확장**: `apply_command_line_args` 메서드로 명령행 인자를 config에 자동 적용
+- **확장된 평가 지표**: 10개 추가 메트릭 (MCC, Kappa, Specificity, NPV, FPR, FNR 등)
+- **유연한 데이터 분할**: 3가지 분할 전략 지원 (group_kfold, time_series_walk_forward, time_series_group_kfold)
+- **고급 하이퍼파라미터 튜닝**: Early Stopping, 타임아웃, 피처 선택 등 고급 기능 지원
+- **MLflow 로깅 개선**: 모든 trial의 상세 메트릭과 전체 튜닝 과정 요약 로깅
+- **실험 결과 파일 개선**: 상세한 메트릭 정보와 MLflow 링크 포함
+
 ### ✅ 2025-06-24 기준 최신 실험 결과 반영
 - XGBoost, CatBoost, LightGBM, Random Forest 4개 모델 모두 ConfigManager 기반 하이퍼파라미터 튜닝 및 전체 파이프라인 정상 동작 확인
 - **nrows 옵션을 통한 부분 데이터 실험 정상 동작 확인**

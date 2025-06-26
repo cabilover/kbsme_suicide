@@ -246,30 +246,150 @@ class ConfigManager:
         Args:
             config: 출력할 설정 딕셔너리
         """
-        print("\n" + "="*50)
-        print("설정 요약")
-        print("="*50)
+        logger.info("=== 설정 요약 ===")
+        logger.info(f"모델 타입: {config.get('model', {}).get('model_type', 'N/A')}")
+        logger.info(f"데이터 경로: {config.get('data', {}).get('data_path', 'N/A')}")
+        logger.info(f"검증 전략: {config.get('validation', {}).get('strategy', 'N/A')}")
+        logger.info(f"CV 폴드 수: {config.get('validation', {}).get('num_cv_folds', 'N/A')}")
+        logger.info(f"튜닝 시도 횟수: {config.get('tuning', {}).get('n_trials', 'N/A')}")
+    
+    def apply_command_line_args(self, config: Dict[str, Any], args: Any) -> Dict[str, Any]:
+        """
+        명령행 인자를 config에 적용
         
-        # 모델 정보
-        if 'model' in config:
-            model_type = config['model'].get('model_type', 'Unknown')
-            print(f"모델 타입: {model_type}")
+        Args:
+            config: 기본 설정 딕셔너리
+            args: argparse.Namespace 객체
+            
+        Returns:
+            인자가 적용된 설정 딕셔너리
+        """
+        config = copy.deepcopy(config)
         
-        # 피처 정보
-        if 'features' in config:
-            target_cols = config['features'].get('target_columns', [])
-            print(f"타겟 변수: {len(target_cols)}개")
-            print(f"  - {', '.join(target_cols)}")
+        # 데이터 관련 인자
+        if hasattr(args, 'data_path') and args.data_path:
+            config['data']['data_path'] = args.data_path
+            logger.info(f"데이터 경로 업데이트: {args.data_path}")
         
-        # 검증 정보
-        if 'validation' in config:
-            strategy = config['validation'].get('strategy', 'Unknown')
-            n_folds = config['validation'].get('num_cv_folds', 'Unknown')
-            print(f"검증 전략: {strategy} ({n_folds}폴드)")
+        if hasattr(args, 'nrows') and args.nrows:
+            config['data']['nrows'] = args.nrows
+            logger.info(f"데이터 행 수 제한: {args.nrows}")
         
-        # 실험 정보
-        if 'experiment' in config:
-            exp_name = config['experiment'].get('name', 'Unknown')
-            print(f"실험 이름: {exp_name}")
+        # 검증 관련 인자
+        if hasattr(args, 'split_strategy') and args.split_strategy:
+            config['validation']['strategy'] = args.split_strategy
+            logger.info(f"분할 전략 업데이트: {args.split_strategy}")
         
-        print("="*50) 
+        if hasattr(args, 'cv_folds') and args.cv_folds:
+            config['validation']['num_cv_folds'] = args.cv_folds
+            logger.info(f"CV 폴드 수 업데이트: {args.cv_folds}")
+        
+        if hasattr(args, 'test_size') and args.test_size:
+            config['validation']['test_size'] = args.test_size
+            logger.info(f"테스트 세트 비율 업데이트: {args.test_size}")
+        
+        if hasattr(args, 'random_state') and args.random_state:
+            config['validation']['random_state'] = args.random_state
+            logger.info(f"랜덤 시드 업데이트: {args.random_state}")
+        
+        # 튜닝 관련 인자
+        if hasattr(args, 'n_trials') and args.n_trials:
+            config['tuning']['n_trials'] = args.n_trials
+            logger.info(f"튜닝 시도 횟수 업데이트: {args.n_trials}")
+        
+        if hasattr(args, 'tuning_direction') and args.tuning_direction:
+            config['tuning']['direction'] = args.tuning_direction
+            logger.info(f"튜닝 방향 업데이트: {args.tuning_direction}")
+        
+        if hasattr(args, 'primary_metric') and args.primary_metric:
+            config['evaluation']['primary_metric'] = args.primary_metric
+            logger.info(f"주요 평가 지표 업데이트: {args.primary_metric}")
+        
+        if hasattr(args, 'n_jobs') and args.n_jobs:
+            config['tuning']['n_jobs'] = args.n_jobs
+            logger.info(f"병렬 처리 작업 수 업데이트: {args.n_jobs}")
+        
+        if hasattr(args, 'timeout') and args.timeout:
+            config['tuning']['timeout'] = args.timeout
+            logger.info(f"튜닝 타임아웃 업데이트: {args.timeout}초")
+        
+        # Early stopping 관련 인자
+        if hasattr(args, 'early_stopping') and args.early_stopping:
+            if 'training' not in config:
+                config['training'] = {}
+            config['training']['early_stopping'] = True
+            logger.info("Early stopping 활성화")
+        
+        if hasattr(args, 'early_stopping_rounds') and args.early_stopping_rounds:
+            if 'training' not in config:
+                config['training'] = {}
+            config['training']['early_stopping_rounds'] = args.early_stopping_rounds
+            logger.info(f"Early stopping 라운드 수 업데이트: {args.early_stopping_rounds}")
+        
+        # 피처 선택 관련 인자
+        if hasattr(args, 'feature_selection') and args.feature_selection:
+            if 'features' not in config:
+                config['features'] = {}
+            config['features']['enable_feature_selection'] = True
+            logger.info("피처 선택 활성화")
+        
+        if hasattr(args, 'feature_selection_method') and args.feature_selection_method:
+            if 'features' not in config:
+                config['features'] = {}
+            config['features']['feature_selection_method'] = args.feature_selection_method
+            logger.info(f"피처 선택 방법 업데이트: {args.feature_selection_method}")
+        
+        if hasattr(args, 'feature_selection_k') and args.feature_selection_k:
+            if 'features' not in config:
+                config['features'] = {}
+            config['features']['feature_selection_k'] = args.feature_selection_k
+            logger.info(f"선택할 피처 수 업데이트: {args.feature_selection_k}")
+        
+        # 리샘플링 관련 인자
+        if hasattr(args, 'resampling_enabled') and args.resampling_enabled:
+            if 'resampling' not in config:
+                config['resampling'] = {}
+            config['resampling']['enabled'] = True
+            logger.info("리샘플링 활성화")
+        
+        if hasattr(args, 'resampling_method') and args.resampling_method:
+            if 'resampling' not in config:
+                config['resampling'] = {}
+            config['resampling']['method'] = args.resampling_method
+            logger.info(f"리샘플링 방법 업데이트: {args.resampling_method}")
+        
+        if hasattr(args, 'resampling_ratio') and args.resampling_ratio:
+            if 'resampling' not in config:
+                config['resampling'] = {}
+            config['resampling']['target_ratio'] = args.resampling_ratio
+            logger.info(f"리샘플링 목표 비율 업데이트: {args.resampling_ratio}")
+        
+        # MLflow 관련 인자
+        if hasattr(args, 'experiment_name') and args.experiment_name:
+            if 'mlflow' not in config:
+                config['mlflow'] = {}
+            config['mlflow']['experiment_name'] = args.experiment_name
+            logger.info(f"MLflow 실험 이름 업데이트: {args.experiment_name}")
+        
+        # 모델 저장 관련 인자
+        if hasattr(args, 'save_model') and args.save_model:
+            if 'model' not in config:
+                config['model'] = {}
+            config['model']['save_model'] = True
+            logger.info("모델 저장 활성화")
+        
+        if hasattr(args, 'save_predictions') and args.save_predictions:
+            if 'evaluation' not in config:
+                config['evaluation'] = {}
+            config['evaluation']['save_predictions'] = True
+            logger.info("예측 결과 저장 활성화")
+        
+        # 로그 레벨 관련 인자
+        if hasattr(args, 'verbose') and args.verbose is not None:
+            if 'logging' not in config:
+                config['logging'] = {}
+            config['logging']['level'] = args.verbose
+            logger.info(f"로그 레벨 업데이트: {args.verbose}")
+        
+        logger.info("명령행 인자 적용 완료")
+        return config 

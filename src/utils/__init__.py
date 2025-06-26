@@ -35,4 +35,27 @@ def set_random_seed(seed=42):
     
     logger.info(f"랜덤 시드 설정 완료: {seed}")
 
-__all__ = ['ConfigManager', 'find_column_with_remainder', 'safe_feature_name', 'set_random_seed'] 
+def safe_float_conversion(value):
+    """Convert value to float if possible; otherwise return np.nan."""
+    import numbers
+    import numpy as np
+    
+    if isinstance(value, numbers.Number):
+        return float(value)
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return np.nan
+
+def is_valid_number(value):
+    """Return True if value is numeric and not NaN/Inf."""
+    import numbers
+    import numpy as np
+    
+    return (
+        isinstance(value, numbers.Number)
+        and not np.isnan(value)
+        and not np.isinf(value)
+    )
+
+__all__ = ['ConfigManager', 'find_column_with_remainder', 'safe_feature_name', 'set_random_seed', 'safe_float_conversion', 'is_valid_number'] 

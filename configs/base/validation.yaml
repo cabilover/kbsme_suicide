@@ -13,7 +13,7 @@ data_split:
 # 검증 전략 설정
 validation:
   strategy: "group_kfold"  # "time_series_walk_forward", "time_series_group_kfold", "group_kfold"
-  num_cv_folds: 5  # 기본 5폴드, 디버깅용 3폴드
+  num_cv_folds: 5  # 기본 5폴드로 변경
   test_size: 0.15  # 테스트 세트 비율
   random_state: 42
   

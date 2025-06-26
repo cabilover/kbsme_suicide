@@ -13,6 +13,33 @@ features:
   target_columns:
     - "suicide_a_next_year"
   
+  # 타겟 변수명 정의 (하드코딩 제거를 위한 중앙화)
+  target_variables:
+    # 원본 타겟 변수명 (전처리 전)
+    original_targets:
+      # 연속형 점수
+      score_targets:
+        - "anxiety_score"
+        - "depress_score" 
+        - "sleep_score"
+        - "comp"
+      # 이진형 타겟
+      binary_targets:
+        - "suicide_t"
+        - "suicide_a"
+    
+    # 다음 해 예측 타겟 (전처리 후)
+    next_year_targets:
+      # 연속형 점수
+      score_targets:
+        - "anxiety_score_next_year"
+        - "depress_score_next_year" 
+        - "sleep_score_next_year"
+      # 이진형 타겟
+      binary_targets:
+        - "suicide_t_next_year"
+        - "suicide_a_next_year"
+  
   # 타겟 타입 정의 (자동 판단 대신 명시적 정의)
   target_types:
     # 회귀 타겟 (연속형 값 예측)

@@ -15,7 +15,7 @@ from sklearn.metrics import (
     precision_score, recall_score, f1_score, accuracy_score,
     roc_auc_score, confusion_matrix, classification_report,
     precision_recall_curve, average_precision_score,
-    balanced_accuracy_score, roc_curve
+    balanced_accuracy_score, roc_curve, fbeta_score, matthews_corrcoef, cohen_kappa_score
 )
 import warnings
 from pathlib import Path
@@ -126,8 +126,10 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
         if positive_samples == 0:
             logger.warning("양성 클래스가 없습니다. 모든 메트릭을 0.0으로 설정합니다.")
             return {
-                'precision': 0.0, 'recall': 0.0, 'f1': 0.0, 'accuracy': 1.0,
+                'precision': 0.0, 'recall': 0.0, 'f1': 0.0, 'f1_beta': 0.0, 'accuracy': 1.0,
                 'balanced_accuracy': 0.5, 'roc_auc': 0.0, 'pr_auc': 0.0,
+                'mcc': 0.0, 'kappa': 0.0, 'specificity': 1.0, 'sensitivity': 0.0,
+                'ppv': 0.0, 'npv': 1.0, 'fpr': 0.0, 'fnr': 0.0, 'tpr': 0.0, 'tnr': 1.0,
                 'positive_samples': 0, 'negative_samples': total_samples,
                 'total_samples': total_samples, 'positive_ratio': 0.0
             }
@@ -140,9 +142,10 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
                 precision = 0.0  # 모든 예측이 0이므로 precision은 0
                 recall = 0.0     # 모든 예측이 0이므로 recall은 0
                 f1 = 0.0         # precision과 recall이 모두 0이므로 f1도 0
+                f1_beta = 0.0    # F1-beta도 0
             except Exception as e:
                 logger.warning(f"기본 지표 계산 중 예외 발생: {e}, 0.0 반환")
-                precision = recall = f1 = 0.0
+                precision = recall = f1 = f1_beta = 0.0
             
             # 정확도는 높을 수 있음 (대부분이 0이므로)
             try:
@@ -157,12 +160,46 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
                 logger.warning(f"Balanced accuracy 계산 중 예외 발생: {e}, 0.0 반환")
                 balanced_acc = 0.5  # 균형 정확도는 0.5 (랜덤 예측과 동일)
             
+            # 추가 메트릭 계산 (모든 예측이 0인 경우)
+            try:
+                mcc = matthews_corrcoef(y_true, y_pred)
+            except Exception as e:
+                logger.warning(f"MCC 계산 중 예외 발생: {e}, 0.0 반환")
+                mcc = 0.0
+            
+            try:
+                kappa = cohen_kappa_score(y_true, y_pred)
+            except Exception as e:
+                logger.warning(f"Kappa 계산 중 예외 발생: {e}, 0.0 반환")
+                kappa = 0.0
+            
+            try:
+                tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+                specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+                npv = tn / (tn + fn) if (tn + fn) > 0 else 0.0
+                fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+                fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+            except Exception as e:
+                logger.warning(f"Confusion matrix 기반 메트릭 계산 중 예외 발생: {e}, 0.0 반환")
+                specificity = npv = fpr = fnr = 0.0
+            
             metrics = {
                 'precision': precision,
                 'recall': recall,
                 'f1': f1,
+                'f1_beta': f1_beta,
                 'accuracy': accuracy,
                 'balanced_accuracy': balanced_acc,
+                'mcc': mcc,
+                'kappa': kappa,
+                'specificity': specificity,
+                'sensitivity': recall,  # recall과 동일
+                'ppv': precision,  # precision과 동일
+                'npv': npv,
+                'fpr': fpr,
+                'fnr': fnr,
+                'tpr': recall,  # recall과 동일
+                'tnr': specificity,  # specificity와 동일
                 'positive_samples': positive_samples,
                 'negative_samples': negative_samples,
                 'total_samples': total_samples,
@@ -215,12 +252,98 @@ def calculate_classification_metrics(y_true: pd.Series, y_pred: pd.Series,
             logger.warning(f"Balanced accuracy 계산 중 예외 발생: {e}, 0.0 반환")
             balanced_acc = 0.0
         
+        # 추가 메트릭 계산
+        try:
+            # F1-beta score (beta=2로 recall에 더 가중치)
+            f1_beta = fbeta_score(y_true, y_pred, beta=2, zero_division=0)
+        except Exception as e:
+            logger.warning(f"F1-beta 계산 중 예외 발생: {e}, 0.0 반환")
+            f1_beta = 0.0
+        
+        try:
+            # Matthews Correlation Coefficient (MCC)
+            mcc = matthews_corrcoef(y_true, y_pred)
+        except Exception as e:
+            logger.warning(f"MCC 계산 중 예외 발생: {e}, 0.0 반환")
+            mcc = 0.0
+        
+        try:
+            # Cohen's Kappa
+            kappa = cohen_kappa_score(y_true, y_pred)
+        except Exception as e:
+            logger.warning(f"Kappa 계산 중 예외 발생: {e}, 0.0 반환")
+            kappa = 0.0
+        
+        try:
+            # Specificity (True Negative Rate)
+            tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+        except Exception as e:
+            logger.warning(f"Specificity 계산 중 예외 발생: {e}, 0.0 반환")
+            specificity = 0.0
+        
+        try:
+            # Negative Predictive Value (NPV)
+            tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+            npv = tn / (tn + fn) if (tn + fn) > 0 else 0.0
+        except Exception as e:
+            logger.warning(f"NPV 계산 중 예외 발생: {e}, 0.0 반환")
+            npv = 0.0
+        
+        try:
+            # False Positive Rate (FPR)
+            tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+            fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        except Exception as e:
+            logger.warning(f"FPR 계산 중 예외 발생: {e}, 0.0 반환")
+            fpr = 0.0
+        
+        try:
+            # False Negative Rate (FNR)
+            tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+            fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+        except Exception as e:
+            logger.warning(f"FNR 계산 중 예외 발생: {e}, 0.0 반환")
+            fnr = 0.0
+        
+        try:
+            # Positive Predictive Value (PPV) - Precision과 동일
+            ppv = precision
+        except Exception as e:
+            logger.warning(f"PPV 계산 중 예외 발생: {e}, 0.0 반환")
+            ppv = 0.0
+        
+        try:
+            # True Positive Rate (TPR) - Recall과 동일
+            tpr = recall
+        except Exception as e:
+            logger.warning(f"TPR 계산 중 예외 발생: {e}, 0.0 반환")
+            tpr = 0.0
+        
+        try:
+            # True Negative Rate (TNR) - Specificity와 동일
+            tnr = specificity
+        except Exception as e:
+            logger.warning(f"TNR 계산 중 예외 발생: {e}, 0.0 반환")
+            tnr = 0.0
+        
         metrics = {
             'precision': precision,
             'recall': recall,
             'f1': f1,
+            'f1_beta': f1_beta,  # F1-beta (beta=2)
             'accuracy': accuracy,
             'balanced_accuracy': balanced_acc,
+            'mcc': mcc,  # Matthews Correlation Coefficient
+            'kappa': kappa,  # Cohen's Kappa
+            'specificity': specificity,  # True Negative Rate
+            'sensitivity': recall,  # True Positive Rate (recall과 동일)
+            'ppv': ppv,  # Positive Predictive Value (precision과 동일)
+            'npv': npv,  # Negative Predictive Value
+            'fpr': fpr,  # False Positive Rate
+            'fnr': fnr,  # False Negative Rate
+            'tpr': tpr,  # True Positive Rate
+            'tnr': tnr,  # True Negative Rate
             'positive_samples': positive_samples,
             'negative_samples': negative_samples,
             'total_samples': total_samples,
@@ -577,15 +700,50 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
     for target in y_true.columns:
         logger.info(f"타겟 '{target}' 평가 중...")
         
-        # 예측 컬럼 찾기
+        # 예측 컬럼 찾기 - 다양한 접두사 고려
         pred_col = None
-        for col in y_pred.columns:
-            if target in col or col.replace('remainder__', '') == target.replace('remainder__', ''):
-                pred_col = col
-                break
+        
+        # 1. 정확한 매칭
+        if target in y_pred.columns:
+            pred_col = target
+            logger.info(f"타겟 '{target}' -> 정확한 매칭: '{pred_col}'")
+        else:
+            # 2. 접두사 제거 후 매칭
+            target_clean = target
+            for prefix in ['pass__', 'num__', 'cat__', 'remainder__']:
+                if target.startswith(prefix):
+                    target_clean = target[len(prefix):]
+                    break
+            
+            # 접두사가 제거된 타겟과 매칭
+            if target_clean in y_pred.columns:
+                pred_col = target_clean
+                logger.info(f"타겟 '{target}' -> 접두사 제거 매칭: '{pred_col}'")
+            else:
+                # 3. 예측 컬럼에서 접두사 제거 후 매칭
+                for col in y_pred.columns:
+                    col_clean = col
+                    for prefix in ['pass__', 'num__', 'cat__', 'remainder__']:
+                        if col.startswith(prefix):
+                            col_clean = col[len(prefix):]
+                            break
+                    
+                    if col_clean == target_clean:
+                        pred_col = col
+                        logger.info(f"타겟 '{target}' -> 예측 컬럼 접두사 제거 매칭: '{pred_col}'")
+                        break
+                
+                # 4. 부분 매칭 (마지막 수단)
+                if pred_col is None:
+                    for col in y_pred.columns:
+                        if target_clean in col or col in target_clean:
+                            pred_col = col
+                            logger.info(f"타겟 '{target}' -> 부분 매칭: '{pred_col}'")
+                            break
         
         if pred_col is None:
             logger.warning(f"타겟 '{target}'에 대한 예측 컬럼을 찾을 수 없습니다.")
+            logger.warning(f"사용 가능한 예측 컬럼: {list(y_pred.columns)}")
             continue
         
         logger.info(f"타겟 '{target}' -> 예측 컬럼 '{pred_col}'")
@@ -639,7 +797,7 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
                     logger.info(f"타겟 '{target}' - 예측 확률 사용 가능")
                 target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean, pred_proba)
                 # 빈 메트릭도 0.0으로 채움
-                for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                for m in ['precision','recall','f1','f1_beta','accuracy','balanced_accuracy','mcc','kappa','specificity','sensitivity','ppv','npv','fpr','fnr','tpr','tnr','roc_auc','pr_auc']:
                     if m not in target_metrics:
                         target_metrics[m] = 0.0
                 all_metrics[target] = target_metrics
@@ -649,7 +807,7 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
                 # 설정에 없는 타겟은 기본적으로 분류로 처리
                 logger.warning(f"타겟 '{target}' - 설정에 미정의 (기본 분류로 처리)")
                 target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
-                for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                for m in ['precision','recall','f1','f1_beta','accuracy','balanced_accuracy','mcc','kappa','specificity','sensitivity','ppv','npv','fpr','fnr','tpr','tnr','roc_auc','pr_auc']:
                     if m not in target_metrics:
                         target_metrics[m] = 0.0
                 all_metrics[target] = target_metrics
@@ -679,7 +837,7 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
                         logger.info(f"타겟 '{target}' - 예측 확률 사용 가능")
                     target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean, pred_proba)
                     # 빈 메트릭도 0.0으로 채움
-                    for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                    for m in ['precision','recall','f1','f1_beta','accuracy','balanced_accuracy','mcc','kappa','specificity','sensitivity','ppv','npv','fpr','fnr','tpr','tnr','roc_auc','pr_auc']:
                         if m not in target_metrics:
                             target_metrics[m] = 0.0
                     all_metrics[target] = target_metrics
@@ -689,7 +847,7 @@ def calculate_all_metrics(y_true: pd.DataFrame, y_pred: pd.DataFrame,
                     # 기본적으로 분류로 처리
                     logger.info(f"타겟 '{target}' - 기본 분류 문제로 처리")
                     target_metrics = calculate_classification_metrics(true_vals_clean, pred_vals_clean)
-                    for m in ['precision','recall','f1','accuracy','balanced_accuracy','roc_auc','pr_auc']:
+                    for m in ['precision','recall','f1','f1_beta','accuracy','balanced_accuracy','mcc','kappa','specificity','sensitivity','ppv','npv','fpr','fnr','tpr','tnr','roc_auc','pr_auc']:
                         if m not in target_metrics:
                             target_metrics[m] = 0.0
                     all_metrics[target] = target_metrics
@@ -740,8 +898,17 @@ def print_evaluation_summary(all_metrics: Dict[str, Any], feature_validation_res
             logger.info(f"  Precision: {metrics['precision']:.4f}")
             logger.info(f"  Recall: {metrics['recall']:.4f}")
             logger.info(f"  F1-Score: {metrics['f1']:.4f}")
+            logger.info(f"  F1-Beta (β=2): {metrics['f1_beta']:.4f}")
             logger.info(f"  Accuracy: {metrics['accuracy']:.4f}")
             logger.info(f"  Balanced Accuracy: {metrics['balanced_accuracy']:.4f}")
+            logger.info(f"  MCC: {metrics['mcc']:.4f}")
+            logger.info(f"  Cohen's Kappa: {metrics['kappa']:.4f}")
+            logger.info(f"  Specificity (TNR): {metrics['specificity']:.4f}")
+            logger.info(f"  Sensitivity (TPR): {metrics['sensitivity']:.4f}")
+            logger.info(f"  PPV: {metrics['ppv']:.4f}")
+            logger.info(f"  NPV: {metrics['npv']:.4f}")
+            logger.info(f"  FPR: {metrics['fpr']:.4f}")
+            logger.info(f"  FNR: {metrics['fnr']:.4f}")
             if 'roc_auc' in metrics and metrics['roc_auc'] is not None:
                 logger.info(f"  ROC-AUC: {metrics['roc_auc']:.4f}")
             if 'pr_auc' in metrics and metrics['pr_auc'] is not None:

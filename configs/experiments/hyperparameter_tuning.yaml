@@ -13,7 +13,7 @@ experiment:
 # 튜닝 기본 설정
 tuning:
   direction: "maximize"  # "maximize" 또는 "minimize"
-  n_trials: 5  # 튜닝 횟수, 5회로 증가
+  n_trials: 100  # 튜닝 횟수, 100회로 증가
   n_jobs: 1  # 병렬 처리 설정 (MLflow 충돌 방지)
   
   # 조기 종료 설정

@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 import warnings
 from src.feature_engineering import get_target_columns_from_data
 from src.utils import find_column_with_remainder, safe_feature_name
+from src.models import ModelFactory
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -76,7 +77,16 @@ def train_model(X_train: pd.DataFrame, y_train: pd.DataFrame,
     # 검증 성능 평가 - evaluation.py의 calculate_all_metrics 사용
     from src.evaluation import calculate_all_metrics
     val_predictions = model.predict(X_val)
-    val_metrics = calculate_all_metrics(y_val, val_predictions, config=config)
+    
+    # 예측 확률 계산 (ROC-AUC, PR-AUC 계산용)
+    try:
+        val_predictions_proba = model.predict_proba(X_val)
+        logger.info(f"예측 확률 계산 성공: {list(val_predictions_proba.keys())}")
+    except Exception as e:
+        logger.warning(f"예측 확률 계산 실패: {e}")
+        val_predictions_proba = None
+    
+    val_metrics = calculate_all_metrics(y_val, val_predictions, y_pred_proba=val_predictions_proba, config=config)
     
     # 피처 검증 결과 (첫 번째 폴드만, 원본 데이터에서 수행)
     feature_validation_results = None

@@ -57,6 +57,38 @@ kbsmc_suicide/
 └── README.md                        # 이 파일
 ```
 
+## 프로젝트 룰
+
+### 설정 파일 관리 원칙
+- **설정 우선**: 모든 하드코딩된 값은 설정 파일로 이동하여 중앙 관리
+- **설정 검증**: 설정 파일이 없거나 문제가 있는 경우 하드코딩으로 진행하지 않고 진행을 멈춤
+- **명확한 오류 메시지**: 설정 파일 문제 시 구체적인 수정 방법을 로그로 안내
+- **타겟 변수명 중앙화**: `configs/base/common.yaml`의 `target_variables` 섹션에서 모든 타겟 변수명 정의
+- **타겟 타입 명시**: `configs/base/common.yaml`의 `target_types` 섹션에서 회귀/분류 타입 명시적 정의
+
+### 코드 컨벤션
+- **PEP 8 준수**: 파이썬 코드 스타일 가이드 준수
+- **설정 기반 로직**: 하드코딩 대신 설정 파일 기반 동적 처리
+- **오류 처리**: 설정 파일 문제 시 `SystemExit` 또는 `ValueError`로 명확한 오류 발생
+- **로깅**: 설정 파일 문제 시 구체적인 수정 방법을 `logger.error()`로 안내
+
+### 설정 파일 구조
+```yaml
+# configs/base/common.yaml
+features:
+  target_variables:
+    original_targets:
+      score_targets: ["anxiety_score", "depress_score", "sleep_score", "comp"]
+      binary_targets: ["suicide_t", "suicide_a"]
+    next_year_targets:
+      score_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+      binary_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+  
+  target_types:
+    regression_targets: ["anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year"]
+    classification_targets: ["suicide_t_next_year", "suicide_a_next_year"]
+```
+
 ## 환경 설정
 
 ### 1. Conda 환경 활성화
@@ -101,6 +133,130 @@ python scripts/run_hyperparameter_tuning.py --model-type lightgbm --experiment-t
 
 # Random Forest 모델 튜닝
 python scripts/run_hyperparameter_tuning.py --model-type random_forest --experiment-type hyperparameter_tuning --nrows 10000
+```
+
+### 🚀 자동화된 실험을 위한 고급 명령행 인자 사용법
+
+#### 기본 인자
+```bash
+# 필수 인자
+--model-type {xgboost,lightgbm,random_forest,catboost}  # 사용할 모델 타입
+--experiment-type {hyperparameter_tuning,focal_loss,resampling}  # 실험 타입
+
+# 데이터 관련 인자
+--data_path PATH                    # 데이터 파일 경로
+--nrows INT                         # 사용할 데이터 행 수 (테스트용)
+```
+
+#### 검증 및 분할 관련 인자
+```bash
+# 데이터 분할 전략
+--split-strategy {group_kfold,time_series_walk_forward,time_series_group_kfold}
+--cv-folds INT                      # 교차 검증 폴드 수 (기본: 5)
+--test-size FLOAT                   # 테스트 세트 비율 (0.0-1.0, 기본: 0.15)
+--random-state INT                  # 랜덤 시드 (기본: 42)
+```
+
+#### 하이퍼파라미터 튜닝 관련 인자
+```bash
+# 튜닝 설정
+--n-trials INT                      # 튜닝 시도 횟수 (기본: 100)
+--tuning-direction {maximize,minimize}  # 튜닝 방향
+--primary-metric STR                # 주요 평가 지표 (f1, precision, recall, mcc, roc_auc, pr_auc 등)
+--n-jobs INT                        # 병렬 처리 작업 수
+--timeout INT                       # 튜닝 타임아웃 (초)
+```
+
+#### Early Stopping 관련 인자
+```bash
+--early-stopping                    # Early stopping 활성화
+--early-stopping-rounds INT         # Early stopping 라운드 수
+```
+
+#### 피처 선택 관련 인자
+```bash
+--feature-selection                 # 피처 선택 활성화
+--feature-selection-method {mutual_info,chi2,f_classif,recursive}  # 피처 선택 방법
+--feature-selection-k INT           # 선택할 피처 수
+```
+
+#### 리샘플링 관련 인자
+```bash
+--resampling-enabled                # 리샘플링 활성화
+--resampling-method {smote,borderline_smote,adasyn,under_sampling,hybrid}  # 리샘플링 방법
+--resampling-ratio FLOAT            # 리샘플링 후 양성 클래스 비율
+```
+
+#### MLflow 및 결과 저장 관련 인자
+```bash
+--experiment-name STR               # MLflow 실험 이름
+--save-model                        # 최적 모델 저장
+--save-predictions                  # 예측 결과 저장
+--mlflow_ui                         # 튜닝 완료 후 MLflow UI 실행
+--verbose {0,1,2}                   # 로그 레벨 (0: 최소, 1: 기본, 2: 상세)
+```
+
+#### 실용적인 실험 예시
+
+**1. 빠른 테스트 (소규모 데이터)**
+```bash
+python scripts/run_hyperparameter_tuning.py \
+  --model-type xgboost \
+  --experiment-type hyperparameter_tuning \
+  --nrows 1000 \
+  --n-trials 10 \
+  --cv-folds 3 \
+  --verbose 2
+```
+
+**2. 시간 기반 분할 실험**
+```bash
+python scripts/run_hyperparameter_tuning.py \
+  --model-type catboost \
+  --experiment-type hyperparameter_tuning \
+  --split-strategy time_series_walk_forward \
+  --cv-folds 5 \
+  --n-trials 50 \
+  --primary-metric pr_auc
+```
+
+**3. 리샘플링 비교 실험**
+```bash
+python scripts/run_hyperparameter_tuning.py \
+  --model-type lightgbm \
+  --experiment-type resampling \
+  --resampling-comparison \
+  --resampling-methods smote adasyn \
+  --n-trials 30 \
+  --cv-folds 5
+```
+
+**4. 피처 선택 실험**
+```bash
+python scripts/run_hyperparameter_tuning.py \
+  --model-type random_forest \
+  --experiment-type hyperparameter_tuning \
+  --feature-selection \
+  --feature-selection-method mutual_info \
+  --feature-selection-k 10 \
+  --n-trials 50 \
+  --save-model \
+  --save-predictions
+```
+
+**5. 고성능 실험 (전체 데이터)**
+```bash
+python scripts/run_hyperparameter_tuning.py \
+  --model-type xgboost \
+  --experiment-type hyperparameter_tuning \
+  --n-trials 200 \
+  --cv-folds 5 \
+  --primary-metric f1 \
+  --early-stopping \
+  --early-stopping-rounds 50 \
+  --save-model \
+  --save-predictions \
+  --mlflow_ui
 ```
 
 ### ConfigManager 기반 리샘플링 비교 실험 실행 (✅ 최신 기능)
@@ -173,6 +329,17 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **설정 기반 타겟 타입 정의**: 하드코딩된 로직 대신 `configs/base/common.yaml`의 `target_types` 섹션에서 명시적 정의
 - **다중 타겟 지원**: 각 타겟별로 개별 평가 수행 후 통합 결과 반환
 - **타겟별 메트릭 구조**: 평면화된 메트릭에서 타겟별 구조화된 메트릭으로 개선
+- **확장된 평가 지표**: 10개 추가 메트릭 (MCC, Kappa, Specificity, NPV, FPR, FNR 등)
+
+### 🚀 자동화된 실험 시스템 (✅ 최신 기능)
+- **명령행 인자 기반 실험 제어**: 20개 이상의 인자로 실험 완전 자동화
+- **ConfigManager 기반 설정 관리**: 계층적 설정 파일 자동 병합 및 검증
+- **유연한 데이터 분할**: 3가지 분할 전략 (group_kfold, time_series_walk_forward, time_series_group_kfold)
+- **고급 하이퍼파라미터 튜닝**: Optuna 기반 최적화, Early Stopping, 타임아웃 지원
+- **피처 선택 자동화**: Mutual Info, Chi2, F-test, Recursive Feature Elimination 지원
+- **리샘플링 실험 통합**: SMOTE, ADASYN, Borderline SMOTE 등 비교 실험
+- **MLflow 실험 추적**: 모든 실험 결과 자동 로깅 및 시각화
+- **결과 저장 자동화**: 모델, 예측 결과, 시각화 자동 저장
 
 ### 불균형 데이터 처리
 - **클래스 가중치, scale_pos_weight**: XGBoost 등에서 불균형 데이터 처리를 위한 가중치 옵션 지원
