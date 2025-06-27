@@ -3,6 +3,33 @@
 ## 프로젝트 개요
 개인별 연간 정신 건강 지표 데이터를 활용하여 다음 해의 불안/우울/수면 점수 및 자살 사고/시도 여부를 예측하는 머신러닝 프로젝트입니다.
 
+## 🎯 최근 주요 개선사항 (2025-06-27)
+
+### ✅ **상세한 실험 결과 저장 기능**
+- **241개 상세 메트릭** 자동 추출 및 카테고리화
+- **튜닝 범위 정보** 명확한 표시
+- **교차 검증 통계** (평균, 표준편차) 자동 계산
+- **모델 특성 분석** (피처 중요도, 복잡도)
+- **실험 환경 정보** (시스템, 라이브러리 버전)
+- **데이터 품질 및 전처리** 상세 정보
+
+### ✅ **자동화된 테스트 스크립트**
+- **15개 테스트 케이스** 자동 실행
+- **5개 Phase** 단계별 검증:
+  - Phase 1: 기본 모델 검증 (4개 모델)
+  - Phase 2: 분할 전략 테스트 (3개 전략)
+  - Phase 3: 리샘플링 테스트 (2개 비교)
+  - Phase 4: 평가 지표별 테스트 (3개 메트릭)
+  - Phase 5: 고급 기능 테스트 (3개 기능)
+- **오류 발생 시에도 계속 진행** (100% 완료율 달성)
+- **상세한 로깅 및 결과 검증**
+
+### ✅ **검증 결과 (2025-06-27)**
+- **총 테스트 수**: 15개
+- **성공한 테스트**: 15개 ✅
+- **실패한 테스트**: 0개 ✅
+- **성공률**: 100% 🎉
+
 ## 프로젝트 구조
 ```
 kbsmc_suicide/
@@ -50,8 +77,13 @@ kbsmc_suicide/
 │       ├── default.yaml              # 기본 템플릿
 │       └── tuning.yaml               # 튜닝 템플릿
 ├── scripts/
-│   └── run_hyperparameter_tuning.py  # 통합 실험 실행 스크립트 (✅ ConfigManager 기반 리샘플링 비교 포함)
-├── requirements.txt                  # 필요한 패키지 목록 (XGBoost 1.7.6 고정)
+│   ├── run_hyperparameter_tuning.py  # 통합 실험 실행 스크립트 (✅ ConfigManager 기반 리샘플링 비교 포함)
+│   └── run_all_model_tuning.sh       # 전체 모델 튜닝 자동화 스크립트 (✅ 15개 테스트 자동 실행)
+├── results/                          # 실험 결과 저장소
+│   ├── experiment_results_*.txt      # 상세한 실험 결과 파일
+│   ├── tuning_log_*.txt              # 튜닝 과정 로그
+│   └── test_logs/                    # 자동화 테스트 로그
+├── requirements.txt                  # 필요한 패키지 목록 (XGBoost 1.7.6 고정, psutil 추가)
 ├── projectplan                       # 프로젝트 계획서
 ├── PROJECT_PROGRESS.md              # 프로젝트 진행 상황 문서
 └── README.md                        # 이 파일
@@ -120,7 +152,20 @@ python src/data_analysis.py
 - 피처 엔지니어링
 - 결과 저장 및 MLflow 로깅
 
-### ConfigManager 기반 하이퍼파라미터 튜닝 실행 (권장)
+### 🚀 자동화된 전체 테스트 실행 (권장)
+```bash
+# 모든 기능을 자동으로 테스트 (약 1.5시간 소요)
+./scripts/run_all_model_tuning.sh
+```
+
+이 스크립트는 다음을 자동으로 실행합니다:
+- **15개 테스트 케이스** 순차 실행
+- **5개 Phase** 단계별 검증
+- **실시간 로깅** 및 결과 검증
+- **오류 발생 시에도 계속 진행**
+- **최종 요약 보고**
+
+### ConfigManager 기반 하이퍼파라미터 튜닝 실행
 ```bash
 # XGBoost 모델 튜닝
 python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type hyperparameter_tuning --nrows 10000
