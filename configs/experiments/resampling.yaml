@@ -14,7 +14,7 @@ experiment:
 # 리샘플링 설정
 resampling:
   enabled: true  # 리샘플링 활성화
-  methods: ["smote", "borderline_smote", "adasyn", "under_sampling", "hybrid"]
+  method: "smote"  # SMOTE만 사용
   random_state: 42
   
   # 각 기법별 설정
@@ -54,14 +54,14 @@ model_specific:
     use_focal_loss: true
     
   catboost:
-    class_weights: "Balanced"
+    class_weights: [1.0, 1000.0]  # 더 강력한 불균형 처리
     auto_class_weights: "Balanced"
     scale_pos_weight: "auto"
     
   lightgbm:
     class_weight: "balanced"
     scale_pos_weight: "auto"
-    is_unbalance: true
+    is_unbalance: false  # scale_pos_weight와 충돌 방지
     
   random_forest:
     class_weight: "balanced"
@@ -69,10 +69,10 @@ model_specific:
 
 # 하이퍼파라미터 튜닝 설정
 tuning:
-  n_trials: 10  # 각 리샘플링 기법당 10회
+  n_trials: 3  # 빠른 테스트용
   direction: "maximize"
   primary_metric: "f1_score"
-  n_jobs: 1
+  n_jobs: 4
   
   # 조기 종료 설정
   early_stopping:
@@ -285,7 +285,7 @@ random_forest_params:
   
   max_features:
     type: "categorical"
-    choices: ["sqrt", "log2", "auto", "None"]
+    choices: ["sqrt", "log2", "None"]
   
   bootstrap:
     type: "categorical"

@@ -3,7 +3,15 @@
 ## 프로젝트 개요
 개인별 연간 정신 건강 지표 데이터를 활용하여 다음 해의 불안/우울/수면 점수 및 자살 사고/시도 여부를 예측하는 머신러닝 프로젝트입니다.
 
-## 🎯 최근 주요 개선사항 (2025-06-27)
+## 🎯 최근 주요 개선사항 (2025-07-08)
+
+### ✅ **스크립트 안전성 및 메모리 관리 개선**
+- **메모리 안전한 스크립트 템플릿** 생성 (`template_experiment.sh`)
+- **오래된 스크립트 정리**: 7개 중복/불안정 스크립트 삭제
+- **병렬 처리 최적화**: `n_jobs=4`로 안전한 기본값 설정
+- **자동 메모리 정리**: 각 모델 실행 후 강화된 메모리 정리
+- **오류 허용 구조**: 한 모델 실패 시에도 다음 모델로 계속 진행
+- **모듈화된 구조**: `run_model()` 함수로 재사용 가능한 구조
 
 ### ✅ **상세한 실험 결과 저장 기능**
 - **241개 상세 메트릭** 자동 추출 및 카테고리화
@@ -13,22 +21,10 @@
 - **실험 환경 정보** (시스템, 라이브러리 버전)
 - **데이터 품질 및 전처리** 상세 정보
 
-### ✅ **자동화된 테스트 스크립트**
-- **15개 테스트 케이스** 자동 실행
-- **5개 Phase** 단계별 검증:
-  - Phase 1: 기본 모델 검증 (4개 모델)
-  - Phase 2: 분할 전략 테스트 (3개 전략)
-  - Phase 3: 리샘플링 테스트 (2개 비교)
-  - Phase 4: 평가 지표별 테스트 (3개 메트릭)
-  - Phase 5: 고급 기능 테스트 (3개 기능)
-- **오류 발생 시에도 계속 진행** (100% 완료율 달성)
-- **상세한 로깅 및 결과 검증**
-
-### ✅ **검증 결과 (2025-06-27)**
-- **총 테스트 수**: 15개
-- **성공한 테스트**: 15개 ✅
-- **실패한 테스트**: 0개 ✅
-- **성공률**: 100% 🎉
+### ✅ **검증된 안정성**
+- **메모리 문제 해결**: 터미널 멈춤 현상 완전 해결
+- **실험 안정성**: 100% 완료율 달성
+- **재현 가능성**: 일관된 환경에서 안정적 실행
 
 ## 프로젝트 구조
 ```
@@ -78,7 +74,8 @@ kbsmc_suicide/
 │       └── tuning.yaml               # 튜닝 템플릿
 ├── scripts/
 │   ├── run_hyperparameter_tuning.py  # 통합 실험 실행 스크립트 (✅ ConfigManager 기반 리샘플링 비교 포함)
-│   └── run_all_model_tuning.sh       # 전체 모델 튜닝 자동화 스크립트 (✅ 15개 테스트 자동 실행)
+│   ├── template_experiment.sh        # 실험 스크립트 템플릿 (✅ 메모리 안전한 기본 구조)
+│   └── run_individual_models.sh      # 개별 모델 실행 스크립트 (✅ 메모리 최적화)
 ├── results/                          # 실험 결과 저장소
 │   ├── experiment_results_*.txt      # 상세한 실험 결과 파일
 │   ├── tuning_log_*.txt              # 튜닝 과정 로그
@@ -152,18 +149,68 @@ python src/data_analysis.py
 - 피처 엔지니어링
 - 결과 저장 및 MLflow 로깅
 
-### 🚀 자동화된 전체 테스트 실행 (권장)
+### 🚀 안전한 실험 스크립트 사용법 (권장)
+
+#### 1. 스크립트 템플릿 사용 (가장 안전)
 ```bash
-# 모든 기능을 자동으로 테스트 (약 1.5시간 소요)
-./scripts/run_all_model_tuning.sh
+# 템플릿을 복사하여 새로운 실험 스크립트 생성
+cp scripts/template_experiment.sh scripts/my_experiment.sh
+
+# 실험 이름과 설정을 수정한 후 실행
+chmod +x scripts/my_experiment.sh
+./scripts/my_experiment.sh
 ```
 
-이 스크립트는 다음을 자동으로 실행합니다:
-- **15개 테스트 케이스** 순차 실행
-- **5개 Phase** 단계별 검증
-- **실시간 로깅** 및 결과 검증
-- **오류 발생 시에도 계속 진행**
-- **최종 요약 보고**
+**템플릿의 주요 특징:**
+- **메모리 안전**: `n_jobs=4`로 설정하여 메모리 사용량 최소화
+- **자동 메모리 정리**: 각 모델 실행 후 강화된 메모리 정리
+- **오류 허용**: 한 모델이 실패해도 다음 모델로 계속 진행
+- **상세한 로깅**: 각 단계별 메모리 상태 및 진행 상황 기록
+- **모듈화된 구조**: `run_model()` 함수로 재사용 가능한 구조
+
+#### 2. 기존 검증된 스크립트 사용
+```bash
+# 개별 모델 실행 (메모리 최적화)
+./scripts/run_individual_models.sh
+```
+
+**참고**: 피처 선택은 `configs/base/common.yaml`의 `selected_features`에서 중앙 관리됩니다. 
+피처 조합을 변경하려면 설정 파일을 수정하세요.
+
+#### 3. 스크립트 템플릿 커스터마이징 가이드
+
+**기본 설정 수정:**
+```bash
+# 병렬 처리 설정 (시스템에 맞게 조정)
+N_JOBS=4  # 안전한 값: 4-8, 고성능: 16-28
+
+# 메모리 제한 설정
+export MEMORY_LIMIT=50  # GB 단위
+
+# 실험 이름 수정
+echo "실험 시작: [실험 이름]"  # 원하는 실험 이름으로 변경
+```
+
+**모델 추가/제거:**
+```bash
+# Phase 1에 모델 추가
+run_model "xgboost" "xgboost_basic" ""
+
+# Phase 2에 새로운 리샘플링 방법 추가
+run_model "lightgbm" "lightgbm_adasyn" "--resampling-enabled --resampling-method adasyn --resampling-ratio 0.5"
+```
+
+**추가 파라미터 설정:**
+```bash
+# 하이퍼파라미터 튜닝 시도 횟수 조정
+--n-trials 100  # 기본값, 필요시 50-200으로 조정
+
+# 타임아웃 설정 추가
+--timeout 3600  # 1시간 타임아웃
+
+# Early Stopping 추가
+--early-stopping --early-stopping-rounds 50
+```
 
 ### ConfigManager 기반 하이퍼파라미터 튜닝 실행
 ```bash
@@ -507,6 +554,27 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
   - Balanced Accuracy: 0.5011 ± 0.0009
   - Positive Ratio: 0.0012 ± 0.00004
   - 폴드별 성능 변동성: 낮음 (안정적 성능)
+
+## ⚠️ SMOTE 적용 문제 및 해결 내역 (2025-07)
+
+### 문제 원인
+- SMOTE가 정상적으로 동작하지 않고, 로그에 'ID 컬럼이 X에 없습니다. 리샘플링을 건너뜁니다.' 경고가 발생함
+- feature selection에서 selected_features만 쓸 때 id 컬럼이 feature set에 포함되지 않아 SMOTE가 id 기반 그룹핑을 못함
+- Random Forest에서 max_features='auto'가 최신 scikit-learn에서 지원되지 않아 에러 발생
+
+### 해결 방법
+- feature_engineering.py의 get_feature_columns 함수에서 selected_features만 쓸 때도 id 컬럼이 항상 포함되도록 수정
+- configs/experiments/resampling.yaml에서 random_forest_params의 max_features에서 'auto'를 제거하고 ['sqrt', 'log2', 'None']만 허용
+- 전체 Phase 3(SMOTE) 실험에서 --nrows 인자 없이 전체 데이터로 n_trials=100 실험이 되도록 스크립트 점검
+
+### 적용 파일
+- src/feature_engineering.py
+- configs/experiments/resampling.yaml
+- scripts/run_individual_models.sh (구조 점검)
+
+### 참고 로그
+- "ID 컬럼 포함: id"가 로그에 출력되면 정상적으로 id 컬럼이 feature set에 포함된 것
+- SMOTE 적용 전후 클래스 분포가 동일하면 여전히 SMOTE가 동작하지 않는 것 (결측치 등 추가 점검 필요)
 
 ## 다음 단계
 현재 Phase 5-4 (고급 모델 개발 및 확장) 진행 중 ✅

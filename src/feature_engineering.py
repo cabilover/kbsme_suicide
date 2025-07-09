@@ -410,9 +410,8 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
     target_columns = get_target_columns(config)
     
     if not selected_features:
-        # 기존 로직 (타겟, ID, 날짜, 범주형/수치형 제외)
+        # 기존 로직 (타겟, 날짜, 범주형/수치형 제외) - ID 컬럼은 리샘플링을 위해 포함
         exclude_columns = target_columns + [
-            config['time_series']['id_column'],
             config['time_series']['date_column'],
             config['time_series']['year_column']
         ]
@@ -426,6 +425,13 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
     
     # selected_features 기반으로 피처 필터링
     available_features = []
+    
+    # ID 컬럼은 리샘플링을 위해 항상 포함
+    id_column = config['time_series']['id_column']
+    if id_column in all_columns:
+        available_features.append(id_column)
+        logger.info(f"ID 컬럼 포함: {id_column}")
+    
     for feature in selected_features:
         # 1. 원본 이름으로 찾기
         if feature in all_columns:
