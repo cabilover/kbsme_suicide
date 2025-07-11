@@ -137,6 +137,9 @@ data/
 # Model files (excluded as requested)
 models/
 
+# Log files (excluded as requested)
+logs/
+
 # Results files (excluded as requested)
 results/
 
