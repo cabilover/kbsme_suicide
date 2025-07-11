@@ -8,6 +8,46 @@
 
 ## 현재 진행 상황
 
+### ✅ 2025-07-11 기준 최신 업데이트: PR-AUC -inf 문제 해결 및 하이퍼파라미터 튜닝 안정화
+- **PR-AUC -inf 문제 원인 분석 및 해결**:
+  - **원인**: 과도하게 넓은 하이퍼파라미터 범위 (특히 `scale_pos_weight: 10.0-1000.0`)로 인한 모델 불안정성
+  - **해결**: 하이퍼파라미터 범위를 7월 10일 안정 설정으로 복원
+    - `scale_pos_weight`: 10.0-100.0 (극단적 값 제한)
+    - `iterations`: 50-500 (모델 복잡도 제한)
+    - `depth`: 3-10 (과적합 방지)
+  - **결과**: PR-AUC가 -inf 대신 0.0 근처의 안정적인 값으로 복원
+
+- **데이터 샘플링 설정 개선**:
+  - **샘플링 비활성화**: `configs/base/common.yaml`에서 `sampling.enabled: false`로 설정하여 전체 데이터셋 사용
+  - **빠른 테스트 지원**: 샘플링 설정을 주석으로 유지하여 필요시 활성화 가능
+
+- **SMOTE 리샘플링 문제 해결**:
+  - **ID 컬럼 포함 문제**: `src/preprocessing.py`에서 ID 컬럼을 항상 통과 컬럼에 포함하도록 수정
+  - **리샘플링 안정성**: SMOTE 적용 시 ID 컬럼 누락으로 인한 오류 방지
+
+- **하이퍼파라미터 튜닝 범위 최적화**:
+  - **XGBoost**: `scale_pos_weight` 10.0-100.0, `reg_alpha/reg_lambda` 문자열 형식 수정
+  - **LightGBM**: `scale_pos_weight` 10.0-100.0, 안정적인 범위 설정
+  - **CatBoost**: `scale_pos_weight` 10.0-100.0, 모델 복잡도 제한
+  - **Random Forest**: 안정적인 범위 유지
+
+- **모델별 설정 파일 업데이트**:
+  - **CatBoost**: `configs/models/catboost.yaml` - 안정적인 기본값 설정
+  - **LightGBM**: `configs/models/lightgbm.yaml` - 균형잡힌 파라미터 설정
+  - **XGBoost**: `configs/models/xgboost.yaml` - 안정적인 범위 설정
+  - **Random Forest**: `configs/models/random_forest.yaml` - 검증된 설정 유지
+
+- **평가 지표 복원**:
+  - **PR-AUC 복원**: `configs/experiments/hyperparameter_tuning.yaml`과 `resampling.yaml`에서 primary_metric을 다시 'pr_auc'로 설정
+  - **극단적 불균형 대응**: PR-AUC가 극도로 불균형한 데이터에서도 안정적으로 계산되도록 개선
+
+- **실험 스크립트 개선**:
+  - **새로운 스크립트**: `scripts/run_individual_models.sh` - 개별 모델 튜닝 실행
+  - **템플릿 스크립트**: `scripts/template_experiment.sh` - 실험 템플릿 제공
+  - **기존 스크립트 제거**: `scripts/run_all_model_tuning.sh` - 더 이상 사용하지 않는 스크립트 제거
+
+- **requirements.txt 업데이트**: 최신 라이브러리 버전 반영
+
 ### ✅ 2025-06-27 기준 최신 업데이트: 상세한 실험 결과 저장 및 자동화된 테스트 시스템 구축
 - **상세한 실험 결과 저장 기능**: `save_experiment_results` 함수 대폭 개선
   - **241개 상세 메트릭** 자동 추출 및 카테고리화 (기본 성능, 교차 검증 통계, Trial별 성능, Fold별 성능, 튜닝 과정, 모델 특성)

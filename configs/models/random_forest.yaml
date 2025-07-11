@@ -5,13 +5,13 @@
 model:
   model_type: "random_forest"
   
-  # Random Forest 특화 파라미터
+  # Random Forest 특화 파라미터 (자살 예측 최적화)
   random_forest:
-    # 기본 파라미터
-    n_estimators: 100
-    max_depth: 10
-    min_samples_split: 2
-    min_samples_leaf: 1
+    # 기본 파라미터 (참고 repository 기반)
+    n_estimators: 300  # 100 -> 300으로 증가
+    max_depth: 20      # 10 -> 20으로 증가
+    min_samples_split: 10
+    min_samples_leaf: 4
     max_features: "sqrt"
     
     # 부트스트랩 설정

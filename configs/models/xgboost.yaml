@@ -5,15 +5,15 @@
 model:
   model_type: "xgboost"
   
-  # XGBoost 모델 파라미터
+  # XGBoost 모델 파라미터 (자살 예측 최적화)
   xgboost:
-    n_estimators: 100
-    max_depth: 6
+    n_estimators: 300  # 100 -> 300으로 증가
+    max_depth: 8       # 6 -> 8로 증가
     learning_rate: 0.1
-    subsample: 0.8
-    colsample_bytree: 0.8
+    subsample: 0.9     # 0.8 -> 0.9로 증가
+    colsample_bytree: 0.9  # 0.8 -> 0.9로 증가
     min_child_weight: 1
-    scale_pos_weight: 1.0  # 분류 문제에서 자동으로 계산됨
+    scale_pos_weight: 1.0  # 자동 계산됨 (코드에서 _calculate_scale_pos_weight 사용)
     early_stopping_rounds: 10
     verbose: 0
     n_jobs: 28   # 병렬처리 코어 수

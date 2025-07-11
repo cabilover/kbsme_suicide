@@ -39,9 +39,8 @@ class LightGBMModel(BaseModel):
         # BaseModel 초기화
         super().__init__(config)
         
-        # 모델 파라미터
+        # 모델 파라미터 (설정에서만 가져옴, 코드 내 하드코딩 금지)
         self.model_params = config['model']['lightgbm']
-        
         logger.info(f"  - Focal Loss 사용: False")
     
     def _get_model_params(self, target: str) -> Dict[str, Any]:
@@ -57,6 +56,8 @@ class LightGBMModel(BaseModel):
         params = self.model_params.copy()
         params.pop('focal_loss', None)  # LightGBM은 focal_loss를 지원하지 않음
         params.pop('use_focal_loss', None)  # 내부 플래그도 제거
+        # 병렬 파라미터 추가
+        params['num_threads'] = self.model_params.get('num_threads', 4)
 
         # 타겟 접두사 제거
         clean_target = target
@@ -68,26 +69,45 @@ class LightGBMModel(BaseModel):
         clean_classification_targets = [
             t[len(prefix):] if any(t.startswith(prefix) for prefix in ['pass__', 'num__', 'cat__']) else t
             for t in self.classification_targets
-            for prefix in ['pass__', 'num__', 'cat__'] if t.startswith(prefix) or prefix == 'pass__'
         ]
+        
+        # 분류 문제인 경우
         if clean_target in clean_classification_targets:
-            # 분류 문제인 경우
-            # 설정 파일에서 scale_pos_weight 가져오기 (기본값 1.0)
+            # 반드시 config에서만 파라미터를 가져옴 (코드 내 하드코딩 금지)
             scale_pos_weight = self.model_params.get('scale_pos_weight', 1.0)
-            
-            # 만약 scale_pos_weight가 1.0이면 자동 계산을 위해 None으로 설정
-            # (LightGBM이 자동으로 클래스 비율에 따라 계산)
-            if scale_pos_weight == 1.0:
-                params['scale_pos_weight'] = None
+            is_unbalance = self.model_params.get('is_unbalance', False)
+            class_weight = self.model_params.get('class_weight', None)
+            # 파라미터 설정 (is_unbalance와 scale_pos_weight 충돌 방지)
+            if scale_pos_weight != 1.0 and scale_pos_weight is not None and scale_pos_weight != "auto":
+                    params['scale_pos_weight'] = scale_pos_weight
+                params.pop('is_unbalance', None)  # scale_pos_weight 우선 시 is_unbalance 제거
+                    logger.info(f"  - scale_pos_weight: {scale_pos_weight}")
+                logger.info(f"  - is_unbalance: False (scale_pos_weight와 충돌 방지)")
+            elif is_unbalance:
+                params['is_unbalance'] = is_unbalance
+                params.pop('scale_pos_weight', None)  # is_unbalance 우선 시 scale_pos_weight 제거
+                logger.info(f"  - is_unbalance: {is_unbalance}")
+                logger.info(f"  - scale_pos_weight: 1.0 (is_unbalance와 충돌 방지)")
             else:
-                params['scale_pos_weight'] = scale_pos_weight
-            
+                params.pop('is_unbalance', None)
+                params.pop('scale_pos_weight', None)
+                logger.info(f"  - scale_pos_weight: 1.0 (기본값)")
+                logger.info(f"  - is_unbalance: False (기본값)")
+            if class_weight and class_weight != "None":
+                params['class_weight'] = class_weight
+                logger.info(f"  - class_weight: {class_weight}")
             params['objective'] = 'binary'
             params['metric'] = 'binary_logloss'
+            # 설정된 파라미터 요약
+            logger.info(f"=== {target} 클래스 불균형 처리 설정 ===")
+            logger.info(f"  - scale_pos_weight: {scale_pos_weight}")
+            logger.info(f"  - is_unbalance: {is_unbalance}")
+            logger.info(f"  - class_weight: {class_weight}")
         else:
             # 회귀 문제
             params['objective'] = 'regression'
             params['metric'] = 'rmse'
+        
         return params
     
     def fit(self, X: pd.DataFrame, y: pd.DataFrame, 
@@ -162,6 +182,19 @@ class LightGBMModel(BaseModel):
             
             # 모델 파라미터 준비
             params = self._get_model_params(target)
+            
+            # scale_pos_weight가 "auto"인 경우 자동 계산
+            if params.get('scale_pos_weight') == "auto":
+                # 양성 클래스와 음성 클래스 비율 계산
+                positive_count = (y_target == 1).sum()
+                negative_count = (y_target == 0).sum()
+                if positive_count > 0 and negative_count > 0:
+                    auto_scale_pos_weight = negative_count / positive_count
+                    params['scale_pos_weight'] = auto_scale_pos_weight
+                    logger.info(f"  - scale_pos_weight 자동 계산: {auto_scale_pos_weight:.2f} (음성:양성 = {negative_count}:{positive_count})")
+                else:
+                    logger.warning(f"  - scale_pos_weight 자동 계산 실패: 양성 또는 음성 클래스가 없음")
+                    params['scale_pos_weight'] = 1.0
             
             # 실제 적용되는 파라미터 로깅
             logger.info(f"=== {target} 모델 파라미터 ===")

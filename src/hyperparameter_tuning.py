@@ -20,6 +20,8 @@ from datetime import datetime
 import os
 import time
 import numbers
+import gc
+import psutil
 from src.utils import safe_float_conversion, is_valid_number
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -36,6 +38,58 @@ from src.evaluation import calculate_all_metrics
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def monitor_memory_usage():
+    """현재 메모리 사용량을 모니터링하고 로깅합니다."""
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        memory_percent = process.memory_percent()
+        
+        logger.info(f"메모리 사용량: {memory_info.rss / 1024 / 1024:.1f}MB ({memory_percent:.1f}%)")
+        return memory_info.rss / 1024 / 1024  # MB 단위
+    except Exception as e:
+        logger.warning(f"메모리 모니터링 실패: {e}")
+        return None
+
+
+def cleanup_memory():
+    """메모리를 강제로 정리합니다."""
+    try:
+        # Python 가비지 컬렉션
+        collected = gc.collect()
+        logger.info(f"가비지 컬렉션 완료: {collected}개 객체 정리")
+        
+        # 메모리 사용량 확인
+        memory_usage = monitor_memory_usage()
+        
+        return memory_usage
+    except Exception as e:
+        logger.warning(f"메모리 정리 실패: {e}")
+        return None
+
+
+def safe_cleanup_memory():
+    """안전한 메모리 정리 - 중요한 객체는 보호"""
+    try:
+        # 현재 메모리 상태 확인
+        before_memory = monitor_memory_usage()
+        
+        # 가비지 컬렉션만 수행 (강제 정리는 하지 않음)
+        collected = gc.collect()
+        
+        # 메모리 정리 후 상태 확인
+        after_memory = monitor_memory_usage()
+        
+        if before_memory and after_memory:
+            freed_memory = before_memory - after_memory
+            logger.info(f"안전한 메모리 정리: {collected}개 객체 정리, {freed_memory:.1f}MB 해제")
+        
+        return after_memory
+    except Exception as e:
+        logger.warning(f"안전한 메모리 정리 실패: {e}")
+        return None
 
 
 class HyperparameterTuner:
@@ -426,7 +480,24 @@ class HyperparameterTuner:
                 mlflow.log_param(f"trial_{trial.number}_error", str(e)[:100])  # 에러 메시지 길이 제한
             except Exception as log_e:
                 logger.warning(f"Trial {trial.number} 예외 로깅 실패: {log_e}")
+            
+            # 메모리 정리 (예외 발생 시에도)
+            cleanup_memory()
             return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
+        
+        finally:
+            # Trial 완료 후 메모리 정리 (안전한 방식)
+            if trial.number % 10 == 0:  # 10개 trial마다 메모리 정리 (덜 자주)
+                logger.info(f"Trial {trial.number} 완료 후 메모리 정리")
+                # 안전한 메모리 정리 - 중요한 객체는 보호
+                try:
+                    # 현재 trial의 결과가 이미 MLflow에 저장되었는지 확인
+                    if hasattr(trial, 'state') and trial.state == optuna.trial.TrialState.COMPLETE:
+                        # trial이 성공적으로 완료된 경우에만 메모리 정리
+                        collected = gc.collect()
+                        logger.info(f"Trial {trial.number} 메모리 정리 완료: {collected}개 객체")
+                except Exception as e:
+                    logger.warning(f"Trial {trial.number} 메모리 정리 실패: {e}")
     
     def optimize(self, start_mlflow_run: bool = True) -> Tuple[Dict[str, Any], float]:
         """
@@ -463,6 +534,10 @@ class HyperparameterTuner:
     
     def _run_optimization(self, n_trials: int, n_jobs: int) -> Tuple[Dict[str, Any], float]:
         """실제 최적화 실행 로직"""
+        # 최적화 시작 전 메모리 상태 확인
+        logger.info("최적화 시작 전 메모리 상태:")
+        monitor_memory_usage()
+        
         try:
             mlflow.log_param("optimization_algorithm", self.tuning_config['sampler']['type'])
         except Exception as e:
@@ -492,6 +567,14 @@ class HyperparameterTuner:
         
         self.best_params = self.study.best_params
         self.best_score = self.study.best_value
+        
+        # 최적화 완료 후 메모리 상태 확인
+        logger.info("최적화 완료 후 메모리 상태:")
+        monitor_memory_usage()
+        
+        # 최종 안전한 메모리 정리
+        logger.info("최적화 완료 후 안전한 메모리 정리:")
+        safe_cleanup_memory()
         
         # 7. 전체 튜닝 과정 요약 로깅
         try:

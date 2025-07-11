@@ -6,6 +6,12 @@ data:
   file_path: "data/processed/processed_data_with_features.csv"
   encoding: "utf-8"
   na_values: ["", "nan", "NaN", "NULL", "null"]
+  # 빠른 테스트를 위한 샘플링 설정
+  sampling:
+    enabled: false  # 샘플링 비활성화 (전체 데이터셋 사용)
+    method: "id_based"  # ID 기반 샘플링
+    sample_size: 10000  # 10,000명의 환자
+    random_state: 42  # 재현성을 위한 시드
 
 # 피처 설정
 features:
@@ -74,13 +80,16 @@ features:
     - "treatment_type"
     - "follow_up_status"
   
-  # 선택된 피처 목록 - 기본 인구학적 정보 + 정신 건강 점수만
+  # 선택된 피처 목록 - comp 제외, suicide_t 추가
   selected_features: [
     # 기본 인구학적 정보
     "age", "sex",
     
-    # 정신 건강 점수
-    "comp", "anxiety_score", "depress_score", "sleep_score"
+    # 정신 건강 점수 (comp 제외)
+    "anxiety_score", "depress_score", "sleep_score",
+    
+    # 자살 관련 변수 추가
+    "suicide_t"
   ]
   
   # 기존 피처 검증 설정
@@ -112,7 +121,7 @@ preprocessing:
   
   # 수치형 결측치 처리
   numerical_imputation:
-    strategy: "mean"  # "mean", "median", "constant"
+    strategy: "median"  # "mean", "median", "constant"
     columns: ["anxiety_score", "depress_score", "sleep_score", "comp", "age"]
   
   # 범주형 결측치 처리

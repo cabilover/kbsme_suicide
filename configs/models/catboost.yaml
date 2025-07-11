@@ -5,11 +5,11 @@
 model:
   model_type: "catboost"
   
-  # CatBoost 특화 파라미터
+  # CatBoost 모델 파라미터 (자살 예측 최적화)
   catboost:
-    # 기본 파라미터
-    iterations: 100
-    depth: 6
+    # 기본 파라미터 (참고 repository 기반)
+    iterations: 300  # 100 -> 300으로 증가
+    depth: 8         # 6 -> 8로 증가
     learning_rate: 0.1
     l2_leaf_reg: 3
     
@@ -36,10 +36,10 @@ model:
     # 성능 최적화
     verbose: false
     
-    # 불균형 데이터 처리
+    # 불균형 데이터 처리 (강화)
     # class_weights: [1, 1]  # (사용하지 않음)
     auto_class_weights: "Balanced"
-    scale_pos_weight: 1.0  # (사용하지 않음)
+    scale_pos_weight: 1.0  # 자동 계산됨 (코드에서 _calculate_scale_pos_weight 사용)
     
     # Focal Loss 설정 (CatBoost는 직접 지원하지 않지만 설정을 인식)
     use_focal_loss: false  # Focal Loss 사용 여부 (true/false)

@@ -71,7 +71,7 @@ model_specific:
 tuning:
   n_trials: 3  # 빠른 테스트용
   direction: "maximize"
-  primary_metric: "f1_score"
+  primary_metric: "pr_auc"
   n_jobs: 4
   
   # 조기 종료 설정

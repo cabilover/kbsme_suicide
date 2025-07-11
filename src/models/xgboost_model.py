@@ -55,6 +55,8 @@ class XGBoostModel(BaseModel):
             모델 파라미터 딕셔너리
         """
         params = self.model_params.copy()
+        # 병렬 파라미터 추가
+        params['n_jobs'] = self.model_params.get('n_jobs', 4)
         
         # 분류 문제인 경우
         if target in self.classification_targets:

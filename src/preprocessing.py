@@ -747,9 +747,8 @@ def get_passthrough_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[st
     Returns:
         통과시킬 컬럼 목록
     """
-    # 기본적으로 제외할 컬럼들
+    # 기본적으로 제외할 컬럼들 (ID 컬럼은 리샘플링을 위해 포함)
     exclude_columns = [
-        config['time_series']['id_column'],
         config['time_series']['date_column'],
         config['time_series']['year_column']
     ]
@@ -771,6 +770,12 @@ def get_passthrough_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[st
         if target in df.columns and target not in passthrough_cols:
             passthrough_cols.append(target)
             logger.info(f"타겟 컬럼 '{target}'을 통과 컬럼에 추가")
+    
+    # ID 컬럼이 제외되었다면 다시 추가 (리샘플링을 위해 필요)
+    id_column = config['time_series']['id_column']
+    if id_column in df.columns and id_column not in passthrough_cols:
+        passthrough_cols.append(id_column)
+        logger.info(f"ID 컬럼 '{id_column}'을 통과 컬럼에 추가 (리샘플링용)")
     
     logger.info(f"통과시킬 컬럼: {passthrough_cols}")
     return passthrough_cols

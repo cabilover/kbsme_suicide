@@ -83,7 +83,7 @@ class RandomForestModel(BaseModel):
         clean_class_targets = [self._strip_prefix(t) for t in self.classification_targets]
         
         # 공통 파라미터 설정
-        params['n_jobs'] = self.model_params.get('n_jobs', 28)
+        params['n_jobs'] = self.model_params.get('n_jobs', 4)
         
         if clean_target in clean_class_targets:
             # 분류 모델용 파라미터
