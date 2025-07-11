@@ -143,6 +143,9 @@ results/
 # CatBoost training files (excluded as requested)
 catboost_info/
 
+# Reference repository (excluded as requested)
+reference_repo/
+
 # IDE files
 .vscode/
 .idea/
