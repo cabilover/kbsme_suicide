@@ -636,7 +636,7 @@ class HyperparameterTuner:
         return self.best_params, self.best_score
     
     def save_results(self):
-        """튜닝 결과를 저장합니다."""
+        """튜닝 결과를 저장하고 Optuna 시각화를 MLflow에 로깅합니다."""
         if self.study is None:
             logger.warning("저장할 튜닝 결과가 없습니다.")
             return
@@ -651,9 +651,20 @@ class HyperparameterTuner:
         if results_config.get('save_study', False):
             self._save_study()
         
-        # 시각화 생성
+        # Optuna 시각화 생성 및 MLflow 로깅
         if results_config.get('create_plots', False):
+            # 기존 시각화 생성 (하위 호환성)
             self._create_plots()
+            
+            # 새로운 Optuna 시각화 로깅 기능 사용
+            try:
+                logger.info("Optuna 시각화를 MLflow에 로깅 시작")
+                log_optuna_visualizations_to_mlflow(self.study)
+                log_optuna_dashboard_to_mlflow(self.study)
+                logger.info("Optuna 시각화 MLflow 로깅 완료")
+            except Exception as e:
+                logger.warning(f"Optuna 시각화 MLflow 로깅 실패: {e}")
+                # 실패해도 기존 기능은 계속 동작
     
     def _save_best_model(self):
         """최적 파라미터로 학습된 모델을 저장합니다."""
@@ -805,7 +816,7 @@ class HyperparameterTuner:
         logger.info(f"Study 저장 완료: {study_save_path}")
     
     def _create_plots(self):
-        """튜닝 결과 시각화를 생성합니다."""
+        """튜닝 결과 시각화를 생성하고 MLflow에 로깅합니다."""
         plots_save_path = self.tuning_config['results']['plots_save_path']
         Path(plots_save_path).mkdir(parents=True, exist_ok=True)
         
@@ -821,11 +832,23 @@ class HyperparameterTuner:
             plt.savefig(f"{plots_save_path}/optimization_history.png", dpi=300, bbox_inches='tight')
             plt.close()
             
+            # MLflow에 로깅
+            try:
+                mlflow.log_artifact(f"{plots_save_path}/optimization_history.png", "optuna_plots")
+            except Exception as e:
+                logger.warning(f"MLflow 최적화 히스토리 플롯 로깅 실패: {e}")
+            
             # 다른 플롯들도 개별적으로 생성
             try:
                 optuna.visualization.matplotlib.plot_param_importances(self.study)
                 plt.savefig(f"{plots_save_path}/param_importances.png", dpi=300, bbox_inches='tight')
                 plt.close()
+                
+                # MLflow에 로깅
+                try:
+                    mlflow.log_artifact(f"{plots_save_path}/param_importances.png", "optuna_plots")
+                except Exception as e:
+                    logger.warning(f"MLflow 파라미터 중요도 플롯 로깅 실패: {e}")
             except Exception as e:
                 logger.warning(f"파라미터 중요도 플롯 생성 실패: {e}")
             
@@ -833,8 +856,43 @@ class HyperparameterTuner:
                 optuna.visualization.matplotlib.plot_parallel_coordinate(self.study)
                 plt.savefig(f"{plots_save_path}/parallel_coordinate.png", dpi=300, bbox_inches='tight')
                 plt.close()
+                
+                # MLflow에 로깅
+                try:
+                    mlflow.log_artifact(f"{plots_save_path}/parallel_coordinate.png", "optuna_plots")
+                except Exception as e:
+                    logger.warning(f"MLflow 병렬 좌표 플롯 로깅 실패: {e}")
             except Exception as e:
                 logger.warning(f"병렬 좌표 플롯 생성 실패: {e}")
+            
+            # 추가 Optuna 시각화들
+            try:
+                # 파라미터 관계 플롯
+                optuna.visualization.matplotlib.plot_param_importances(self.study, target=lambda t: t.duration.total_seconds())
+                plt.savefig(f"{plots_save_path}/param_importances_duration.png", dpi=300, bbox_inches='tight')
+                plt.close()
+                
+                # MLflow에 로깅
+                try:
+                    mlflow.log_artifact(f"{plots_save_path}/param_importances_duration.png", "optuna_plots")
+                except Exception as e:
+                    logger.warning(f"MLflow 파라미터 중요도(시간) 플롯 로깅 실패: {e}")
+            except Exception as e:
+                logger.warning(f"파라미터 중요도(시간) 플롯 생성 실패: {e}")
+            
+            try:
+                # 슬라이스 플롯
+                optuna.visualization.matplotlib.plot_slice(self.study)
+                plt.savefig(f"{plots_save_path}/slice_plot.png", dpi=300, bbox_inches='tight')
+                plt.close()
+                
+                # MLflow에 로깅
+                try:
+                    mlflow.log_artifact(f"{plots_save_path}/slice_plot.png", "optuna_plots")
+                except Exception as e:
+                    logger.warning(f"MLflow 슬라이스 플롯 로깅 실패: {e}")
+            except Exception as e:
+                logger.warning(f"슬라이스 플롯 생성 실패: {e}")
             
             return
         
@@ -869,6 +927,15 @@ class HyperparameterTuner:
         
         plt.tight_layout()
         plt.savefig(f"{plots_save_path}/optimization_plots.png", dpi=300, bbox_inches='tight')
+        
+        # MLflow에 통합 플롯 로깅
+        try:
+            mlflow.log_artifact(f"{plots_save_path}/optimization_plots.png", "optuna_plots")
+            # mlflow.log_figure를 사용하여 직접 플롯 로깅 (MLflow 1.0+ 지원)
+            mlflow.log_figure(fig, "optuna_plots/optimization_summary.png")
+        except Exception as e:
+            logger.warning(f"MLflow 통합 플롯 로깅 실패: {e}")
+        
         plt.close()
         
         # 2. 최적화 요약 저장
@@ -884,174 +951,317 @@ class HyperparameterTuner:
             for param, value in self.best_params.items():
                 f.write(f"  {param}: {value}\n")
         
-        logger.info(f"시각화 생성 완료: {plots_save_path}")
-
-    def run_tuning(self) -> Dict[str, Any]:
-        """
-        하이퍼파라미터 튜닝을 실행합니다.
+        # MLflow에 요약 파일 로깅
+        try:
+            mlflow.log_artifact(summary_path, "optuna_summary")
+        except Exception as e:
+            logger.warning(f"MLflow 요약 파일 로깅 실패: {e}")
         
-        Returns:
-            튜닝 결과 딕셔너리 (best_params, best_score, tuning_time 등 포함)
-        """
-        logger.info("=== 하이퍼파라미터 튜닝 시작 ===")
-        start_time = time.time()
+        logger.info(f"시각화 생성 및 MLflow 로깅 완료: {plots_save_path}")
+        
+        # 3. 추가 Optuna 시각화 생성 및 로깅
+        self._create_additional_optuna_plots(plots_save_path)
+    
+    def _create_additional_optuna_plots(self, plots_save_path: str):
+        """추가 Optuna 시각화를 생성하고 MLflow에 로깅합니다."""
+        try:
+            # 1. 최적화 히스토리 (개별 플롯)
+            optuna.visualization.matplotlib.plot_optimization_history(self.study)
+            plt.savefig(f"{plots_save_path}/optimization_history_individual.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # MLflow에 로깅
+            try:
+                mlflow.log_artifact(f"{plots_save_path}/optimization_history_individual.png", "optuna_plots")
+            except Exception as e:
+                logger.warning(f"MLflow 최적화 히스토리 개별 플롯 로깅 실패: {e}")
+        except Exception as e:
+            logger.warning(f"최적화 히스토리 개별 플롯 생성 실패: {e}")
         
         try:
-            # Optuna study 생성
-            study = optuna.create_study(
-                direction=self.tuning_config.get('direction', 'maximize'),
-                sampler=optuna.samplers.TPESampler(seed=42)
+            # 2. 파라미터 중요도 (개별 플롯)
+            optuna.visualization.matplotlib.plot_param_importances(self.study)
+            plt.savefig(f"{plots_save_path}/param_importances_individual.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # MLflow에 로깅
+            try:
+                mlflow.log_artifact(f"{plots_save_path}/param_importances_individual.png", "optuna_plots")
+            except Exception as e:
+                logger.warning(f"MLflow 파라미터 중요도 개별 플롯 로깅 실패: {e}")
+        except Exception as e:
+            logger.warning(f"파라미터 중요도 개별 플롯 생성 실패: {e}")
+        
+        try:
+            # 3. 병렬 좌표 플롯 (개별 플롯)
+            optuna.visualization.matplotlib.plot_parallel_coordinate(self.study)
+            plt.savefig(f"{plots_save_path}/parallel_coordinate_individual.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # MLflow에 로깅
+            try:
+                mlflow.log_artifact(f"{plots_save_path}/parallel_coordinate_individual.png", "optuna_plots")
+            except Exception as e:
+                logger.warning(f"MLflow 병렬 좌표 개별 플롯 로깅 실패: {e}")
+        except Exception as e:
+            logger.warning(f"병렬 좌표 개별 플롯 생성 실패: {e}")
+        
+        try:
+            # 4. 슬라이스 플롯
+            optuna.visualization.matplotlib.plot_slice(self.study)
+            plt.savefig(f"{plots_save_path}/slice_plot_individual.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # MLflow에 로깅
+            try:
+                mlflow.log_artifact(f"{plots_save_path}/slice_plot_individual.png", "optuna_plots")
+            except Exception as e:
+                logger.warning(f"MLflow 슬라이스 개별 플롯 로깅 실패: {e}")
+        except Exception as e:
+            logger.warning(f"슬라이스 개별 플롯 생성 실패: {e}")
+        
+        try:
+            # 5. 파라미터 관계 플롯 (시간 기준)
+            optuna.visualization.matplotlib.plot_param_importances(
+                self.study, 
+                target=lambda t: t.duration.total_seconds() if t.duration else 0
             )
+            plt.savefig(f"{plots_save_path}/param_importances_duration_individual.png", dpi=300, bbox_inches='tight')
+            plt.close()
             
-            # 튜닝 실행
-            study.optimize(
-                self._objective,
-                n_trials=self.n_trials,
-                timeout=self.timeout,
-                show_progress_bar=True
-            )
-            
-            # 결과 추출
-            best_params = study.best_params
-            best_score = study.best_value
-            tuning_time = time.time() - start_time
-            
-            logger.info(f"튜닝 완료 - 최고 성능: {best_score:.4f}")
-            logger.info(f"튜닝 시간: {tuning_time:.2f}초")
-            
-            # 결과 저장
-            self.study = study
-            
-            return {
-                'best_params': best_params,
-                'best_score': best_score,
-                'tuning_time': tuning_time,
-                'n_trials': len(study.trials),
-                'study': study
-            }
+            # MLflow에 로깅
+            try:
+                mlflow.log_artifact(f"{plots_save_path}/param_importances_duration_individual.png", "optuna_plots")
+            except Exception as e:
+                logger.warning(f"MLflow 파라미터 중요도(시간) 개별 플롯 로깅 실패: {e}")
+        except Exception as e:
+            logger.warning(f"파라미터 중요도(시간) 개별 플롯 생성 실패: {e}")
+        
+        try:
+            # 6. 컨투어 플롯 (2개 파라미터 간 관계)
+            if len(self.study.best_params) >= 2:
+                param_names = list(self.study.best_params.keys())[:2]
+                optuna.visualization.matplotlib.plot_contour(self.study, params=param_names)
+                plt.savefig(f"{plots_save_path}/contour_plot.png", dpi=300, bbox_inches='tight')
+                plt.close()
+                
+                # MLflow에 로깅
+                try:
+                    mlflow.log_artifact(f"{plots_save_path}/contour_plot.png", "optuna_plots")
+                except Exception as e:
+                    logger.warning(f"MLflow 컨투어 플롯 로깅 실패: {e}")
+        except Exception as e:
+            logger.warning(f"컨투어 플롯 생성 실패: {e}")
+        
+        logger.info("추가 Optuna 시각화 생성 및 MLflow 로깅 완료")
+
+
+def log_optuna_visualizations_to_mlflow(study, experiment_name: str = "optuna_visualizations"):
+    """
+    Optuna 시각화를 MLflow에 로깅하는 유틸리티 함수
+    
+    Args:
+        study: Optuna study 객체
+        experiment_name: MLflow 실험 이름
+    """
+    import tempfile
+    import os
+    
+    logger.info("Optuna 시각화를 MLflow에 로깅 시작")
+    
+    # 임시 디렉토리 생성
+    with tempfile.TemporaryDirectory() as temp_dir:
+        plots_created = []
+        
+        try:
+            # 1. 최적화 히스토리
+            optuna.visualization.matplotlib.plot_optimization_history(study)
+            history_path = os.path.join(temp_dir, "optimization_history.png")
+            plt.savefig(history_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            plots_created.append(("optimization_history.png", history_path))
             
         except Exception as e:
-            logger.error(f"튜닝 실행 중 오류 발생: {str(e)}")
-            raise
+            logger.warning(f"최적화 히스토리 플롯 생성 실패: {e}")
+        
+        try:
+            # 2. 파라미터 중요도
+            optuna.visualization.matplotlib.plot_param_importances(study)
+            importance_path = os.path.join(temp_dir, "param_importances.png")
+            plt.savefig(importance_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            plots_created.append(("param_importances.png", importance_path))
+            
+        except Exception as e:
+            logger.warning(f"파라미터 중요도 플롯 생성 실패: {e}")
+        
+        try:
+            # 3. 병렬 좌표 플롯
+            optuna.visualization.matplotlib.plot_parallel_coordinate(study)
+            parallel_path = os.path.join(temp_dir, "parallel_coordinate.png")
+            plt.savefig(parallel_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            plots_created.append(("parallel_coordinate.png", parallel_path))
+            
+        except Exception as e:
+            logger.warning(f"병렬 좌표 플롯 생성 실패: {e}")
+        
+        try:
+            # 4. 슬라이스 플롯
+            optuna.visualization.matplotlib.plot_slice(study)
+            slice_path = os.path.join(temp_dir, "slice_plot.png")
+            plt.savefig(slice_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            plots_created.append(("slice_plot.png", slice_path))
+            
+        except Exception as e:
+            logger.warning(f"슬라이스 플롯 생성 실패: {e}")
+        
+        try:
+            # 5. 컨투어 플롯 (2개 파라미터 간 관계)
+            if len(study.best_params) >= 2:
+                param_names = list(study.best_params.keys())[:2]
+                optuna.visualization.matplotlib.plot_contour(study, params=param_names)
+                contour_path = os.path.join(temp_dir, "contour_plot.png")
+                plt.savefig(contour_path, dpi=300, bbox_inches='tight')
+                plt.close()
+                plots_created.append(("contour_plot.png", contour_path))
+                
+        except Exception as e:
+            logger.warning(f"컨투어 플롯 생성 실패: {e}")
+        
+        try:
+            # 6. 파라미터 중요도 (시간 기준)
+            optuna.visualization.matplotlib.plot_param_importances(
+                study, 
+                target=lambda t: t.duration.total_seconds() if t.duration else 0
+            )
+            duration_path = os.path.join(temp_dir, "param_importances_duration.png")
+            plt.savefig(duration_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            plots_created.append(("param_importances_duration.png", duration_path))
+            
+        except Exception as e:
+            logger.warning(f"파라미터 중요도(시간) 플롯 생성 실패: {e}")
+        
+        # MLflow에 모든 플롯 로깅
+        for plot_name, plot_path in plots_created:
+            try:
+                mlflow.log_artifact(plot_path, f"optuna_plots/{plot_name}")
+                logger.info(f"MLflow에 로깅 완료: {plot_name}")
+            except Exception as e:
+                logger.warning(f"MLflow 로깅 실패 ({plot_name}): {e}")
+        
+        # 7. 최적화 요약 정보를 텍스트 파일로 저장
+        summary_path = os.path.join(temp_dir, "optimization_summary.txt")
+        with open(summary_path, 'w', encoding='utf-8') as f:
+            f.write("=== Optuna 최적화 요약 ===\n\n")
+            f.write(f"총 시도 횟수: {len(study.trials)}\n")
+            f.write(f"최고 성능: {study.best_value:.6f}\n")
+            f.write(f"최적화 방향: {study.direction}\n\n")
+            f.write("최적 파라미터:\n")
+            for param, value in study.best_params.items():
+                f.write(f"  {param}: {value}\n")
+            f.write(f"\n최적화 완료 시간: {study.best_trial.datetime_complete}\n")
+        
+        try:
+            mlflow.log_artifact(summary_path, "optuna_summary")
+            logger.info("MLflow에 최적화 요약 로깅 완료")
+        except Exception as e:
+            logger.warning(f"MLflow 요약 로깅 실패: {e}")
+        
+        # 8. 최적화 통계를 메트릭으로 로깅
+        try:
+            mlflow.log_metric("optuna_n_trials", len(study.trials))
+            mlflow.log_metric("optuna_best_value", study.best_value)
+            mlflow.log_metric("optuna_optimization_direction", 1 if study.direction == "maximize" else 0)
+            
+            # 파라미터별 최적값을 메트릭으로 로깅
+            for param, value in study.best_params.items():
+                safe_param_name = param.replace(' ', '_').replace('-', '_')
+                try:
+                    if isinstance(value, (int, float)):
+                        mlflow.log_metric(f"optuna_best_{safe_param_name}", value)
+                except Exception as e:
+                    logger.warning(f"파라미터 메트릭 로깅 실패 ({param}): {e}")
+            
+            logger.info("MLflow에 최적화 통계 메트릭 로깅 완료")
+        except Exception as e:
+            logger.warning(f"MLflow 메트릭 로깅 실패: {e}")
+    
+    logger.info(f"Optuna 시각화 MLflow 로깅 완료: {len(plots_created)}개 플롯")
 
-    def setup_mlflow(self):
-        """
-        MLflow 설정을 초기화합니다.
-        """
-        # MLflow 설정
-        mlflow_config = self.config.get('mlflow', {})
-        experiment_name = mlflow_config.get('experiment_name', 'hyperparameter_tuning')
-        
-        # MLflow 실험 설정
-        mlflow.set_experiment(experiment_name)
-        experiment = mlflow.get_experiment_by_name(experiment_name)
-        if experiment is None:
-            self.experiment_id = mlflow.create_experiment(experiment_name)
-        else:
-            self.experiment_id = experiment.experiment_id
-        
-        logger.info(f"MLflow 실험 설정: {experiment_name} (ID: {self.experiment_id})")
-        
-        # 현재 run ID는 나중에 설정됨
-        self.run_id = None
 
-    def load_data(self) -> pd.DataFrame:
-        """
-        데이터를 로드합니다.
-        
-        Returns:
-            로드된 데이터프레임
-        """
-        logger.info(f"데이터 로드 중: {self.data_path}")
-        
-        if not Path(self.data_path).exists():
-            raise FileNotFoundError(f"데이터 파일을 찾을 수 없습니다: {self.data_path}")
-        
-        if self.nrows:
-            data = pd.read_csv(self.data_path, nrows=self.nrows)
-            logger.info(f"테스트용 데이터 로드: {len(data):,} 행")
-        else:
-            data = pd.read_csv(self.data_path)
-            logger.info(f"전체 데이터 로드: {len(data):,} 행")
-        
-        return data
-
-
-def setup_tuning_logger(log_filename=None):
+def create_optuna_dashboard_data(study):
     """
-    튜닝 로그를 파일로 저장하기 위한 로거를 설정합니다.
+    Optuna 대시보드용 데이터를 생성합니다.
+    
+    Args:
+        study: Optuna study 객체
+        
+    Returns:
+        대시보드 데이터 딕셔너리
     """
-    if log_filename is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"tuning_log_{timestamp}.txt"
+    dashboard_data = {
+        "study_info": {
+            "n_trials": len(study.trials),
+            "best_value": study.best_value,
+            "direction": study.direction,
+            "best_trial_number": study.best_trial.number,
+            "optimization_start": study.best_trial.datetime_start.isoformat() if study.best_trial.datetime_start else None,
+            "optimization_end": study.best_trial.datetime_complete.isoformat() if study.best_trial.datetime_complete else None
+        },
+        "best_params": study.best_params,
+        "trial_history": []
+    }
     
-    # results 디렉토리 생성
-    results_dir = Path(__file__).parent.parent / "results"
-    results_dir.mkdir(exist_ok=True)
-    log_path = results_dir / log_filename
+    # Trial 히스토리 수집
+    for trial in study.trials:
+        if trial.state == optuna.trial.TrialState.COMPLETE:
+            trial_data = {
+                "number": trial.number,
+                "value": trial.value,
+                "params": trial.params,
+                "duration": trial.duration.total_seconds() if trial.duration else None,
+                "datetime_start": trial.datetime_start.isoformat() if trial.datetime_start else None,
+                "datetime_complete": trial.datetime_complete.isoformat() if trial.datetime_complete else None
+            }
+            dashboard_data["trial_history"].append(trial_data)
     
-    # 파일 핸들러 추가
-    file_handler = logging.FileHandler(log_path, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    
-    # 포맷터 설정
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    
-    # 루트 로거에 핸들러 추가
-    root_logger = logging.getLogger()
-    root_logger.addHandler(file_handler)
-    
-    return log_path
+    return dashboard_data
 
-def save_tuning_log(result, model_type, experiment_type, nrows=None, experiment_id=None, run_id=None, error_msg=None, log_file_path=None):
+
+def log_optuna_dashboard_to_mlflow(study, experiment_name: str = "optuna_dashboard"):
     """
-    튜닝 결과 및 로그를 results 폴더에 txt로 저장합니다.
+    Optuna 대시보드 데이터를 MLflow에 로깅합니다.
+    
+    Args:
+        study: Optuna study 객체
+        experiment_name: MLflow 실험 이름
     """
-    results_dir = Path(__file__).parent.parent / "results"
-    results_dir.mkdir(exist_ok=True)
+    import json
+    import tempfile
+    import os
     
-    # 이미 로그 파일이 있다면 그대로 사용, 없다면 새로 생성
-    if log_file_path is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"tuning_log_{timestamp}.txt"
-        log_file_path = results_dir / log_filename
+    logger.info("Optuna 대시보드 데이터를 MLflow에 로깅 시작")
     
-    # result가 tuple이면 dict로 변환
-    result_dict = None
-    if isinstance(result, tuple) and len(result) == 2:
-        best_params, best_score = result
-        result_dict = {'best_params': best_params, 'best_score': best_score}
-    elif isinstance(result, dict):
-        result_dict = result
-    else:
-        result_dict = {}
+    # 대시보드 데이터 생성
+    dashboard_data = create_optuna_dashboard_data(study)
     
-    # 결과 요약을 로그 파일에 추가
-    with open(log_file_path, 'a', encoding='utf-8') as f:
-        f.write("\n" + "="*50 + "\n")
-        f.write("튜닝 결과 요약\n")
-        f.write("="*50 + "\n")
-        
-        f.write(f"모델 타입: {model_type}\n")
-        f.write(f"실험 타입: {experiment_type}\n")
-        if nrows:
-            f.write(f"사용 데이터 행 수: {nrows:,}\n")
-        
-        if experiment_id and run_id:
-            mlflow_link = f"http://localhost:5000/#/experiments/{experiment_id}/runs/{run_id}"
-            f.write(f"MLflow 링크: {mlflow_link}\n")
-        
-        if error_msg:
-            f.write(f"에러 메시지: {error_msg}\n")
-        elif result_dict:
-            f.write(f"최고 성능: {result_dict.get('best_score', 'N/A')}\n")
-            f.write(f"최적 파라미터: {result_dict.get('best_params', 'N/A')}\n")
-            f.write(f"튜닝 시간: {result_dict.get('tuning_time', 'N/A')}\n")
-        
-        f.write("="*50 + "\n")
+    # 임시 파일에 JSON 저장
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(dashboard_data, f, indent=2, default=str)
+        temp_file_path = f.name
     
-    print(f"튜닝 로그가 저장되었습니다: {log_file_path}")
+    try:
+        # MLflow에 JSON 파일 로깅
+        mlflow.log_artifact(temp_file_path, "optuna_dashboard")
+        logger.info("MLflow에 Optuna 대시보드 데이터 로깅 완료")
+    except Exception as e:
+        logger.warning(f"MLflow 대시보드 데이터 로깅 실패: {e}")
+    finally:
+        # 임시 파일 삭제
+        os.unlink(temp_file_path)
 
 
 def main():

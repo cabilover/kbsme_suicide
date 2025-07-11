@@ -79,9 +79,9 @@ class LightGBMModel(BaseModel):
             class_weight = self.model_params.get('class_weight', None)
             # 파라미터 설정 (is_unbalance와 scale_pos_weight 충돌 방지)
             if scale_pos_weight != 1.0 and scale_pos_weight is not None and scale_pos_weight != "auto":
-                    params['scale_pos_weight'] = scale_pos_weight
+                params['scale_pos_weight'] = scale_pos_weight
                 params.pop('is_unbalance', None)  # scale_pos_weight 우선 시 is_unbalance 제거
-                    logger.info(f"  - scale_pos_weight: {scale_pos_weight}")
+                logger.info(f"  - scale_pos_weight: {scale_pos_weight}")
                 logger.info(f"  - is_unbalance: False (scale_pos_weight와 충돌 방지)")
             elif is_unbalance:
                 params['is_unbalance'] = is_unbalance

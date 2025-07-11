@@ -359,3 +359,9 @@ data/
 - score가 float이 아닐 때 무조건 0.0으로 대체하는 로직을 한 번 더 점검
 - 필요시 isnan/isinf 체크 자체를 try/except로 감싸서 완전 방지
 - 불균형 데이터 처리(리샘플링, 클래스 가중치 등)는 구조적 문제 완전 해결 후 진행 
+
+### ✅ 2025-07-12 최신 업데이트: Optuna 튜닝 시각화(플롯) MLflow 자동 기록 지원
+- **Optuna 튜닝 시각화(플롯) 자동 기록**: 하이퍼파라미터 튜닝이 끝나면 Optuna의 주요 시각화(최적화 히스토리, 파라미터 중요도, 병렬좌표, 슬라이스, 컨투어 등)가 자동으로 생성되어 MLflow에 아티팩트(optuna_plots 폴더)로 저장됨
+- **MLflow UI에서 확인**: 각 실험 run의 아티팩트(optuna_plots)에서 모든 튜닝 플롯을 웹에서 바로 확인 가능
+- **지원 플롯 종류**: optimization_history, param_importances, parallel_coordinate, slice_plot, contour_plot, param_importances_duration 등
+- **프로젝트 내 자동화**: `src/hyperparameter_tuning.py`의 log_optuna_visualizations_to_mlflow 함수에서 자동 처리됨 
