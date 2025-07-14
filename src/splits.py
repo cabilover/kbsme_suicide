@@ -357,6 +357,9 @@ def get_cv_splits(df: pd.DataFrame, config: Dict[str, Any]) -> Generator[Tuple[p
     elif strategy == "group_kfold":
         logger.info("순수 그룹 기반 K-Fold 검증 전략 사용")
         yield from get_group_kfold_splits(df, config)
+    elif strategy == "stratified_group_kfold":
+        logger.info("ID 기반 Stratified Group K-Fold 검증 전략 사용")
+        yield from get_stratified_group_kfold_splits(df, config)
     else:
         raise ValueError(f"지원하지 않는 검증 전략: {strategy}")
 
@@ -441,6 +444,170 @@ def log_splits_info(train_val_df: pd.DataFrame, test_df: pd.DataFrame, config: D
         logger.info(f"테스트 연도 범위: {splits_info['year_range']['test']}")
     
     return splits_info
+
+
+def calculate_id_class_ratios(df: pd.DataFrame, config: Dict[str, Any]) -> pd.Series:
+    """
+    각 ID별 클래스 비율을 계산합니다.
+    
+    Args:
+        df: 데이터프레임
+        config: 설정 딕셔너리
+        
+    Returns:
+        ID별 양성 클래스 비율 시리즈
+    """
+    id_column = config['time_series']['id_column']
+    target_columns = config['features']['target_columns']
+    
+    # 첫 번째 분류 타겟 사용 (보통 suicide_a_next_year)
+    target_col = target_columns[0] if target_columns else 'suicide_a_next_year'
+    
+    # ID별 양성 클래스 비율 계산
+    id_class_ratios = df.groupby(id_column)[target_col].agg(lambda x: (x == 1).mean())
+    
+    logger.info(f"ID별 클래스 비율 계산 완료:")
+    logger.info(f"  - 총 ID 수: {len(id_class_ratios):,}")
+    logger.info(f"  - 양성 클래스가 있는 ID 수: {(id_class_ratios > 0).sum():,}")
+    logger.info(f"  - 양성 클래스 비율 범위: {id_class_ratios.min():.4f} ~ {id_class_ratios.max():.4f}")
+    
+    return id_class_ratios
+
+
+def split_fold_data(fold_data: pd.DataFrame, config: Dict[str, Any]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    폴드 데이터를 훈련/검증으로 분할합니다.
+    
+    Args:
+        fold_data: 폴드 데이터
+        config: 설정 딕셔너리
+        
+    Returns:
+        train_fold_df: 훈련 데이터
+        val_fold_df: 검증 데이터
+    """
+    id_column = config['time_series']['id_column']
+    val_ratio = config['validation']['val_ids_ratio']
+    random_state = config['data_split']['random_state']
+    
+    # 고유한 ID 목록 추출
+    unique_ids = fold_data[id_column].unique()
+    
+    # ID 기반 분할
+    splitter = GroupShuffleSplit(
+        n_splits=1, 
+        test_size=val_ratio, 
+        random_state=random_state
+    )
+    
+    # 더미 그룹 생성
+    groups = fold_data[id_column].values
+    
+    # 분할 수행
+    train_indices, val_indices = next(splitter.split(fold_data, groups=groups))
+    
+    # 데이터프레임 분할
+    train_fold_df = fold_data.iloc[train_indices].copy()
+    val_fold_df = fold_data.iloc[val_indices].copy()
+    
+    return train_fold_df, val_fold_df
+
+
+def get_stratified_group_kfold_splits(df: pd.DataFrame, config: Dict[str, Any]) -> Generator[Tuple[pd.DataFrame, pd.DataFrame, Dict[str, Any]], None, None]:
+    """
+    ID 기반 Stratified Group K-Fold 교차 검증 폴드를 생성합니다.
+    각 폴드의 클래스 비율을 균형있게 유지하면서 ID 겹침을 방지합니다.
+    
+    Args:
+        df: 훈련/검증용 데이터프레임
+        config: 설정 딕셔너리
+        
+    Yields:
+        train_fold_df: 현재 폴드의 훈련 데이터
+        val_fold_df: 현재 폴드의 검증 데이터
+        fold_info: 폴드 정보 딕셔너리
+    """
+    id_column = config['time_series']['id_column']
+    year_column = config['time_series']['year_column']
+    num_folds = config['validation']['num_cv_folds']
+    stratification_config = config['validation'].get('stratification', {})
+    min_positive_samples = stratification_config.get('min_positive_samples_per_fold', 1)
+    
+    logger.info(f"ID 기반 Stratified Group K-Fold 분할 시작")
+    logger.info(f"  - 총 데이터: {len(df):,} 행")
+    logger.info(f"  - 폴드 수: {num_folds}")
+    logger.info(f"  - 최소 양성 샘플/폴드: {min_positive_samples}")
+    
+    # 1. ID별 클래스 비율 계산
+    id_class_ratios = calculate_id_class_ratios(df, config)
+    
+    # 2. 클래스 비율에 따른 ID 그룹화
+    positive_ids = id_class_ratios[id_class_ratios > 0].index.tolist()
+    negative_ids = id_class_ratios[id_class_ratios == 0].index.tolist()
+    
+    logger.info(f"ID 그룹화 완료:")
+    logger.info(f"  - 양성 클래스 ID 수: {len(positive_ids):,}")
+    logger.info(f"  - 음성 클래스 ID 수: {len(negative_ids):,}")
+    
+    # 3. 양성 ID가 충분한지 확인
+    if len(positive_ids) < num_folds * min_positive_samples:
+        logger.warning(f"양성 ID 수({len(positive_ids)})가 폴드 수({num_folds}) * 최소 샘플({min_positive_samples})보다 적습니다.")
+        logger.warning("일반 Group K-Fold로 대체합니다.")
+        yield from get_group_kfold_splits(df, config)
+        return
+    
+    # 4. 균형잡힌 폴드 생성
+    # 양성 ID를 폴드에 균등 분배
+    positive_folds = np.array_split(positive_ids, num_folds)
+    
+    # 음성 ID를 폴드에 균등 분배
+    negative_folds = np.array_split(negative_ids, num_folds)
+    
+    # 5. 각 폴드 생성
+    for fold_idx in range(num_folds):
+        # 현재 폴드의 ID들
+        fold_positive_ids = positive_folds[fold_idx].tolist()
+        fold_negative_ids = negative_folds[fold_idx].tolist()
+        
+        # 폴드 데이터 생성
+        fold_ids = fold_positive_ids + fold_negative_ids
+        fold_data = df[df[id_column].isin(fold_ids)].copy()
+        
+        # 훈련/검증 분할
+        train_fold_df, val_fold_df = split_fold_data(fold_data, config)
+        
+        # 폴드 정보 생성
+        fold_info = {
+            'fold_idx': fold_idx + 1,
+            'strategy': 'stratified_group_kfold',
+            'train_ids_count': len(train_fold_df[id_column].unique()),
+            'val_ids_count': len(val_fold_df[id_column].unique()),
+            'train_samples': len(train_fold_df),
+            'val_samples': len(val_fold_df),
+            'train_years_range': (int(train_fold_df[year_column].min()), int(train_fold_df[year_column].max())),
+            'val_years_range': (int(val_fold_df[year_column].min()), int(val_fold_df[year_column].max())),
+            'positive_ids_in_fold': len(fold_positive_ids),
+            'negative_ids_in_fold': len(fold_negative_ids),
+            'total_ids_in_fold': len(fold_ids)
+        }
+        
+        # 클래스 분포 로깅
+        target_columns = config['features']['target_columns']
+        target_col = target_columns[0] if target_columns else 'suicide_a_next_year'
+        
+        train_positive_ratio = (train_fold_df[target_col] == 1).mean()
+        val_positive_ratio = (val_fold_df[target_col] == 1).mean()
+        
+        logger.info(f"Stratified Group K-Fold 폴드 {fold_idx + 1} 생성 완료")
+        logger.info(f"  - 훈련 데이터: {fold_info['train_samples']:,} 행 ({fold_info['train_ids_count']:,}개 ID)")
+        logger.info(f"  - 검증 데이터: {fold_info['val_samples']:,} 행 ({fold_info['val_ids_count']:,}개 ID)")
+        logger.info(f"  - 훈련 연도 범위: {fold_info['train_years_range']}")
+        logger.info(f"  - 검증 연도 범위: {fold_info['val_years_range']}")
+        logger.info(f"  - 폴드 내 양성 ID: {fold_info['positive_ids_in_fold']}개")
+        logger.info(f"  - 훈련 양성 비율: {train_positive_ratio:.4f}")
+        logger.info(f"  - 검증 양성 비율: {val_positive_ratio:.4f}")
+        
+        yield train_fold_df, val_fold_df, fold_info
 
 
 def main():

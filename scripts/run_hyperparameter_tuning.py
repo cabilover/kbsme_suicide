@@ -21,7 +21,7 @@ from typing import Dict, Any, List
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from src.hyperparameter_tuning import HyperparameterTuner, save_tuning_log
+from src.hyperparameter_tuning import HyperparameterTuner
 from src.splits import (
     load_config, 
     split_test_set, 
@@ -1365,7 +1365,8 @@ def main():
                 resampling_methods=args.resampling_methods,
                 nrows=args.nrows
             )
-            save_tuning_log(result, 'legacy', 'resampling', args.nrows)
+            # 실험 결과는 MLflow를 통해 자동으로 저장됨
+            pass
         else:
             raise ValueError("model-type 또는 tuning_config+base_config 중 하나는 반드시 지정해야 합니다.")
         if args.resampling_comparison:
@@ -1393,8 +1394,8 @@ def main():
                 print(f"❌ MLflow UI 실행 실패: {str(e)}")
     except Exception as e:
         logger.error(f"하이퍼파라미터 튜닝 실패: {str(e)}")
-        # robust error logging
-        save_tuning_log(None, args.model_type if 'args' in locals() and args.model_type else 'unknown', args.experiment_type if 'args' in locals() and args.experiment_type else 'unknown', getattr(args, 'nrows', None), error_msg=str(e))
+        # robust error logging (MLflow를 통해 자동으로 로깅됨)
+        logger.error(f"실험 실패 - 모델: {args.model_type if 'args' in locals() and args.model_type else 'unknown'}, 실험: {args.experiment_type if 'args' in locals() and args.experiment_type else 'unknown'}")
         sys.exit(1)
 
 

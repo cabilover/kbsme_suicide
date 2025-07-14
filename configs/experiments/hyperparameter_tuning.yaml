@@ -78,9 +78,27 @@ xgboost_params:
     high: 1.0
     log: false
   
+  colsample_bylevel:
+    type: "float"
+    low: 0.6
+    high: 1.0
+    log: false
+  
   min_child_weight:
     type: "int"
     low: 1
+    high: 10
+    log: false
+  
+  gamma:
+    type: "float"
+    low: 0.1
+    high: 5.0
+    log: true
+  
+  max_delta_step:
+    type: "int"
+    low: 0
     high: 10
     log: false
   
@@ -101,6 +119,10 @@ xgboost_params:
     low: 10.0
     high: 100.0
     log: true
+  
+  tree_method:
+    type: "categorical"
+    choices: ["auto", "exact", "approx", "hist"]
 
 # LightGBM 하이퍼파라미터 검색 범위
 lightgbm_params:
@@ -114,6 +136,12 @@ lightgbm_params:
     type: "int"
     low: 3
     high: 12
+    log: false
+  
+  num_leaves:
+    type: "int"
+    low: 10
+    high: 200
     log: false
   
   learning_rate:
@@ -134,6 +162,30 @@ lightgbm_params:
     high: 1.0
     log: false
   
+  feature_fraction:
+    type: "float"
+    low: 0.6
+    high: 1.0
+    log: false
+  
+  bagging_fraction:
+    type: "float"
+    low: 0.6
+    high: 1.0
+    log: false
+  
+  bagging_freq:
+    type: "int"
+    low: 0
+    high: 10
+    log: false
+  
+  min_data_in_leaf:
+    type: "int"
+    low: 10
+    high: 100
+    log: false
+  
   min_child_weight:
     type: "int"
     low: 1
@@ -157,6 +209,10 @@ lightgbm_params:
     low: 10.0
     high: 100.0
     log: true
+  
+  boosting_type:
+    type: "categorical"
+    choices: ["gbdt", "dart", "goss"]
 
 # CatBoost 하이퍼파라미터 검색 범위
 catboost_params:
@@ -235,8 +291,8 @@ random_forest_params:
 # 평가 설정
 evaluation:
   # 극도 불균형 데이터에 적합한 평가 지표
-  primary_metric: "pr_auc"  # Precision-Recall AUC (불균형 데이터에 적합)
-  secondary_metrics: ["recall", "precision", "balanced_accuracy", "roc_auc"]
+  primary_metric: "recall"  # Recall (소수 클래스 예측 성능 중시)
+  secondary_metrics: ["precision", "pr_auc", "balanced_accuracy", "roc_auc"]
   
   # 평가 지표 설정
   metrics:
@@ -258,9 +314,14 @@ evaluation:
 
 # 교차 검증 설정
 cv:
-  strategy: "group_kfold"
+  strategy: "stratified_group_kfold"  # "group_kfold", "stratified_group_kfold"
   n_folds: 5
   shuffle: false
+  stratification:
+    enabled: true
+    method: "id_based"
+    min_positive_samples_per_fold: 1
+    balance_threshold: 0.1
 
 # 결과 저장 설정
 results:

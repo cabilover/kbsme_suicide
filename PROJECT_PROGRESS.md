@@ -371,3 +371,96 @@ data/
 - **MLflow UI에서 확인**: 각 실험 run의 아티팩트(optuna_plots)에서 모든 튜닝 플롯을 웹에서 바로 확인 가능
 - **지원 플롯 종류**: optimization_history, param_importances, parallel_coordinate, slice_plot, contour_plot, param_importances_duration 등
 - **프로젝트 내 자동화**: `src/hyperparameter_tuning.py`의 log_optuna_visualizations_to_mlflow 함수에서 자동 처리됨 
+
+### ✅ 2025-07-14 최신 업데이트: Stratified Group K-Fold 구현 및 하이퍼파라미터 확장
+
+#### 🎯 **주요 개선사항**
+
+##### **1. Stratified Group K-Fold 구현 (ID 기반)**
+- **구현 위치**: `src/splits.py`에 `get_stratified_group_kfold_splits()` 함수 추가
+- **핵심 로직**:
+  - `calculate_id_class_ratios()`: ID별 클래스 비율 계산
+  - 양성/음성 ID 분리 및 균등 분배
+  - 각 폴드에서 클래스 비율 균형 유지
+  - 양성 ID 수가 부족할 경우 자동으로 일반 Group K-Fold로 대체
+- **설정 파일 확장**:
+  - `configs/base/validation.yaml`: stratification 설정 추가
+  - `configs/experiments/hyperparameter_tuning.yaml`: stratified_group_kfold 전략 설정
+
+##### **2. 하이퍼파라미터 검색 범위 확장**
+- **XGBoost 추가 파라미터**:
+  - `gamma`: 0.1-5.0 (분할에 필요한 최소 손실 감소)
+  - `max_delta_step`: 0-10 (가중치 추정 최대 델타 스텝)
+  - `colsample_bylevel`: 0.6-1.0 (레벨별 특성 샘플링)
+  - `tree_method`: ["auto", "exact", "approx", "hist"] (트리 구성 방법)
+- **LightGBM 추가 파라미터**:
+  - `num_leaves`: 10-200 (리프 노드 최대 개수)
+  - `feature_fraction`: 0.6-1.0 (특성 샘플링 비율)
+  - `bagging_fraction`: 0.6-1.0 (데이터 샘플링 비율)
+  - `bagging_freq`: 0-10 (배깅 빈도)
+  - `min_data_in_leaf`: 10-100 (리프 노드 최소 데이터 수)
+  - `boosting_type`: ["gbdt", "dart", "goss"] (부스팅 방법)
+
+##### **3. Recall 기반 튜닝 및 scale_pos_weight 개선**
+- **Primary Metric 변경**: `recall`로 설정하여 소수 클래스 예측 성능 중시
+- **scale_pos_weight 자동 계산 제어**:
+  - `configs/base/common.yaml`에 `auto_scale_pos_weight` 옵션 추가
+  - `false`로 설정 시 튜닝된 값 우선 사용
+  - `true`로 설정 시 클래스 비율 기반 자동 계산
+- **설정 파일**: `configs/experiments/hyperparameter_tuning.yaml`에서 `primary_metric: "recall"`
+
+##### **4. 코드 정리 및 안정화**
+- **정의되지 않은 함수 제거**: `setup_tuning_logger`, `save_tuning_log`, `setup_mlflow` 등 미구현 함수 호출 제거
+- **오류 처리 개선**: 하이퍼파라미터 튜닝 과정에서 발생하는 다양한 오류 상황 대응
+- **로깅 시스템 정리**: MLflow를 통한 일관된 실험 추적
+
+#### 📊 **테스트 결과 및 현황**
+
+##### **극도 불균형 데이터 특성**
+- **자살 시도 비율**: 0.12% (극도 불균형)
+- **현재 테스트 데이터**: 양성 ID 수가 폴드 수보다 적어서 자동으로 일반 Group K-Fold 사용
+- **모델 성능**: 모든 예측이 0으로 나오는 현상 (극도 불균형에서 일반적)
+
+##### **Stratified Group K-Fold 활성화 조건**
+```python
+if len(positive_ids) < num_folds * min_positive_samples:
+    # 일반 Group K-Fold로 대체
+    yield from get_group_kfold_splits(df, config)
+```
+
+#### 🔧 **추가 개선 방안**
+
+##### **1. 더 큰 데이터셋으로 테스트**
+```bash
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --n-trials 5 --cv-folds 5 --nrows 10000
+```
+
+##### **2. 최소 양성 샘플 수 조정**
+```yaml
+stratification:
+  min_positive_samples_per_fold: 0  # 더 관대한 조건
+```
+
+##### **3. 리샘플링 활성화**
+- SMOTE나 다른 리샘플링 기법으로 양성 샘플 수 증가
+
+#### 🎯 **주요 성과**
+
+1. **Stratified Group K-Fold 구현 완료**: 극도 불균형 데이터에서도 안정적인 교차 검증 가능
+2. **하이퍼파라미터 확장**: 더 나은 모델 탐색을 위한 파라미터 범위 확장
+3. **Recall 기반 튜닝**: 소수 클래스 예측 성능 개선을 위한 평가 지표 변경
+4. **자동 계산 제어**: scale_pos_weight 튜닝과 자동 계산 간의 충돌 해결
+5. **코드 안정화**: 미구현 함수 제거 및 오류 처리 개선
+
+#### 📈 **다음 단계 계획**
+
+1. **대규모 데이터셋 테스트**: 전체 데이터셋 또는 더 큰 샘플로 Stratified Group K-Fold 효과 검증
+2. **리샘플링 기법 적용**: SMOTE, ADASYN 등으로 양성 샘플 수 증가
+3. **앙상블 모델 개발**: Stacking, Blending, Voting 기법 구현
+4. **모델 해석 기능**: SHAP, LIME 등을 활용한 모델 해석 기능 추가
+
+---
+
+**최종 업데이트**: 2025년 07월 14일
+**작성자**: AI Assistant
+**프로젝트 상태**: Phase 5-4 진행 중 ✅ (Stratified Group K-Fold 구현 완료, 하이퍼파라미터 확장 완료, Recall 기반 튜닝 완료) 

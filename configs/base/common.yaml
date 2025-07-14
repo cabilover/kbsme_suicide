@@ -151,3 +151,8 @@ preprocessing:
   feature_selection:
     method: "variance_threshold"
     threshold: 0.01 
+
+# 모델 설정
+model:
+  # scale_pos_weight 자동 계산 제어
+  auto_scale_pos_weight: false  # false: 튜닝된 값 사용, true: 자동 계산 사용 

@@ -12,13 +12,20 @@ data_split:
 
 # 검증 전략 설정
 validation:
-  strategy: "group_kfold"  # "time_series_walk_forward", "time_series_group_kfold", "group_kfold"
+  strategy: "group_kfold"  # "time_series_walk_forward", "time_series_group_kfold", "group_kfold", "stratified_group_kfold"
   num_cv_folds: 5  # 기본 5폴드로 변경
   test_size: 0.15  # 테스트 세트 비율
   random_state: 42
   
   # 모든 전략에 공통 적용될 수 있는 파라미터
   val_ids_ratio: 0.15  # 각 폴드 내에서 검증에 사용할 ID 비율
+
+  # Stratified Group K-Fold 전용 설정
+  stratification:
+    enabled: false  # 기본값은 비활성화
+    method: "id_based"  # "id_based" 또는 "sample_based"
+    min_positive_samples_per_fold: 1  # 각 폴드당 최소 양성 샘플 수
+    balance_threshold: 0.1  # 클래스 비율 균형 임계값
 
   # "time_series_walk_forward" 전략 전용 파라미터
   validation_start_year: 2021  # Walk-Forward 검증 시작 연도

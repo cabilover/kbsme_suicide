@@ -120,11 +120,11 @@ class HyperparameterTuner:
         else:
             self.data_path = 'data/processed/processed_data_with_features.csv'  # 기본값
         
-        # 로그 파일 설정
-        self.log_file_path = setup_tuning_logger()
+        # 로그 파일 설정 (MLflow를 통한 로깅 사용)
+        self.log_file_path = None
         
-        # MLflow 설정
-        self.setup_mlflow()
+        # MLflow 설정 (실험 시작 시 자동으로 설정됨)
+        pass
         
         # 데이터 로딩
         if data is not None:
@@ -1282,10 +1282,6 @@ def main():
     
     # 결과 저장
     tuner.save_results()
-    
-    # 튜닝 로그 저장
-    save_tuning_log(best_params, tuner.config['model']['model_type'], "hyperparameter_tuning",
-                    tuner.nrows, tuner.study.number, tuner.study.id)
     
     print(f"\n=== 최적화 완료 ===")
     print(f"최고 성능: {best_score:.4f}")

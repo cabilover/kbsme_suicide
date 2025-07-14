@@ -153,10 +153,17 @@ class XGBoostModel(BaseModel):
             
             # 분류 문제인 경우 불균형 처리
             if original_target in self.classification_targets:
-                # 기존 방식: scale_pos_weight 계산
-                pos_weight = self._calculate_scale_pos_weight(y_target)
-                params['scale_pos_weight'] = pos_weight
-                logger.info(f"  - scale_pos_weight: {pos_weight:.2f}")
+                # 자동 계산 제어 옵션 확인
+                auto_calc = self.config.get('model', {}).get('auto_scale_pos_weight', True)
+                
+                if auto_calc:
+                    # 자동 계산 활성화: 클래스 비율 기반 계산
+                    pos_weight = self._calculate_scale_pos_weight(y_target)
+                    params['scale_pos_weight'] = pos_weight
+                    logger.info(f"  - scale_pos_weight (자동 계산): {pos_weight:.2f}")
+                else:
+                    # 자동 계산 비활성화: 튜닝된 값 사용 (이미 params에 설정됨)
+                    logger.info(f"  - scale_pos_weight (튜닝된 값): {params.get('scale_pos_weight', '설정되지 않음')}")
             
             # 실제 적용되는 파라미터 로깅
             logger.info(f"=== {original_target} 모델 파라미터 ===")

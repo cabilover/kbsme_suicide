@@ -248,12 +248,23 @@ class BaseModel(ABC):
         """
         분류 문제에서 양성 클래스 가중치를 계산합니다.
         
+        설정에 따라 자동 계산 또는 튜닝된 값을 사용합니다.
+        
         Args:
             y: 타겟 시리즈
             
         Returns:
             양성 클래스 가중치
         """
+        # 자동 계산 제어 옵션 확인
+        auto_calc = self.config.get('model', {}).get('auto_scale_pos_weight', True)
+        
+        if not auto_calc:
+            # 자동 계산 비활성화: 튜닝된 값 사용 (기본값 1.0)
+            logger.info("scale_pos_weight 자동 계산 비활성화 - 튜닝된 값 사용")
+            return 1.0
+        
+        # 자동 계산 활성화: 기존 로직 사용
         if len(y.unique()) != 2:
             return 1.0
         
@@ -263,7 +274,9 @@ class BaseModel(ABC):
         if pos_count == 0:
             return 1.0
         
-        return neg_count / pos_count
+        calculated_weight = neg_count / pos_count
+        logger.info(f"scale_pos_weight 자동 계산: {calculated_weight:.2f} (neg: {neg_count}, pos: {pos_count})")
+        return calculated_weight
     
     def get_model_info(self) -> Dict[str, Any]:
         """
