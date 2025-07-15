@@ -19,8 +19,8 @@ resampling:
   
   # 각 기법별 설정
   smote:
-    k_neighbors: 5
-    sampling_strategy: "auto"
+    k_neighbors: 3
+    sampling_strategy: 0.1
   
   borderline_smote:
     k_neighbors: 5
@@ -50,26 +50,26 @@ resampling:
 model_specific:
   xgboost:
     # 기존 XGBoost 설정 유지
-    scale_pos_weight: "auto"
+    scale_pos_weight: 1.0
     use_focal_loss: true
     
   catboost:
-    class_weights: [1.0, 1000.0]  # 더 강력한 불균형 처리
-    auto_class_weights: "Balanced"
-    scale_pos_weight: "auto"
+    class_weights: null
+    auto_class_weights: null
+    scale_pos_weight: 1.0
     
   lightgbm:
-    class_weight: "balanced"
-    scale_pos_weight: "auto"
+    class_weight: null
+    scale_pos_weight: 1.0
     is_unbalance: false  # scale_pos_weight와 충돌 방지
     
   random_forest:
-    class_weight: "balanced"
-    sample_weight: "auto"
+    class_weight: null
+    sample_weight: null
 
 # 하이퍼파라미터 튜닝 설정
 tuning:
-  n_trials: 3  # 빠른 테스트용
+  n_trials: 100  # 빠른 테스트용
   direction: "maximize"
   primary_metric: "pr_auc"
   n_jobs: 4
@@ -77,8 +77,8 @@ tuning:
   # 조기 종료 설정
   early_stopping:
     enabled: true
-    patience: 10  # 10번 연속 개선 없으면 조기 종료
-    min_trials: 5  # 최소 5번은 시도
+    patience: 20  # 10번 연속 개선 없으면 조기 종료
+    min_trials: 20  # 최소 5번은 시도
 
 # Optuna Sampler 설정
 sampler:
@@ -143,8 +143,8 @@ xgboost_params:
   
   scale_pos_weight:
     type: "float"
-    low: 0.5
-    high: 10.0
+    low: 0.8
+    high: 3.0
     log: true
   
   use_focal_loss:

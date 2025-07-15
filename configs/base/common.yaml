@@ -80,16 +80,27 @@ features:
     - "treatment_type"
     - "follow_up_status"
   
-  # 선택된 피처 목록 - comp 제외, suicide_t 추가
+  # 선택된 피처 목록 - 확장된 20개 피처
   selected_features: [
     # 기본 인구학적 정보
-    "age", "sex",
+    "age", "sex", "age_group",
     
-    # 정신 건강 점수 (comp 제외)
-    "anxiety_score", "depress_score", "sleep_score",
+    # 정신 건강 점수
+    "anxiety_score", "depress_score", "sleep_score", "comp",
     
-    # 자살 관련 변수 추가
-    "suicide_t"
+    # 자살 관련 변수
+    "suicide_t", "suicide_a",
+    
+    # 정신과 분류
+    "psychia_cate",
+    
+    # 시간 기반 피처
+    "month", "day_of_week", "day_of_year",
+    
+    # 과거 이력 피처 (이동 통계)
+    "anxiety_score_rolling_mean_2y", "anxiety_score_rolling_std_2y", "anxiety_score_yoy_change",
+    "depress_score_rolling_mean_2y", "depress_score_rolling_std_2y", "depress_score_yoy_change",
+    "sleep_score_rolling_mean_2y", "sleep_score_rolling_std_2y", "sleep_score_yoy_change"
   ]
   
   # 기존 피처 검증 설정

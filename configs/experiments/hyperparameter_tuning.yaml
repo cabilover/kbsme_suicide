@@ -13,14 +13,14 @@ experiment:
 # 튜닝 기본 설정
 tuning:
   direction: "maximize"  # "maximize" 또는 "minimize"
-  n_trials: 100  # 튜닝 횟수, 100회로 증가
+  n_trials: 500  # 튜닝 횟수, 500회로 증가
   n_jobs: 1  # 병렬 처리 설정 (MLflow 충돌 방지)
   
   # 조기 종료 설정
   early_stopping:
     enabled: true
-    patience: 20  # 20번 연속 개선 없으면 조기 종료
-    min_trials: 30  # 최소 30번은 시도
+    patience: 50  # 50번 연속 개선 없으면 조기 종료
+    min_trials: 100  # 최소 100번은 시도
 
 # Optuna Sampler 설정
 sampler:
@@ -108,18 +108,18 @@ xgboost_params:
     high: 10.0
     log: true
   
-  reg_lambda:
+    reg_lambda:
     type: "float"
     low: "1e-8"
     high: 10.0
     log: true
-  
+
   scale_pos_weight:
     type: "float"
-    low: 10.0
-    high: 100.0
+    low: 50.0
+    high: 1000.0
     log: true
-  
+
   tree_method:
     type: "categorical"
     choices: ["auto", "exact", "approx", "hist"]
@@ -198,18 +198,18 @@ lightgbm_params:
     high: 10.0
     log: true
   
-  reg_lambda:
+    reg_lambda:
     type: "float"
     low: "1e-8"
     high: 10.0
     log: true
-  
+
   scale_pos_weight:
     type: "float"
-    low: 10.0
-    high: 100.0
+    low: 50.0
+    high: 1000.0
     log: true
-  
+
   boosting_type:
     type: "categorical"
     choices: ["gbdt", "dart", "goss"]
@@ -218,32 +218,60 @@ lightgbm_params:
 catboost_params:
   iterations:
     type: "int"
-    low: 50
-    high: 500
+    low: 100
+    high: 1000
     log: false
   
   depth:
     type: "int"
-    low: 3
-    high: 10
+    low: 4
+    high: 12
     log: false
   
   learning_rate:
     type: "float"
-    low: 0.01
-    high: 0.3
+    low: 0.005
+    high: 0.15
     log: true
   
   l2_leaf_reg:
     type: "float"
-    low: 1
-    high: 10
+    low: 0.1
+    high: 50.0
     log: true
   
   border_count:
     type: "int"
     low: 32
-    high: 255
+    high: 128
+    log: false
+  
+  min_data_in_leaf:
+    type: "int"
+    low: 1
+    high: 20
+    log: false
+  
+  max_bin:
+    type: "int"
+    low: 128
+    high: 512
+    log: false
+  
+  subsample:
+    type: "float"
+    low: 0.6
+    high: 1.0
+    log: false
+  
+  od_type:
+    type: "categorical"
+    choices: ["Iter", "IncToDec"]
+  
+  od_wait:
+    type: "int"
+    low: 20
+    high: 100
     log: false
   
   bagging_temperature:
