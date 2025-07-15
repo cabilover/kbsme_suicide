@@ -13,11 +13,11 @@ from typing import Dict, Any, List, Tuple
 import logging
 from datetime import datetime
 import warnings
-from src.utils import find_column_with_remainder
+from src.utils import find_column_with_remainder, setup_logging
 from pathlib import Path
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 

@@ -3,6 +3,17 @@
 ## 프로젝트 개요
 개인별 연간 정신 건강 지표 데이터를 활용하여 다음 해의 불안/우울/수면 점수 및 자살 사고/시도 여부를 예측하는 머신러닝 프로젝트입니다.
 
+## 🎯 최근 주요 개선사항 (2025-07-16)
+
+### ✅ **로깅 시스템 일원화 및 코드 일관성 강화**
+- **공통 로깅 함수 도입**: `src/utils.py`에 `setup_logging`, `get_logger`, `log_experiment_info` 함수 추가
+- **모듈별 일관된 로깅 적용**: 기존의 `logging.basicConfig()` 개별 호출을 모두 제거하고, `setup_logging()` 함수로 통합
+- **utils 패키지 구조 개선**: `src/utils/__init__.py`에서 공통 함수 및 로깅 함수 직접 제공 (import 경로 문제 해결)
+- **테스트 완료**: 모든 주요 모듈(`training.py`, `hyperparameter_tuning.py`, `evaluation.py`, `feature_engineering.py`, `preprocessing.py`, `data_analysis.py`, `splits.py`)에서 로깅 정상 동작 확인
+- **향후 확장성**: 파일 로깅, 포맷, 레벨 등 중앙에서 손쉽게 관리 가능
+
+---
+
 ## 🎯 최근 주요 개선사항 (2025-07-14)
 
 ### ✅ **Stratified Group K-Fold 구현 및 하이퍼파라미터 확장**

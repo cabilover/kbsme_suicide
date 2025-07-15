@@ -29,12 +29,10 @@ from src.splits import (
     log_splits_info
 )
 from src.utils.config_manager import ConfigManager
+from src.utils import setup_logging
 
 # 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 

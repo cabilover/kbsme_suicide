@@ -12,11 +12,11 @@ import mlflow
 from sklearn.model_selection import train_test_split
 import warnings
 from src.feature_engineering import get_target_columns_from_data
-from src.utils import find_column_with_remainder, safe_feature_name
+from src.utils import find_column_with_remainder, safe_feature_name, safe_float, setup_logging
 from src.models import ModelFactory
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 
@@ -151,15 +151,14 @@ def log_training_results(training_results: Dict[str, Any], fold_count: int):
     # val_metrics는 타겟별 메트릭 딕셔너리 형태
     for target_name, target_metrics in val_metrics.items():
         for metric_name, value in target_metrics.items():
-            if isinstance(value, (int, float)) and not np.isnan(value) and not np.isinf(value):
-                try:
-                    # 타겟명과 메트릭명을 조합하여 고유한 메트릭 이름 생성
-                    safe_target_name = target_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
-                    safe_metric_name = metric_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
-                    mlflow_metric_name = f"fold_{fold_count}_{safe_target_name}_{safe_metric_name}"
-                    mlflow.log_metric(mlflow_metric_name, value)
-                except Exception as e:
-                    logger.warning(f"MLflow 메트릭 로깅 실패 ({mlflow_metric_name}): {e}")
+            try:
+                # 타겟명과 메트릭명을 조합하여 고유한 메트릭 이름 생성
+                safe_target_name = target_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                safe_metric_name = metric_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+                mlflow_metric_name = f"fold_{fold_count}_{safe_target_name}_{safe_metric_name}"
+                mlflow.log_metric(mlflow_metric_name, safe_float(value))
+            except Exception as e:
+                logger.warning(f"MLflow 메트릭 로깅 실패 ({mlflow_metric_name}): {e}")
     
     # Early Stopping 정보 로깅
     if training_results.get('early_stopping_used'):
@@ -187,7 +186,7 @@ def log_training_results(training_results: Dict[str, Any], fold_count: int):
                 try:
                     mlflow.log_metric(
                         f"feature_importance_{target}_{safe_feature_name}", 
-                        row['importance']
+                        safe_float(row['importance'])
                     )
                 except Exception as e:
                     logger.warning(f"MLflow 피처 중요도 로깅 실패: {e}")
@@ -204,7 +203,7 @@ def log_training_results(training_results: Dict[str, Any], fold_count: int):
                     try:
                         mlflow.log_metric(
                             f"aggregated_feature_importance_{safe_feature_name}", 
-                            row['importance']
+                            safe_float(row['importance'])
                         )
                     except Exception as e:
                         logger.warning(f"MLflow 집계 피처 중요도 로깅 실패: {e}")
@@ -382,11 +381,10 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         
         # MLflow에 집계 메트릭 로깅
         for metric_name, value in aggregate_metrics.items():
-            if isinstance(value, (int, float)) and not np.isnan(value) and not np.isinf(value):
-                try:
-                    mlflow.log_metric(f"cv_{metric_name}", value)
-                except Exception as e:
-                    logger.warning(f"MLflow 집계 메트릭 로깅 실패 (cv_{metric_name}): {e}")
+            try:
+                mlflow.log_metric(f"cv_{metric_name}", safe_float(value))
+            except Exception as e:
+                logger.warning(f"MLflow 집계 메트릭 로깅 실패 (cv_{metric_name}): {e}")
         
         # 리샘플링 사용 여부 로깅
         resampling_enabled = config.get('resampling', {}).get('enabled', False)

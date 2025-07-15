@@ -20,9 +20,10 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.neighbors import NearestNeighbors
 from sklearn.utils import resample
 import warnings
+from src.utils import setup_logging
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 

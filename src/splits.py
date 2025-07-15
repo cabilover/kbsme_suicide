@@ -15,9 +15,10 @@ import logging
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 import yaml
 from pathlib import Path
+from src.utils import setup_logging
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 

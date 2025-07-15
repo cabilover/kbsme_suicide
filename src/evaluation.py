@@ -19,9 +19,10 @@ from sklearn.metrics import (
 )
 import warnings
 from pathlib import Path
+from src.utils import setup_logging
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 

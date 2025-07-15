@@ -22,7 +22,7 @@ import time
 import numbers
 import gc
 import psutil
-from src.utils import safe_float_conversion, is_valid_number
+from src.utils import safe_float_conversion, is_valid_number, safe_float, setup_logging
 
 # 프로젝트 루트를 Python 경로에 추가
 import sys
@@ -36,7 +36,7 @@ from src.models import ModelFactory
 from src.evaluation import calculate_all_metrics
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 
@@ -406,7 +406,7 @@ class HyperparameterTuner:
                             try:
                                 safe_target_name = target_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
                                 safe_metric_name = metric_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
-                                mlflow.log_metric(f"trial_{trial.number}_fold_{fold_idx}_{safe_target_name}_{safe_metric_name}", metric_value)
+                                mlflow.log_metric(f"trial_{trial.number}_fold_{fold_idx}_{safe_target_name}_{safe_metric_name}", safe_float(metric_value))
                             except Exception as e:
                                 logger.warning(f"Trial {trial.number} 폴드 {fold_idx} 메트릭 로깅 실패 ({metric_name}): {e}")
                         
@@ -414,7 +414,7 @@ class HyperparameterTuner:
                         safe_target_name = target_name.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
                         safe_metric_name = primary_metric.replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
                         try:
-                            mlflow.log_metric(f"fold_{fold_idx}_{safe_target_name}_{safe_metric_name}", score)
+                            mlflow.log_metric(f"fold_{fold_idx}_{safe_target_name}_{safe_metric_name}", safe_float(score))
                         except Exception as e:
                             logger.warning(f"MLflow 로깅 실패: {e}")
                         break  # 첫 번째 타겟에서 찾으면 중단
@@ -449,14 +449,14 @@ class HyperparameterTuner:
                 # 5. Trial 성공 로깅 및 성능 지표
                 try:
                     mlflow.log_param(f"trial_{trial.number}_status", "success")
-                    mlflow.log_metric(f"trial_{trial.number}_mean_score", mean_score)
-                    mlflow.log_metric(f"trial_{trial.number}_std_score", std_score)
-                    mlflow.log_metric(f"trial_{trial.number}_min_score", min(cv_scores))
-                    mlflow.log_metric(f"trial_{trial.number}_max_score", max(cv_scores))
+                    mlflow.log_metric(f"trial_{trial.number}_mean_score", safe_float(mean_score))
+                    mlflow.log_metric(f"trial_{trial.number}_std_score", safe_float(std_score))
+                    mlflow.log_metric(f"trial_{trial.number}_min_score", safe_float(min(cv_scores)))
+                    mlflow.log_metric(f"trial_{trial.number}_max_score", safe_float(max(cv_scores)))
                     
                     # 성능 변화 추이를 위한 trial 번호 로깅
                     mlflow.log_metric("trial_number", trial.number)
-                    mlflow.log_metric("trial_score", mean_score)
+                    mlflow.log_metric("trial_score", safe_float(mean_score))
                     
                 except Exception as e:
                     logger.warning(f"Trial {trial.number} 성공 로깅 실패: {e}")
@@ -592,11 +592,11 @@ class HyperparameterTuner:
             if successful_trials:
                 scores = [t.value for t in successful_trials if t.value is not None]
                 if scores:
-                    mlflow.log_metric("all_trials_mean_score", np.mean(scores))
-                    mlflow.log_metric("all_trials_std_score", np.std(scores))
-                    mlflow.log_metric("all_trials_min_score", np.min(scores))
-                    mlflow.log_metric("all_trials_max_score", np.max(scores))
-                    mlflow.log_metric("all_trials_median_score", np.median(scores))
+                    mlflow.log_metric("all_trials_mean_score", safe_float(np.mean(scores)))
+                    mlflow.log_metric("all_trials_std_score", safe_float(np.std(scores)))
+                    mlflow.log_metric("all_trials_min_score", safe_float(np.min(scores)))
+                    mlflow.log_metric("all_trials_max_score", safe_float(np.max(scores)))
+                    mlflow.log_metric("all_trials_median_score", safe_float(np.median(scores)))
             
             # 최적화 진행 상황
             mlflow.log_param("best_trial_number", self.study.best_trial.number)
@@ -616,7 +616,7 @@ class HyperparameterTuner:
         
         if isinstance(self.best_score, (int, float)) and not np.isnan(self.best_score) and not np.isinf(self.best_score):
             try:
-                mlflow.log_metric("best_score", self.best_score)
+                mlflow.log_metric("best_score", safe_float(self.best_score))
             except Exception as e:
                 logger.warning(f"MLflow best_score 로깅 실패: {e}")
         else:
@@ -624,11 +624,11 @@ class HyperparameterTuner:
             # best_score가 유효하지 않은 경우 0.0으로 설정
             try:
                 self.best_score = float(self.best_score) if self.best_score != float('-inf') and self.best_score != float('inf') else 0.0
-                mlflow.log_metric("best_score", self.best_score)
+                mlflow.log_metric("best_score", safe_float(self.best_score))
             except (ValueError, TypeError) as e:
                 logger.warning(f"best_score 타입 변환 실패: {self.best_score} ({type(self.best_score)}): {e}")
                 self.best_score = 0.0
-                mlflow.log_metric("best_score", self.best_score)
+                mlflow.log_metric("best_score", safe_float(self.best_score))
         
         logger.info(f"최적화 완료!")
         logger.info(f"  - 최고 성능: {self.best_score:.4f}")
@@ -1172,8 +1172,8 @@ def log_optuna_visualizations_to_mlflow(study, experiment_name: str = "optuna_vi
         
         # 8. 최적화 통계를 메트릭으로 로깅
         try:
-            mlflow.log_metric("optuna_n_trials", len(study.trials))
-            mlflow.log_metric("optuna_best_value", study.best_value)
+            mlflow.log_metric("optuna_n_trials", safe_float(len(study.trials)))
+            mlflow.log_metric("optuna_best_value", safe_float(study.best_value))
             mlflow.log_metric("optuna_optimization_direction", 1 if study.direction == "maximize" else 0)
             
             # 파라미터별 최적값을 메트릭으로 로깅
@@ -1181,7 +1181,7 @@ def log_optuna_visualizations_to_mlflow(study, experiment_name: str = "optuna_vi
                 safe_param_name = param.replace(' ', '_').replace('-', '_')
                 try:
                     if isinstance(value, (int, float)):
-                        mlflow.log_metric(f"optuna_best_{safe_param_name}", value)
+                        mlflow.log_metric(f"optuna_best_{safe_param_name}", safe_float(value))
                 except Exception as e:
                     logger.warning(f"파라미터 메트릭 로깅 실패 ({param}): {e}")
             

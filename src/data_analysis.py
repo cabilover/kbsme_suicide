@@ -8,6 +8,7 @@ from datetime import datetime
 import warnings
 import yaml
 import logging
+from src.utils import setup_logging
 
 # Configure warnings for EDA - suppress common plotting and pandas warnings
 # while keeping important ones visible
@@ -34,7 +35,7 @@ REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 def load_config():
