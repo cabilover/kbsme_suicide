@@ -648,6 +648,46 @@ class ResamplingPipeline:
         return self.resampler.fit_resample(X, y, id_column)
 
 
+def create_missing_flags(df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
+    """
+    결측치 플래그를 생성합니다.
+    
+    Args:
+        df: 입력 데이터프레임
+        config: 설정 딕셔너리
+        
+    Returns:
+        결측치 플래그가 추가된 데이터프레임
+    """
+    df_with_flags = df.copy()
+    
+    # 설정에서 결측치 플래그 설정 가져오기
+    missing_flags_config = config['preprocessing'].get('missing_flags', {})
+    enabled = missing_flags_config.get('enabled', True)
+    
+    if not enabled:
+        logger.info("결측치 플래그 생성이 비활성화되어 있습니다.")
+        return df_with_flags
+    
+    # 설정에서 플래그 생성 대상 컬럼 가져오기
+    missing_flag_columns = missing_flags_config.get('columns', ['sleep_score', 'depress_score', 'anxiety_score'])
+    
+    logger.info("결측치 플래그 생성")
+    
+    for col in missing_flag_columns:
+        if col in df.columns:
+            flag_col = f'{col}_missing'
+            df_with_flags[flag_col] = df[col].isnull().astype(int)
+            
+            missing_count = df[col].isnull().sum()
+            missing_rate = missing_count / len(df) * 100
+            logger.info(f"  - {flag_col}: {missing_count}개 ({missing_rate:.4f}%)")
+        else:
+            logger.warning(f"결측치 플래그 생성 대상 컬럼 '{col}'이 데이터에 존재하지 않습니다.")
+    
+    return df_with_flags
+
+
 def apply_timeseries_imputation(df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
     """
     ID별로 시계열 보간을 적용합니다.
@@ -778,6 +818,16 @@ def get_passthrough_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[st
         passthrough_cols.append(id_column)
         logger.info(f"ID 컬럼 '{id_column}'을 통과 컬럼에 추가 (리샘플링용)")
     
+    # 결측치 플래그 컬럼들도 통과 컬럼에 추가
+    missing_flags_config = config['preprocessing'].get('missing_flags', {})
+    if missing_flags_config.get('enabled', True):
+        missing_flag_columns = missing_flags_config.get('columns', ['sleep_score', 'depress_score', 'anxiety_score'])
+        for col in missing_flag_columns:
+            flag_col = f'{col}_missing'
+            if flag_col in df.columns and flag_col not in passthrough_cols:
+                passthrough_cols.append(flag_col)
+                logger.info(f"결측치 플래그 '{flag_col}'을 통과 컬럼에 추가")
+    
     logger.info(f"통과시킬 컬럼: {passthrough_cols}")
     return passthrough_cols
 
@@ -794,9 +844,46 @@ def create_preprocessing_pipeline(config: Dict[str, Any]) -> ColumnTransformer:
     """
     # 수치형 결측치 처리 + 스케일링
     numerical_strategy = config['preprocessing']['numerical_imputation']['strategy']
+    scaling_config = config['preprocessing']['scaling']
+    
+    # 설정에 따라 스케일러 선택
+    if scaling_config['method'] == 'robust':
+        from sklearn.preprocessing import RobustScaler
+        scaler = RobustScaler(
+            with_centering=scaling_config.get('with_mean', True),
+            with_scaling=scaling_config.get('with_std', True)
+        )
+        logger.info(f"RobustScaler 적용: with_centering={scaling_config.get('with_mean', True)}, with_scaling={scaling_config.get('with_std', True)}")
+    elif scaling_config['method'] == 'standard':
+        scaler = StandardScaler(
+            with_mean=scaling_config.get('with_mean', True),
+            with_std=scaling_config.get('with_std', True)
+        )
+        logger.info(f"StandardScaler 적용: with_mean={scaling_config.get('with_mean', True)}, with_std={scaling_config.get('with_std', True)}")
+    elif scaling_config['method'] == 'minmax':
+        from sklearn.preprocessing import MinMaxScaler
+        scaler = MinMaxScaler()
+        logger.info("MinMaxScaler 적용")
+    elif scaling_config['method'] == 'none':
+        from sklearn.preprocessing import FunctionTransformer
+        scaler = FunctionTransformer(
+            func=lambda x: x, 
+            validate=False,
+            feature_names_out='one-to-one'
+        )
+        logger.info("스케일링 비활성화")
+    else:
+        logger.warning(f"지원하지 않는 스케일링 방법: {scaling_config['method']}. 스케일링을 비활성화합니다.")
+        from sklearn.preprocessing import FunctionTransformer
+        scaler = FunctionTransformer(
+            func=lambda x: x, 
+            validate=False,
+            feature_names_out='one-to-one'
+        )
+    
     numerical_transformer = Pipeline([
         ('imputer', SimpleImputer(strategy=numerical_strategy)),
-        ('scaler', StandardScaler())
+        ('scaler', scaler)
     ])
     
     # 범주형 결측치 처리 + 인코딩
@@ -831,6 +918,7 @@ def create_preprocessing_pipeline(config: Dict[str, Any]) -> ColumnTransformer:
     
     logger.info(f"전처리 파이프라인 생성 완료")
     logger.info(f"  - 수치형 전략: {numerical_strategy}")
+    logger.info(f"  - 스케일링 방법: {scaling_config['method']}")
     logger.info(f"  - 범주형 전략: {categorical_strategy}")
     logger.info(f"  - 범주형 인코딩: {categorical_encoding}")
     
@@ -850,8 +938,11 @@ def fit_preprocessing_pipeline(df: pd.DataFrame, config: Dict[str, Any]) -> Tupl
     """
     logger.info("전처리 파이프라인 피팅 시작")
     
-    # 시계열 보간 적용
-    df_imputed = apply_timeseries_imputation(df, config)
+    # 1단계: 결측치 플래그 생성 (원본 데이터에서)
+    df_with_flags = create_missing_flags(df, config)
+    
+    # 2단계: 시계열 보간 적용
+    df_imputed = apply_timeseries_imputation(df_with_flags, config)
     
     # 수치형, 범주형, 통과 컬럼 식별
     numerical_cols = get_numerical_columns(df_imputed, config)
@@ -907,7 +998,7 @@ def transform_data(df: pd.DataFrame, preprocessor: ColumnTransformer, config: Di
     Returns:
         변환된 데이터프레임
     """
-    # 파이프라인을 사용하여 데이터 변환
+    # create_missing_flags(df, config) 호출 제거 (fit 시점에만 플래그 생성)
     transformed_array = preprocessor.transform(df)
     
     # 변환된 배열을 데이터프레임으로 변환

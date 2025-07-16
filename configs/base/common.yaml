@@ -146,6 +146,11 @@ preprocessing:
     columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
     fallback_strategy: "mean"
   
+  # 결측치 플래그 설정
+  missing_flags:
+    enabled: true  # 결측치 플래그 생성 활성화
+    columns: ["sleep_score", "depress_score", "anxiety_score"]  # 플래그 생성 대상 컬럼
+  
   # 수치형 결측치 처리
   numerical_imputation:
     strategy: "median"  # "mean", "median", "constant"
@@ -170,9 +175,9 @@ preprocessing:
   
   # 스케일링
   scaling:
-    method: "robust"
-    with_mean: true
-    with_std: true
+    method: "none"  # 트리 기반 모델을 위해 스케일링 비활성화
+    with_mean: false
+    with_std: false
   
   # 피처 선택
   feature_selection:

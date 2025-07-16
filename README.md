@@ -580,6 +580,7 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
 ### 전처리 파이프라인
 - **시계열 보간**: 개인별 ffill/bfill 전략
 - **결측치 처리**: 수치형(mean), 범주형(most_frequent)
+- **결측치 플래그(Flag) 생성**: 주요 시계열 점수(`anxiety_score`, `depress_score`, `sleep_score` 등)에 대해 결측값이 존재하는 행을 사전에 감지하여, 각 점수별로 `*_missing_flag` 컬럼을 생성합니다. 이 플래그는 결측치 보간/대체 전에 추가되며, 이후 파이프라인 전체에서 보존되어 결측 자체의 임상적 의미를 피처로 활용할 수 있습니다. 플래그 생성 대상 컬럼은 config(`configs/base/common.yaml`)에서 관리되며, passthrough 컬럼으로 지정되어 모든 모델 입력에 전달됩니다.
 - **범주형 인코딩**: OrdinalEncoder (XGBoost 호환, 안정화 완료)
 - **데이터 타입 변환**: XGBoost 호환을 위한 float32 변환
 
