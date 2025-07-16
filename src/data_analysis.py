@@ -1,3 +1,17 @@
+"""
+데이터 분석 모듈
+
+이 모듈은 원본 데이터에 대한 종합적인 탐색적 데이터 분석(EDA)을 수행합니다.
+- 결측치 분석 및 시각화
+- 이상치 분석 (IQR 기반)
+- 시계열 길이 분석 (개인별 연도 수)
+- 타겟 변수 분포 분석 (연속형/이진형)
+- 데이터 타입 분석 및 변환
+- 타겟 변수 생성 (다음 해 예측용)
+
+참고: 피처 엔지니어링은 별도의 feature_engineering.py 모듈에서 담당합니다.
+"""
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -465,52 +479,7 @@ def create_target_variables(df, config=None):
     
     return df
 
-def feature_engineering_analysis(df, config=None):
-    """Analyze potential features for engineering."""
-    print("\n=== Feature Engineering Analysis ===")
-    
-    # 설정에서 점수 타겟 가져오기
-    score_targets, _ = get_target_variables(config or load_config())
-    
-    # Time-based features from dov
-    if 'dov' in df.columns and df['dov'].dtype == 'datetime64[ns]':
-        df['month'] = df['dov'].dt.month
-        df['day_of_week'] = df['dov'].dt.dayofweek
-        df['day_of_year'] = df['dov'].dt.dayofyear
-        
-        print("\nTime-based features created:")
-        print("- month: Month of visit")
-        print("- day_of_week: Day of week (0=Monday, 6=Sunday)")
-        print("- day_of_year: Day of year (1-366)")
-    
-    # Historical features analysis
-    print("\nAnalyzing potential historical features...")
-    
-    # Calculate rolling statistics for each individual
-    historical_features = {}
-    
-    for col in score_targets:
-        if col in df.columns:
-            # Calculate rolling mean over past 2 years
-            df[f'{col}_rolling_mean_2y'] = df.groupby('id')[col].rolling(window=2, min_periods=1).mean().reset_index(0, drop=True)
-            
-            # Calculate rolling std over past 2 years
-            df[f'{col}_rolling_std_2y'] = df.groupby('id')[col].rolling(window=2, min_periods=1).std().reset_index(0, drop=True)
-            
-            # Calculate year-over-year change
-            df[f'{col}_yoy_change'] = df.groupby('id')[col].diff()
-            
-            historical_features[col] = {
-                'rolling_mean_2y_created': True,
-                'rolling_std_2y_created': True,
-                'yoy_change_created': True
-            }
-    
-    # Save feature engineering analysis
-    feature_analysis = pd.DataFrame(historical_features).T
-    feature_analysis.to_csv(REPORTS_DIR / "feature_engineering_analysis.txt")
-    
-    return df
+
 
 def main():
     """Main function to run all analysis."""
@@ -551,10 +520,6 @@ def main():
         # Create target variables
         df = create_target_variables(df, config)
         mlflow.log_artifact(str(REPORTS_DIR / "target_variable_analysis.txt"))
-        
-        # Feature engineering analysis
-        df = feature_engineering_analysis(df, config)
-        mlflow.log_artifact(str(REPORTS_DIR / "feature_engineering_analysis.txt"))
         
         # Save processed data in the correct location
         df.to_csv(PROCESSED_DIR / "processed_data_with_features.csv", index=False)

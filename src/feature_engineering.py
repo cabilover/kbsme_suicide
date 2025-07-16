@@ -1,10 +1,14 @@
 """
-피처 엔지니어링 모듈
+통합 피처 엔지니어링 모듈
 
 이 모듈은 기존 피처의 유효성을 검증하고 새로운 피처를 생성합니다.
 - 기존 피처의 데이터 유출 검증
 - 시간 기반 피처 생성
+- 이동 통계 피처 생성 (rolling mean, std)
+- 변화율 피처 생성 (yoy_change)
+- 지연 피처 생성 (lag features)
 - 데이터 유출 방지 원칙 준수
+- 설정 기반 통합 관리
 """
 
 import pandas as pd
@@ -234,21 +238,97 @@ def create_rolling_features(df: pd.DataFrame, config: Dict[str, Any]) -> pd.Data
     for col in rolling_columns:
         if col in df.columns:
             for window in window_sizes:
-                # 이동 평균
+                # 이동 평균 - min_periods를 window로 설정하여 더 엄격한 조건 적용
                 mean_col_name = f"{col}_rolling_mean_{window}y"
                 df_with_rolling[mean_col_name] = df_with_rolling.groupby(id_column)[col].rolling(
-                    window=window, min_periods=1
+                    window=window, min_periods=window
                 ).mean().reset_index(0, drop=True)
                 
-                # 이동 표준편차
+                # 이동 표준편차 - min_periods를 window로 설정하여 더 엄격한 조건 적용
                 std_col_name = f"{col}_rolling_std_{window}y"
                 df_with_rolling[std_col_name] = df_with_rolling.groupby(id_column)[col].rolling(
-                    window=window, min_periods=1
+                    window=window, min_periods=window
                 ).std().reset_index(0, drop=True)
                 
                 logger.info(f"  - {mean_col_name}, {std_col_name} 생성 완료")
     
     return df_with_rolling
+
+
+def create_yoy_change_features(df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
+    """
+    연도별 변화율 피처를 생성합니다 (data_analysis.py에서 가져온 기능).
+    
+    Args:
+        df: 데이터프레임
+        config: 설정 딕셔너리
+        
+    Returns:
+        변화율 피처가 추가된 데이터프레임
+    """
+    logger.info("연도별 변화율 피처 생성")
+    
+    df_with_yoy = df.copy()
+    
+    # 설정에서 점수 타겟 가져오기
+    target_vars = config.get('features', {}).get('target_variables', {})
+    original_targets = target_vars.get('original_targets', {})
+    score_targets = original_targets.get('score_targets', ['anxiety_score', 'depress_score', 'sleep_score', 'comp'])
+    
+    # 시계열 설정 가져오기
+    id_column = config['time_series']['id_column']
+    year_column = config['time_series']['year_column']
+    
+    # ID별로 정렬
+    df_with_yoy = df_with_yoy.sort_values([id_column, year_column])
+    
+    for col in score_targets:
+        if col in df.columns:
+            # 연도별 변화율 계산 (전년 대비 변화량)
+            yoy_col_name = f"{col}_yoy_change"
+            df_with_yoy[yoy_col_name] = df_with_yoy.groupby(id_column)[col].diff()
+            logger.info(f"  - {yoy_col_name} 생성 완료")
+    
+    return df_with_yoy
+
+
+def create_target_variables(df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
+    """
+    다음 해 예측을 위한 타겟 변수를 생성합니다 (data_analysis.py에서 가져온 기능).
+    
+    Args:
+        df: 데이터프레임
+        config: 설정 딕셔너리
+        
+    Returns:
+        타겟 변수가 추가된 데이터프레임
+    """
+    logger.info("타겟 변수 생성 (next_year)")
+    
+    df_with_targets = df.copy()
+    
+    # 설정에서 타겟 변수명 가져오기
+    target_vars = config.get('features', {}).get('target_variables', {})
+    original_targets = target_vars.get('original_targets', {})
+    score_targets = original_targets.get('score_targets', ['anxiety_score', 'depress_score', 'sleep_score', 'comp'])
+    binary_targets = original_targets.get('binary_targets', ['suicide_t', 'suicide_a'])
+    
+    target_cols = score_targets + binary_targets
+    
+    # 시계열 설정 가져오기
+    id_column = config['time_series']['id_column']
+    year_column = config['time_series']['year_column']
+    
+    # ID별로 정렬
+    df_with_targets = df_with_targets.sort_values([id_column, year_column])
+    
+    # 다음 해 타겟 변수 생성
+    for col in target_cols:
+        if col in df.columns:
+            df_with_targets[f'{col}_next_year'] = df_with_targets.groupby(id_column)[col].shift(-1)
+            logger.info(f"  - {col}_next_year 생성 완료")
+    
+    return df_with_targets
 
 
 def fit_feature_engineering(df: pd.DataFrame, config: Dict[str, Any]) -> Tuple[pd.DataFrame, Dict[str, Any]]:
@@ -290,29 +370,35 @@ def fit_feature_engineering(df: pd.DataFrame, config: Dict[str, Any]) -> Tuple[p
     # 1단계: 기존 피처 유효성 검증
     validation_results = validate_existing_features(df, config)
     
-    # 2단계: 시간 기반 피처 생성
-    df_with_time = create_time_features(df, config)
+    # 2단계: 타겟 변수 생성 (next_year)
+    df_with_targets = create_target_variables(df, config)
     
-    # 3단계: 지연 피처 생성 (설정에 따라)
+    # 3단계: 시간 기반 피처 생성
+    df_with_time = create_time_features(df_with_targets, config)
+    
+    # 4단계: 지연 피처 생성 (설정에 따라)
     df_with_lags = create_lagged_features(df_with_time, config)
     
-    # 4단계: 이동 통계 피처 생성 (설정에 따라)
+    # 5단계: 이동 통계 피처 생성 (설정에 따라)
     df_with_rolling = create_rolling_features(df_with_lags, config)
+    
+    # 6단계: 연도별 변화율 피처 생성
+    df_with_yoy = create_yoy_change_features(df_with_rolling, config)
     
     # 피처 정보 수집
     feature_info = {
         'validation_results': validation_results,
-        'total_features': len(df_with_rolling.columns),
+        'total_features': len(df_with_yoy.columns),
         'original_features': len(df.columns),
-        'new_features': len(df_with_rolling.columns) - len(df.columns)
+        'new_features': len(df_with_yoy.columns) - len(df.columns)
     }
     
     logger.info(f"피처 엔지니어링 완료: {feature_info['total_features']}개 피처")
     logger.info(f"  - 원본 피처: {feature_info['original_features']}개")
     logger.info(f"  - 새로 생성된 피처: {feature_info['new_features']}개")
-    logger.info(f"[DEBUG] 피처 엔지니어링 직후 컬럼 목록: {list(df_with_rolling.columns)}")
+    logger.info(f"[DEBUG] 피처 엔지니어링 직후 컬럼 목록: {list(df_with_yoy.columns)}")
     
-    return df_with_rolling, feature_info
+    return df_with_yoy, feature_info
 
 
 def transform_features(df: pd.DataFrame, feature_info: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
@@ -338,18 +424,24 @@ def transform_features(df: pd.DataFrame, feature_info: Dict[str, Any], config: D
     
     logger.info("피처 엔지니어링 적용")
     
-    # 1단계: 시간 기반 피처 생성
-    df_with_time = create_time_features(df, config)
+    # 1단계: 타겟 변수 생성 (next_year)
+    df_with_targets = create_target_variables(df, config)
     
-    # 2단계: 지연 피처 생성 (설정에 따라)
+    # 2단계: 시간 기반 피처 생성
+    df_with_time = create_time_features(df_with_targets, config)
+    
+    # 3단계: 지연 피처 생성 (설정에 따라)
     df_with_lags = create_lagged_features(df_with_time, config)
     
-    # 3단계: 이동 통계 피처 생성 (설정에 따라)
+    # 4단계: 이동 통계 피처 생성 (설정에 따라)
     df_with_rolling = create_rolling_features(df_with_lags, config)
     
-    logger.info(f"피처 엔지니어링 적용 완료: {len(df_with_rolling.columns)}개 피처")
+    # 5단계: 연도별 변화율 피처 생성
+    df_with_yoy = create_yoy_change_features(df_with_rolling, config)
     
-    return df_with_rolling
+    logger.info(f"피처 엔지니어링 적용 완료: {len(df_with_yoy.columns)}개 피처")
+    
+    return df_with_yoy
 
 
 def get_target_columns(config: Dict[str, Any]) -> List[str]:
@@ -520,21 +612,21 @@ features:
     scope: "sample"
     sample_size: 1000
   
+  enable_feature_engineering: true
   enable_lagged_features: true
   lag_periods: [1, 2]
   lagged_features:
     columns: ["anxiety_score", "depress_score", "sleep_score"]
   
-  enable_rolling_features: true
-  rolling_features:
-    windows: [2, 3]
+  enable_rolling_stats: true
+  rolling_stats:
+    window_sizes: [2, 3]
     columns: ["anxiety_score", "depress_score", "sleep_score"]
-    functions: ["mean", "std"]
 
 time_series:
   id_column: "id"
   year_column: "yov"
-  date_column: "date"
+  date_column: "dov"
             """)
             raise SystemExit(1)
         
@@ -583,12 +675,12 @@ time_series:
             raise SystemExit(1)
     
     # 데이터 로드
-    data_path = Path("data/processed/processed_data_with_features.csv")
+    data_path = Path("data/sourcedata/data.csv")
     if not data_path.exists():
         logger.error("전처리된 데이터 파일을 찾을 수 없습니다!")
         logger.error("해결 방법:")
-        logger.error("1. data/processed/processed_data_with_features.csv 파일이 존재하는지 확인하세요")
-        logger.error("2. 파일이 없다면 먼저 src/data_analysis.py를 실행하여 데이터를 전처리하세요")
+        logger.error("1. data/sourcedata/data.csv 파일이 존재하는지 확인하세요")
+        logger.error("2. 파일이 없다면 원본 데이터를 준비하세요")
         raise SystemExit(1)
     
     df = pd.read_csv(data_path)
@@ -607,7 +699,7 @@ time_series:
     target_columns = get_target_columns(config)
     logger.info(f"타겟 컬럼: {target_columns}")
     
-    print("✅ 설정 파일 검증 완료 - 피처 엔지니어링이 정상적으로 완료되었습니다.")
+    print("✅ 통합 피처 엔지니어링이 정상적으로 완료되었습니다.")
 
 
 if __name__ == "__main__":

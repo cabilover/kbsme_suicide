@@ -618,8 +618,8 @@ def main():
     # 설정 로드
     config = load_config()
     
-    # 데이터 로드 (처음 10,000행만 사용)
-    data_path = "data/processed/processed_data_with_features.csv"
+    # 데이터 로드 (처음 10,000행만 사용, 설정 파일의 data.file_path 사용)
+    data_path = config['data']['file_path']
     df = pd.read_csv(data_path, nrows=10000)
     
     logger.info(f"테스트 데이터 로드: {len(df):,} 행")

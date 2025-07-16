@@ -3,7 +3,7 @@
 
 # 데이터 설정
 data:
-  file_path: "data/processed/processed_data_with_features.csv"
+  file_path: "data/sourcedata/data.csv"
   encoding: "utf-8"
   na_values: ["", "nan", "NaN", "NULL", "null"]
   # 빠른 테스트를 위한 샘플링 설정
@@ -12,6 +12,12 @@ data:
     method: "id_based"  # ID 기반 샘플링
     sample_size: 10000  # 10,000명의 환자
     random_state: 42  # 재현성을 위한 시드
+
+# 시계열 설정
+time_series:
+  id_column: "id"
+  year_column: "yov"
+  date_column: "dov"
 
 # 피처 설정
 features:
@@ -80,7 +86,7 @@ features:
     - "treatment_type"
     - "follow_up_status"
   
-  # 선택된 피처 목록 - 확장된 20개 피처
+  # 선택된 피처 목록 - 확장된 피처 (통합 후)
   selected_features: [
     # 기본 인구학적 정보
     "age", "sex", "age_group",
@@ -97,28 +103,38 @@ features:
     # 시간 기반 피처
     "month", "day_of_week", "day_of_year",
     
-    # 과거 이력 피처 (이동 통계)
+    # 과거 이력 피처 (이동 통계) - 2년, 3년 윈도우
     "anxiety_score_rolling_mean_2y", "anxiety_score_rolling_std_2y", "anxiety_score_yoy_change",
     "depress_score_rolling_mean_2y", "depress_score_rolling_std_2y", "depress_score_yoy_change",
-    "sleep_score_rolling_mean_2y", "sleep_score_rolling_std_2y", "sleep_score_yoy_change"
+    "sleep_score_rolling_mean_2y", "sleep_score_rolling_std_2y", "sleep_score_yoy_change",
+    
+    # 3년 윈도우 피처 (새로 추가)
+    "anxiety_score_rolling_mean_3y", "anxiety_score_rolling_std_3y",
+    "depress_score_rolling_mean_3y", "depress_score_rolling_std_3y",
+    "sleep_score_rolling_mean_3y", "sleep_score_rolling_std_3y",
+    
+    # 지연 피처 (설정에 따라 활성화)
+    "anxiety_score_lag_1", "anxiety_score_lag_2",
+    "depress_score_lag_1", "depress_score_lag_2",
+    "sleep_score_lag_1", "sleep_score_lag_2"
   ]
   
   # 기존 피처 검증 설정
   validation:
     scope: "sample"  # "sample", "full", "none"
-    sample_size: 10  # scope가 "sample"일 때 검증할 ID 수
+    sample_size: 100  # scope가 "sample"일 때 검증할 ID 수
   
-  # Feature Engineering 제어
-  enable_feature_engineering: false  # true: 활성화, false: 비활성화
+  # Feature Engineering 제어 - 통합 후 활성화
+  enable_feature_engineering: true  # true: 활성화, false: 비활성화
   
-  # 지연 피처 설정 - 비활성화
-  enable_lagged_features: false
-  lag_periods: [1, 2, 3]
+  # 지연 피처 설정 - 활성화
+  enable_lagged_features: true
+  lag_periods: [1, 2]
   lagged_features:
     columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]
   
-  # 이동 통계 피처 설정 - 비활성화
-  enable_rolling_stats: false
+  # 이동 통계 피처 설정 - 활성화
+  enable_rolling_stats: true
   rolling_stats:
     window_sizes: [2, 3]
     columns: ["anxiety_score", "depress_score", "sleep_score", "comp"]

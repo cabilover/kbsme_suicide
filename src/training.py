@@ -486,8 +486,8 @@ def main(config=None):
     if config is None:
         print("[WARNING] config 인자가 전달되지 않았습니다. 외부에서 config를 넘겨주세요.")
         return
-    # 테스트 데이터 로드
-    data_path = "data/processed/processed_data_with_features.csv"
+    # 테스트 데이터 로드 (설정 파일의 data.file_path 사용)
+    data_path = config['data']['file_path']
     df = pd.read_csv(data_path, nrows=1000)
     logger.info(f"테스트 데이터 로드: {len(df):,} 행")
     # 교차 검증 실행
