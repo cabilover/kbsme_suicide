@@ -412,6 +412,111 @@ def analyze_target_distribution(df, config=None):
         plt.savefig(FIGURES_DIR / f'{target}_distribution_analysis.png', dpi=300, bbox_inches='tight')
         plt.close()
 
+def analyze_infinite_values(df):
+    """Analyze infinite values in the dataset."""
+    print("\n=== Infinite Values Analysis ===")
+    
+    # 모든 수치형 컬럼에서 Inf 값 확인
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    
+    inf_report = {}
+    total_inf_count = 0
+    
+    for col in numeric_cols:
+        inf_count = np.isinf(df[col]).sum()
+        if inf_count > 0:
+            inf_report[col] = {
+                'inf_count': inf_count,
+                'inf_percentage': (inf_count / len(df)) * 100,
+                'positive_inf': np.isposinf(df[col]).sum(),
+                'negative_inf': np.isneginf(df[col]).sum()
+            }
+            total_inf_count += inf_count
+            print(f"\n{col}:")
+            print(f"  Inf values: {inf_count} ({(inf_count / len(df)) * 100:.4f}%)")
+            print(f"  +Inf: {np.isposinf(df[col]).sum()}")
+            print(f"  -Inf: {np.isneginf(df[col]).sum()}")
+    
+    if not inf_report:
+        print("✅ No infinite values found in the dataset.")
+    else:
+        print(f"\n⚠️ Total infinite values found: {total_inf_count}")
+    
+    # Save infinite values analysis
+    if inf_report:
+        inf_df = pd.DataFrame(inf_report).T
+        inf_df.to_csv(REPORTS_DIR / "infinite_values_analysis.txt")
+    
+    return inf_report
+
+
+def analyze_data_type_mixture(df):
+    """Analyze potential data type mixture issues in the dataset."""
+    print("\n=== Data Type Mixture Analysis ===")
+    
+    mixture_report = {}
+    
+    for col in df.columns:
+        # 각 컬럼의 데이터 타입 혼재 여부 확인
+        sample_values = df[col].dropna().head(1000)  # 샘플링하여 성능 향상
+        
+        if len(sample_values) == 0:
+            continue
+            
+        # 데이터 타입 분포 확인
+        type_counts = {}
+        for val in sample_values:
+            val_type = type(val).__name__
+            type_counts[val_type] = type_counts.get(val_type, 0) + 1
+        
+        # 여러 타입이 섞여 있는지 확인
+        if len(type_counts) > 1:
+            mixture_report[col] = {
+                'type_distribution': type_counts,
+                'total_types': len(type_counts),
+                'sample_size': len(sample_values)
+            }
+            print(f"\n{col}:")
+            print(f"  Multiple data types detected: {len(type_counts)} types")
+            for dtype, count in type_counts.items():
+                percentage = (count / len(sample_values)) * 100
+                print(f"    {dtype}: {count} ({percentage:.1f}%)")
+    
+    # 수치형 컬럼에서 문자열 혼재 확인
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    for col in numeric_cols:
+        # 수치형 컬럼에서 문자열이 섞여 있는지 확인
+        non_numeric_mask = pd.to_numeric(df[col], errors='coerce').isna() & df[col].notna()
+        non_numeric_count = non_numeric_mask.sum()
+        
+        if non_numeric_count > 0:
+            if col not in mixture_report:
+                mixture_report[col] = {}
+            mixture_report[col]['non_numeric_count'] = non_numeric_count
+            mixture_report[col]['non_numeric_percentage'] = (non_numeric_count / len(df)) * 100
+            
+            print(f"\n{col} (numeric column):")
+            print(f"  Non-numeric values: {non_numeric_count} ({(non_numeric_count / len(df)) * 100:.4f}%)")
+            
+            # 샘플 비수치 값들 출력
+            sample_non_numeric = df[col][non_numeric_mask].head(5).tolist()
+            print(f"  Sample non-numeric values: {sample_non_numeric}")
+    
+    if not mixture_report:
+        print("✅ No data type mixture issues found in the dataset.")
+    else:
+        print(f"\n⚠️ Data type mixture issues found in {len(mixture_report)} columns.")
+    
+    # Save data type mixture analysis
+    if mixture_report:
+        # JSON 형태로 저장 (복잡한 구조이므로)
+        import json
+        with open(REPORTS_DIR / "data_type_mixture_analysis.txt", 'w') as f:
+            json.dump(mixture_report, f, indent=2, default=str)
+    
+    return mixture_report
+
+
 def analyze_data_types_and_conversion(df):
     """Analyze data types and prepare for conversion."""
     print("\n=== Data Type Analysis ===")
@@ -500,6 +605,16 @@ def main():
         missing_df = analyze_missing_values(df)
         mlflow.log_artifact(str(REPORTS_DIR / "missing_values_analysis.txt"))
         mlflow.log_artifact(str(FIGURES_DIR / "missing_values_analysis.png"))
+        
+        # Analyze infinite values
+        inf_report = analyze_infinite_values(df)
+        if inf_report:
+            mlflow.log_artifact(str(REPORTS_DIR / "infinite_values_analysis.txt"))
+        
+        # Analyze data type mixture
+        mixture_report = analyze_data_type_mixture(df)
+        if mixture_report:
+            mlflow.log_artifact(str(REPORTS_DIR / "data_type_mixture_analysis.txt"))
         
         # Analyze outliers
         outlier_report = analyze_outliers(df, config)
