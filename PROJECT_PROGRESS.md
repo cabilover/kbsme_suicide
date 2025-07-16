@@ -14,6 +14,52 @@
 
 ## 현재 진행 상황
 
+### ✅ 2025-07-16 기준 최신 업데이트: 리샘플링 하이퍼파라미터 튜닝 시스템 대폭 개선
+
+#### **run_hyperparameter_tuning.py 리샘플링 기능 대폭 개선**
+- **k_neighbors 파라미터를 하이퍼파라미터 튜닝 대상으로 포함**:
+  - SMOTE, Borderline SMOTE, ADASYN의 k_neighbors 파라미터가 튜닝 범위에 추가됨
+  - 3~10 범위로 설정하여 적절한 이웃 수 탐색 가능
+  - 기존 하드코딩된 값(5) 제거하고 동적 튜닝 지원
+
+- **sampling_strategy 파라미터 튜닝 지원**:
+  - 극도 불균형 데이터(849:1)에 적합한 0.05~0.3 범위로 설정
+  - 과도한 오버샘플링 방지 및 과적합 위험 감소
+  - resampling.yaml에서 "auto" 대신 보수적 비율로 수정
+
+- **시계열 특화 리샘플링 파라미터 지원**:
+  - time_weight, temporal_window, seasonality_weight 등 5개 파라미터 추가
+  - 시간적 종속성을 고려한 리샘플링 가능
+  - pattern_preservation, trend_preservation 등 불린 파라미터도 튜닝 대상
+
+- **ConfigManager와의 연동 개선**:
+  - 리샘플링 파라미터가 MLflow에 자동 로깅됨
+  - 실험 결과 저장 시 리샘플링 정보 포함
+  - 명령행 인자로 time_series_adapted 옵션 추가
+
+#### **새로운 함수들 추가**
+- **`add_resampling_hyperparameters_to_tuning_config()`**: 리샘플링 파라미터를 하이퍼파라미터 튜닝 설정에 동적으로 추가
+- **`apply_resampling_hyperparameters_to_config()`**: Optuna trial에서 생성된 리샘플링 하이퍼파라미터를 config에 적용
+- **`log_tuning_params()` 개선**: 리샘플링 기법별 상세 파라미터 로깅 기능 추가
+
+#### **지원하는 리샘플링 기법 확장**
+- **기존**: none, smote, borderline_smote, adasyn, under_sampling, hybrid
+- **추가**: time_series_adapted (시계열 특화 리샘플링)
+- **총 7개 기법** 지원으로 확장
+
+#### **하이퍼파라미터 튜닝 범위**
+- **SMOTE**: k_neighbors (3-10), sampling_strategy (0.05-0.3)
+- **Borderline SMOTE**: k_neighbors (3-10), sampling_strategy (0.05-0.3), m_neighbors (5-15)
+- **ADASYN**: k_neighbors (3-10), sampling_strategy (0.05-0.3)
+- **시계열 특화**: time_weight (0.1-0.8), temporal_window (1-6), seasonality_weight (0.0-0.5), pattern_preservation (True/False), trend_preservation (True/False)
+
+#### **테스트 결과**
+- **모든 개선사항 정상 동작 확인**: 4가지 주요 개선사항 모두 성공적으로 테스트 완료
+- **리샘플링 파라미터 포함**: 각 기법별로 올바른 파라미터들이 튜닝 설정에 추가됨
+- **설정 적용 기능**: Optuna trial 파라미터가 config에 올바르게 적용됨
+- **시계열 특화 설정**: 모든 시계열 특화 파라미터가 정상적으로 처리됨
+- **resampling.yaml 통합**: 수정된 설정 파일과의 호환성 확인
+
 ### ✅ 2025-07-16 기준 최신 업데이트: NaN/Inf 데이터 품질 검증 및 data_analysis.py 확장
 
 #### **NaN/Inf 데이터 품질 검증 완료**

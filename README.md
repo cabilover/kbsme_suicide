@@ -5,11 +5,53 @@
 
 ## 🎯 최근 주요 개선사항 (2025-07-16)
 
+### ✅ **리샘플링 하이퍼파라미터 튜닝 시스템 대폭 개선**
+- **k_neighbors 파라미터를 하이퍼파라미터 튜닝 대상으로 포함**:
+  - SMOTE, Borderline SMOTE, ADASYN의 k_neighbors 파라미터가 튜닝 범위에 추가됨
+  - 3~10 범위로 설정하여 적절한 이웃 수 탐색 가능
+  - 기존 하드코딩된 값(5) 제거하고 동적 튜닝 지원
+
+- **sampling_strategy 파라미터 튜닝 지원**:
+  - 극도 불균형 데이터(849:1)에 적합한 0.05~0.3 범위로 설정
+  - 과도한 오버샘플링 방지 및 과적합 위험 감소
+  - resampling.yaml에서 "auto" 대신 보수적 비율로 수정
+
+- **시계열 특화 리샘플링 파라미터 지원**:
+  - time_weight, temporal_window, seasonality_weight 등 5개 파라미터 추가
+  - 시간적 종속성을 고려한 리샘플링 가능
+  - pattern_preservation, trend_preservation 등 불린 파라미터도 튜닝 대상
+
+- **ConfigManager와의 연동 개선**:
+  - 리샘플링 파라미터가 MLflow에 자동 로깅됨
+  - 실험 결과 저장 시 리샘플링 정보 포함
+  - 명령행 인자로 time_series_adapted 옵션 추가
+
+- **지원하는 리샘플링 기법 확장**:
+  - **기존**: none, smote, borderline_smote, adasyn, under_sampling, hybrid
+  - **추가**: time_series_adapted (시계열 특화 리샘플링)
+  - **총 7개 기법** 지원으로 확장
+
+### ✅ **NaN/Inf 데이터 품질 검증 및 data_analysis.py 확장**
+- **원본 데이터 검증**: `data/sourcedata/data.csv`에서 Inf 값 및 데이터 타입 혼재 문제 없음 확인
+  - **Inf 값**: 모든 수치형 컬럼에서 0개 발견 ✅
+  - **데이터 타입 혼재**: 수치형 컬럼에서 문자열 혼재 없음 ✅
+  - **NaN 값**: 예상된 결측치만 존재 (anxiety_score: 58개, depress_score: 300개 등)
+
+- **피처 엔지니어링 → 전처리 파이프라인 테스트**:
+  - **피처 엔지니어링 후**: Inf 0개, NaN 16,636,006개 (정상적인 시계열 피처 생성으로 인한 NaN)
+  - **전처리 후**: Inf 0개, NaN 0개 ✅
+  - **결론**: 파이프라인에서 NaN/Inf 문제 없음, 전처리가 모든 결측치를 적절히 처리
+
+- **data_analysis.py 확장**:
+  - **Inf 값 검증 함수 추가** (`analyze_infinite_values`): 모든 수치형 컬럼에서 Inf 값 검증
+  - **데이터 타입 혼재 검증 함수 추가** (`analyze_data_type_mixture`): 컬럼별 데이터 타입 분포 분석
+  - **새로운 검증 함수들을 분석 파이프라인에 통합**
+
 ### ✅ **로깅 시스템 일원화 및 코드 일관성 강화**
 - **공통 로깅 함수 도입**: `src/utils.py`에 `setup_logging`, `get_logger`, `log_experiment_info` 함수 추가
 - **모듈별 일관된 로깅 적용**: 기존의 `logging.basicConfig()` 개별 호출을 모두 제거하고, `setup_logging()` 함수로 통합
 - **utils 패키지 구조 개선**: `src/utils/__init__.py`에서 공통 함수 및 로깅 함수 직접 제공 (import 경로 문제 해결)
-- **테스트 완료**: 모든 주요 모듈(`training.py`, `hyperparameter_tuning.py`, `evaluation.py`, `feature_engineering.py`, `preprocessing.py`, `data_analysis.py`, `splits.py`)에서 로깅 정상 동작 확인
+- **테스트 완료**: 모든 주요 모듈에서 로깅 정상 동작 확인
 - **향후 확장성**: 파일 로깅, 포맷, 레벨 등 중앙에서 손쉽게 관리 가능
 
 ### ✅ **하이퍼파라미터 검색 범위 대폭 확장 및 피처 세트 확장**
@@ -451,6 +493,24 @@ python scripts/run_hyperparameter_tuning.py --model-type random_forest --experim
 
 # 특정 리샘플링 기법만 비교
 python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type resampling --resampling-comparison --resampling-methods smote adasyn
+
+# 시계열 특화 리샘플링 실험 (✅ 2025-07-16 신규 기능)
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type resampling --resampling-method time_series_adapted
+```
+
+### 리샘플링 하이퍼파라미터 튜닝 실행 (✅ 2025-07-16 신규 기능)
+```bash
+# SMOTE k_neighbors 및 sampling_strategy 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type resampling --resampling-method smote --n-trials 50
+
+# Borderline SMOTE 파라미터 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type catboost --experiment-type resampling --resampling-method borderline_smote --n-trials 50
+
+# ADASYN 파라미터 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type lightgbm --experiment-type resampling --resampling-method adasyn --n-trials 50
+
+# 시계열 특화 리샘플링 파라미터 튜닝
+python scripts/run_hyperparameter_tuning.py --model-type random_forest --experiment-type resampling --resampling-method time_series_adapted --n-trials 50
 ```
 
 ### 레거시 단일 파일 config 사용 (백워드 호환성)
@@ -523,12 +583,26 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **MLflow 실험 추적**: 모든 실험 결과 자동 로깅 및 시각화
 - **결과 저장 자동화**: 모델, 예측 결과, 시각화 자동 저장
 
+### 🔄 리샘플링 시스템 (✅ 2025-07-16 대폭 개선)
+- **7가지 리샘플링 기법 지원**: none, smote, borderline_smote, adasyn, under_sampling, hybrid, time_series_adapted
+- **하이퍼파라미터 튜닝 통합**: k_neighbors, sampling_strategy 등 리샘플링 파라미터도 Optuna로 자동 튜닝
+- **시계열 특화 리샘플링**: time_weight, temporal_window, seasonality_weight 등 5개 파라미터로 시간적 종속성 고려
+- **극도 불균형 데이터 대응**: 849:1 불균형 비율에 최적화된 파라미터 범위 설정
+- **MLflow 자동 로깅**: 모든 리샘플링 파라미터와 결과가 MLflow에 자동 기록
+- **ConfigManager 연동**: 리샘플링 설정이 계층적 config 시스템과 완전 통합
+
 ### 불균형 데이터 처리
 - **클래스 가중치, scale_pos_weight**: XGBoost 등에서 불균형 데이터 처리를 위한 가중치 옵션 지원
 
 ### 유틸리티 함수 (✅ 최신 추가)
 - **숫자 변환 및 검증**: `safe_float_conversion()`, `is_valid_number()` 함수로 하이퍼파라미터 튜닝 과정에서 안전한 숫자 처리
 - **데이터 품질 보장**: NaN/Inf 값 자동 감지 및 처리로 튜닝 과정의 안정성 향상
+
+### 데이터 품질 검증 시스템 (✅ 2025-07-16 신규 추가)
+- **Inf 값 검증**: 모든 수치형 컬럼에서 무한대 값 자동 감지 및 보고
+- **데이터 타입 혼재 검증**: 수치형 컬럼에서 문자열 혼재 여부 검증
+- **파이프라인 품질 검증**: 피처 엔지니어링 → 전처리 과정에서 NaN/Inf 값 변화 추적
+- **자동화된 품질 리포트**: `infinite_values_analysis.txt`, `data_type_mixture_analysis.txt` 자동 생성
 
 ### 최신 실험 결과
 - **2025-01-XX 기준, 모델별 데이터 검증 최적화 및 평가 로직 중앙화 완료**
@@ -695,6 +769,8 @@ mlflow.log_artifact("optimization_history.png", artifact_path="optuna_plots")
 - **완료**: CatBoost, LightGBM, Random Forest 모델 구현 및 테스트 (4개 모델 완료)
 - **완료**: ConfigManager 기반 리샘플링 비교 실험 구현 및 모든 모델 테스트 완료
 - **완료**: 숫자 검증 유틸리티 함수 추가로 하이퍼파라미터 튜닝 안정성 향상
+- **완료**: 리샘플링 하이퍼파라미터 튜닝 시스템 대폭 개선 (2025-07-16)
+- **완료**: NaN/Inf 데이터 품질 검증 및 data_analysis.py 확장 (2025-07-16)
 - **진행 중**: 앙상블 모델 개발 (Stacking, Blending, Voting)
 - **예정**: 피처 엔지니어링 고도화, 모델 해석 및 설명 가능성 확보
 

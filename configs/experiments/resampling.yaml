@@ -4,12 +4,14 @@
 # 실험 설정
 experiment:
   name: "resampling_experiment"
-  description: "다양한 리샘플링 기법 비교 실험"
+  description: "다양한 리샘플링 기법 비교 실험 (시계열 특성 고려)"
   tags:
     - "resampling"
     - "imbalanced_data"
     - "smote"
     - "suicide_prediction"
+    - "time_series"
+    - "temporal_patterns"
 
 # 리샘플링 설정
 resampling:
@@ -24,12 +26,12 @@ resampling:
   
   borderline_smote:
     k_neighbors: 5
-    sampling_strategy: "auto"
+    sampling_strategy: 0.1  # 극도 불균형 데이터에 적합한 보수적 비율
     m_neighbors: 10
   
   adasyn:
     k_neighbors: 5
-    sampling_strategy: "auto"
+    sampling_strategy: 0.1  # 극도 불균형 데이터에 적합한 보수적 비율
     n_neighbors: 5
   
   under_sampling:
@@ -41,10 +43,15 @@ resampling:
     smote_k_neighbors: 5
   
   # 시계열 특화 설정
+  # 시계열 데이터의 시간적 종속성을 고려한 리샘플링 기법
+  # 자살 예측에서 시간적 패턴(계절성, 추세)을 보존하면서 불균형 해결
   time_series_adapted:
-    enabled: false
-    time_weight: 0.3
-    pattern_preservation: true
+    enabled: true  # 시계열 특성 고려 리샘플링 활성화
+    time_weight: 0.3  # 시간적 중요도 가중치 (0.0: 무시 ~ 1.0: 완전 고려)
+    pattern_preservation: true  # 시간적 패턴 보존
+    temporal_window: 3  # 시간적 윈도우 크기 (개월 단위)
+    seasonality_weight: 0.2  # 계절성 가중치 (월별/계절별 패턴 고려)
+    trend_preservation: true  # 추세 패턴 보존 (장기적 변화 패턴 유지)
 
 # 모델별 리샘플링 설정
 model_specific:
@@ -161,6 +168,71 @@ xgboost_params:
     type: "float"
     low: 0.5
     high: 5.0
+    log: false
+  
+  # 리샘플링 관련 하이퍼파라미터
+  smote_sampling_strategy:
+    type: "float"
+    low: 0.05
+    high: 0.3
+    log: false
+  
+  borderline_smote_sampling_strategy:
+    type: "float"
+    low: 0.05
+    high: 0.3
+    log: false
+  
+  adasyn_sampling_strategy:
+    type: "float"
+    low: 0.05
+    high: 0.3
+    log: false
+  
+  # 시계열 특화 리샘플링 하이퍼파라미터
+  time_weight:
+    type: "float"
+    low: 0.1
+    high: 0.8
+    log: false
+  
+  temporal_window:
+    type: "int"
+    low: 1
+    high: 6
+    log: false
+  
+  seasonality_weight:
+    type: "float"
+    low: 0.0
+    high: 0.5
+    log: false
+  
+  pattern_preservation:
+    type: "categorical"
+    choices: [true, false]
+  
+  trend_preservation:
+    type: "categorical"
+    choices: [true, false]
+  
+  # k-neighbors 하이퍼파라미터 (SMOTE, Borderline SMOTE, ADASYN 공통)
+  smote_k_neighbors:
+    type: "int"
+    low: 3
+    high: 10
+    log: false
+  
+  borderline_smote_k_neighbors:
+    type: "int"
+    low: 3
+    high: 10
+    log: false
+  
+  adasyn_k_neighbors:
+    type: "int"
+    low: 3
+    high: 10
     log: false
 
 # CatBoost 하이퍼파라미터 검색 범위 추가
