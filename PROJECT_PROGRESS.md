@@ -537,3 +537,37 @@ stratification:
 **최종 업데이트**: 2025년 07월 14일
 **작성자**: AI Assistant
 **프로젝트 상태**: Phase 5-4 진행 중 ✅ (Stratified Group K-Fold 구현 완료, 하이퍼파라미터 확장 완료, Recall 기반 튜닝 완료) 
+
+### 🚨 2025-07-16 결측치 플래그 KeyError 디버깅 현황 및 분석
+
+#### ❗️ 오류 현상 요약
+- 하이퍼파라미터 튜닝 및 교차검증 과정에서 다음과 같은 에러가 반복적으로 발생:
+  - `columns are missing: {'sleep_score_missing', 'depress_score_missing', 'anxiety_score_missing'}`
+- configs/base/common.yaml의 selected_features에서 해당 결측치 플래그를 제거해도 동일한 에러 발생
+- 실제 feature_columns와 DataFrame.columns를 비교하면 누락 컬럼이 없음에도 불구하고 에러 메시지가 출력됨
+
+#### 🕵️‍♂️ 디버깅 과정 요약
+1. **selected_features 및 feature_columns 확인**
+   - config['features']['selected_features']와 get_feature_columns 반환값을 모두 로그로 출력
+   - 결측치 플래그가 selected_features에 없고, feature_columns에도 포함되지 않음 확인
+2. **DataFrame 컬럼 상태 확인**
+   - 전처리 후 DataFrame에는 결측치 플래그 컬럼이 항상 생성되어 있음
+   - 하지만 feature_columns에는 포함되지 않음
+3. **KeyError 발생 위치 추적**
+   - src/training.py, src/hyperparameter_tuning.py 등에서 X_train = train_processed[feature_columns] 직전/직후의 컬럼 리스트를 모두 로그로 남김
+   - 실제 KeyError 발생 시점에는 feature_columns와 DataFrame.columns가 일치함 (누락 컬럼 없음)
+4. **결과 저장/평가 함수 및 외부 라이브러리 영향 확인**
+   - save_experiment_results, save_predictions, save_feature_importance 등 결과 저장/평가 함수에서 결측치 플래그를 강제하는 코드 없음 확인
+   - Optuna, MLflow 등 외부 라이브러리에서 임의로 KeyError 메시지를 변형하거나, 내부적으로 raise하는 부분이 있는지 확인했으나 직접적인 원인 발견 못함
+5. **예외 메시지 및 KeyError 원인 분석**
+   - except 블록에서 str(e)로 출력되는 에러 메시지에만 'columns are missing: ...'이 포함됨
+   - 실제로는 KeyError가 아니라, 외부 함수/라이브러리에서 임의로 메시지를 생성하거나, pandas 내부에서 발생한 KeyError 메시지가 변형되어 전달되는 것으로 추정
+   - 누락 컬럼 리스트를 직접 비교하면 항상 [] (즉, 실제 누락 없음)
+
+#### 🔍 결론 및 향후 계획
+- 코드 상에서 결측치 플래그 컬럼이 강제되는 부분은 없음
+- 실제 KeyError 발생 시점의 feature_columns와 DataFrame.columns는 일치함
+- 에러 메시지는 외부 라이브러리 또는 pandas 내부에서 변형되어 전달되는 것으로 추정
+- 다음 단계: pandas, Optuna, MLflow 등에서 KeyError 메시지 생성/변형 경로를 추가로 추적하거나, 예외 발생 시점의 전체 stack trace를 저장하여 근본 원인 파악 예정
+
+--- 
