@@ -86,37 +86,49 @@ features:
     - "treatment_type"
     - "follow_up_status"
   
-  # 선택된 피처 목록 - 확장된 피처 (통합 후)
+  # 선택된 피처 목록 - 원본 데이터 기준으로 수정
   selected_features: [
-    # 기본 인구학적 정보
-    "age", "sex", "age_group",
+    # 기본 인구학적 정보 (원본 데이터에 존재)
+    "age", "sex",
     
-    # 정신 건강 점수
+    # 정신 건강 점수 (원본 데이터에 존재)
     "anxiety_score", "depress_score", "sleep_score", "comp",
     
-    # 자살 관련 변수
+    # 자살 관련 변수 (원본 데이터에 존재)
     "suicide_t", "suicide_a",
     
-    # 정신과 분류
+    # 정신과 분류 (원본 데이터에 존재)
     "psychia_cate",
     
-    # 시간 기반 피처
+    # 시간 기반 피처 (피처 엔지니어링으로 생성)
     "month", "day_of_week", "day_of_year",
     
-    # 과거 이력 피처 (이동 통계) - 2년, 3년 윈도우
+    # 과거 이력 피처 (피처 엔지니어링으로 생성) - 2년, 3년 윈도우
     "anxiety_score_rolling_mean_2y", "anxiety_score_rolling_std_2y", "anxiety_score_yoy_change",
     "depress_score_rolling_mean_2y", "depress_score_rolling_std_2y", "depress_score_yoy_change",
     "sleep_score_rolling_mean_2y", "sleep_score_rolling_std_2y", "sleep_score_yoy_change",
     
-    # 3년 윈도우 피처 (새로 추가)
+    # 3년 윈도우 피처 (피처 엔지니어링으로 생성)
     "anxiety_score_rolling_mean_3y", "anxiety_score_rolling_std_3y",
     "depress_score_rolling_mean_3y", "depress_score_rolling_std_3y",
     "sleep_score_rolling_mean_3y", "sleep_score_rolling_std_3y",
     
-    # 지연 피처 (설정에 따라 활성화)
+    # comp 관련 피처 (피처 엔지니어링으로 생성)
+    "comp_rolling_mean_2y", "comp_rolling_std_2y", "comp_yoy_change",
+    "comp_rolling_mean_3y", "comp_rolling_std_3y",
+    
+    # 지연 피처 (피처 엔지니어링으로 생성)
     "anxiety_score_lag_1", "anxiety_score_lag_2",
     "depress_score_lag_1", "depress_score_lag_2",
-    "sleep_score_lag_1", "sleep_score_lag_2"
+    "sleep_score_lag_1", "sleep_score_lag_2",
+    "comp_lag_1", "comp_lag_2",
+    
+    # 결측치 플래그 (전처리에서 생성)
+    "anxiety_score_missing", "depress_score_missing", "sleep_score_missing",
+    
+    # next_year 타겟 변수들은 제외 (데이터 누수 방지)
+    # "anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year", "comp_next_year",
+    # "suicide_t_next_year", "suicide_a_next_year"
   ]
   
   # 기존 피처 검증 설정

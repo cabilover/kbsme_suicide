@@ -500,7 +500,10 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
     selected_features = config['features'].get('selected_features', [])
     all_columns = list(df.columns)
     target_columns = get_target_columns(config)
-    
+
+    # --- 추가: selected_features 로그 출력 ---
+    logger.info(f"[DEBUG] config['features']['selected_features']: {selected_features}")
+
     if not selected_features:
         # 기존 로직 (타겟, 날짜, 범주형/수치형 제외) - ID 컬럼은 리샘플링을 위해 포함
         exclude_columns = target_columns + [
@@ -513,6 +516,8 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
         exclude_columns.extend(numerical_columns)
         feature_columns = [col for col in all_columns if col not in exclude_columns]
         logger.info(f"기존 로직으로 피처 컬럼 선택: {len(feature_columns)}개")
+        # --- 추가: 반환 feature_columns 로그 출력 ---
+        logger.info(f"[DEBUG] get_feature_columns 반환값: {feature_columns}")
         return feature_columns
     
     # selected_features 기반으로 피처 필터링
@@ -578,6 +583,40 @@ def get_feature_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
     
     logger.info(f"selected_features 기반 피처 컬럼 선택(타겟 제외): {len(available_features)}개")
     logger.debug(f"선택된 피처: {available_features}")
+    
+    # 결측치 플래그 포함 여부 확인 로그 추가
+    missing_flags_config = config['preprocessing'].get('missing_flags', {})
+    if missing_flags_config.get('enabled', True):
+        missing_flag_columns = missing_flags_config.get('columns', ['sleep_score', 'depress_score', 'anxiety_score'])
+        logger.info(f"[DEBUG] get_feature_columns - 전체 컬럼 수: {len(all_columns)}")
+        logger.info(f"[DEBUG] get_feature_columns - selected_features 수: {len(selected_features)}")
+        logger.info(f"[DEBUG] get_feature_columns - available_features 수: {len(available_features)}")
+        
+        for col in missing_flag_columns:
+            flag_col = f'{col}_missing'
+            # selected_features에서 확인
+            if flag_col in selected_features:
+                logger.info(f"[DEBUG] get_feature_columns - selected_features에 결측치 플래그 '{flag_col}' 포함됨")
+            else:
+                logger.warning(f"[DEBUG] get_feature_columns - selected_features에 결측치 플래그 '{flag_col}' 누락됨")
+            
+            # available_features에서 확인 (원본 이름과 pass__ 접두사 모두 확인)
+            if flag_col in available_features:
+                logger.info(f"[DEBUG] get_feature_columns - available_features에 결측치 플래그 '{flag_col}' 포함됨")
+            elif f'pass__{flag_col}' in available_features:
+                logger.info(f"[DEBUG] get_feature_columns - available_features에 결측치 플래그 'pass__{flag_col}' 포함됨")
+            else:
+                logger.warning(f"[DEBUG] get_feature_columns - available_features에 결측치 플래그 '{flag_col}' 누락됨")
+    
+    # 실제 DataFrame에 없는 컬럼은 제외하고, 누락된 컬럼은 경고 로그 출력
+    missing_features = [f for f in available_features if f not in all_columns]
+    if missing_features:
+        logger.warning(f"[WARNING] get_feature_columns - 실제 DataFrame에 존재하지 않는 피처: {missing_features}")
+    available_features = [f for f in available_features if f in all_columns]
+
+    # --- 추가: 반환 feature_columns 로그 출력 ---
+    logger.info(f"[DEBUG] get_feature_columns 반환값: {available_features}")
+
     return available_features
 
 

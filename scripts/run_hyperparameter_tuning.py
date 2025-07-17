@@ -10,6 +10,8 @@ MLflow와 연동되어 실험 추적이 가능하며, 다양한 튜닝 전략을
 import argparse
 import logging
 import sys
+import os
+from datetime import datetime
 from pathlib import Path
 import mlflow
 import yaml
@@ -758,6 +760,66 @@ def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str
         )
         
         return best_params, best_score, run.info.experiment_id, run.info.run_id
+
+
+def save_tuning_log(result, model_type, experiment_type, nrows=None, experiment_id=None, run_id=None, log_file_path=None):
+    """
+    튜닝 로그를 파일로 저장합니다.
+    
+    Args:
+        result: 튜닝 결과 (best_params, best_score) 또는 튜플
+        model_type: 모델 타입
+        experiment_type: 실험 타입
+        nrows: 사용한 데이터 행 수
+        experiment_id: MLflow 실험 ID
+        run_id: MLflow Run ID
+        log_file_path: 로그 파일 경로 (None이면 기본 경로 사용)
+    """
+    try:
+        # 결과 파싱
+        if isinstance(result, tuple) and len(result) >= 2:
+            best_params = result[0] if result[0] is not None else {}
+            best_score = result[1] if result[1] is not None else 0.0
+        elif isinstance(result, dict):
+            best_params = result.get('best_params', {})
+            best_score = result.get('best_score', 0.0)
+        else:
+            best_params = {}
+            best_score = 0.0
+        
+        # 로그 파일 경로 설정
+        if log_file_path is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file_path = f"logs/tuning_log_{model_type}_{experiment_type}_{timestamp}.txt"
+        
+        # 로그 디렉토리 생성
+        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+        
+        # 로그 내용 작성
+        log_content = f"""
+=== 튜닝 로그 ===
+모델 타입: {model_type}
+실험 타입: {experiment_type}
+데이터 행 수: {nrows}
+MLflow 실험 ID: {experiment_id}
+MLflow Run ID: {run_id}
+최고 성능: {best_score:.6f}
+최적 파라미터:
+"""
+        
+        for param, value in best_params.items():
+            log_content += f"  {param}: {value}\n"
+        
+        log_content += f"\n생성 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        
+        # 파일 저장
+        with open(log_file_path, 'w', encoding='utf-8') as f:
+            f.write(log_content)
+        
+        logger.info(f"튜닝 로그 저장 완료: {log_file_path}")
+        
+    except Exception as e:
+        logger.error(f"튜닝 로그 저장 실패: {e}")
 
 
 def save_experiment_results(result, model_type, experiment_type, nrows=None, experiment_id=None, run_id=None, config=None, data_info=None):

@@ -259,33 +259,54 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
         fold_count += 1
         logger.info(f"=== 폴드 {fold_count} 학습 ===")
         
-        # 데이터 유출 방지를 위해 각 폴드의 훈련 데이터로만 전처리 파이프라인 학습
-        preprocessor, _ = fit_preprocessing_pipeline(train_fold_df, config)
-        
-        # 피처 엔지니어링도 각 폴드의 훈련 데이터로만 학습
+        # 피처 엔지니어링을 먼저 수행 (결측치 플래그 등이 포함된 피처 생성)
         _, feature_info = fit_feature_engineering(train_fold_df, config)
         
-        # 전처리 적용
-        train_processed = transform_data(train_fold_df, preprocessor, config)
-        val_processed = transform_data(val_fold_df, preprocessor, config)
-        
         # 피처 엔지니어링 적용
-        train_engineered = transform_features(train_processed, feature_info, config)
-        val_engineered = transform_features(val_processed, feature_info, config)
+        train_engineered = transform_features(train_fold_df, feature_info, config)
+        val_engineered = transform_features(val_fold_df, feature_info, config)
         
-        logger.info(f"[DEBUG] train_engineered 컬럼: {list(train_engineered.columns)}")
-        logger.info(f"[DEBUG] val_engineered 컬럼: {list(val_engineered.columns)}")
+        # 전처리 파이프라인을 피처 엔지니어링된 데이터로 학습
+        preprocessor, _ = fit_preprocessing_pipeline(train_engineered, config)
+        
+        # 전처리 적용
+        train_processed = transform_data(train_engineered, preprocessor, config)
+        val_processed = transform_data(val_engineered, preprocessor, config)
+        
+        logger.info(f"[DEBUG] train_processed 컬럼: {list(train_processed.columns)}")
+        logger.info(f"[DEBUG] val_processed 컬럼: {list(val_processed.columns)}")
         
         # 피처와 타겟 분리
-        feature_columns = get_feature_columns(train_engineered, config)
-        target_columns = get_target_columns_from_data(train_engineered, config)
+        feature_columns = get_feature_columns(train_processed, config)
+        target_columns = get_target_columns_from_data(train_processed, config)
         logger.info(f"[DEBUG] feature_columns: {feature_columns}")
+        logger.info(f"[DEBUG] train_processed.columns: {list(train_processed.columns)}")
         logger.info(f"[DEBUG] target_columns: {target_columns}")
         
-        X_train = train_engineered[feature_columns]
-        y_train = train_engineered[target_columns]
-        X_val = val_engineered[feature_columns]
-        y_val = val_engineered[target_columns]
+        try:
+            X_train = train_processed[feature_columns]
+            y_train = train_processed[target_columns]
+            X_val = val_processed[feature_columns]
+            y_val = val_processed[target_columns]
+            logger.info(f"[DEBUG] (try) X_train 컬럼: {list(X_train.columns)}")
+            logger.info(f"[DEBUG] (try) y_train 컬럼: {list(y_train.columns)}")
+            logger.info(f"[DEBUG] (try) X_val 컬럼: {list(X_val.columns)}")
+            logger.info(f"[DEBUG] (try) y_val 컬럼: {list(y_val.columns)}")
+            logger.info(f"[DEBUG] (try) X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+            logger.info(f"[DEBUG] (try) X_val shape: {X_val.shape}, y_val shape: {y_val.shape}")
+        except KeyError as e:
+            logger.error(f"[ERROR] 모델 입력 데이터 생성 중 KeyError 발생: {e}")
+            logger.error(f"[ERROR] feature_columns: {feature_columns}")
+            logger.error(f"[ERROR] train_processed 컬럼: {list(train_processed.columns)}")
+            logger.error(f"[ERROR] target_columns: {target_columns}")
+            logger.error(f"[ERROR] val_processed 컬럼: {list(val_processed.columns)}")
+            raise
+        
+        # 모델 입력 데이터 컬럼명 로그 추가
+        logger.info(f"[DEBUG] X_train 컬럼: {list(X_train.columns)}")
+        logger.info(f"[DEBUG] X_val 컬럼: {list(X_val.columns)}")
+        logger.info(f"[DEBUG] y_train 컬럼: {list(y_train.columns)}")
+        logger.info(f"[DEBUG] y_val 컬럼: {list(y_val.columns)}")
         
         logger.info(f"[DEBUG] X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
         logger.info(f"[DEBUG] X_val shape: {X_val.shape}, y_val shape: {y_val.shape}")

@@ -473,16 +473,23 @@ class HyperparameterTuner:
                 return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
             
         except Exception as e:
-            logger.error(f"Trial {trial.number} 실패: {str(e)}")
-            # 6. 예외 발생한 trial 로깅
+            # 기존 에러 로깅
+            logger.error(f"[DEBUG] Trial {trial.number} 예외 발생: {e}")
+            # 추가: feature_columns와 관련 DataFrame 컬럼 로그
             try:
-                mlflow.log_param(f"trial_{trial.number}_status", "failed")
-                mlflow.log_param(f"trial_{trial.number}_error", str(e)[:100])  # 에러 메시지 길이 제한
+                if 'feature_columns' in locals():
+                    logger.error(f"[DEBUG][EXCEPTION] Trial {trial.number} - feature_columns: {feature_columns}")
+                if 'train_processed' in locals():
+                    logger.error(f"[DEBUG][EXCEPTION] Trial {trial.number} - train_processed.columns: {list(train_processed.columns)}")
+                if 'train_engineered' in locals():
+                    logger.error(f"[DEBUG][EXCEPTION] Trial {trial.number} - train_engineered.columns: {list(train_engineered.columns)}")
+                if 'X_train' in locals():
+                    logger.error(f"[DEBUG][EXCEPTION] Trial {trial.number} - X_train.columns: {list(X_train.columns)}")
             except Exception as log_e:
-                logger.warning(f"Trial {trial.number} 예외 로깅 실패: {log_e}")
-            
-            # 메모리 정리 (예외 발생 시에도)
-            cleanup_memory()
+                logger.error(f"[DEBUG][EXCEPTION] Trial {trial.number} - 추가 로그 중 에러: {log_e}")
+            # 기존 로직 유지
+            missing = [col for col in feature_columns if (('train_processed' in locals() and col not in train_processed.columns) or ('train_engineered' in locals() and col not in train_engineered.columns))] if 'feature_columns' in locals() else []
+            logger.error(f"[DEBUG] Trial {trial.number} - 누락된 컬럼: {missing}")
             return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
         
         finally:
@@ -730,9 +737,12 @@ class HyperparameterTuner:
         feature_columns = get_feature_columns(train_engineered, self.config)
         target_columns = get_target_columns_from_data(train_engineered, self.config)
         
-        # 타겟 컬럼 매칭 문제 해결
-        logger.info(f"[DEBUG] _save_best_model - train_engineered 컬럼: {list(train_engineered.columns)}")
+        # --- 추가: feature_columns와 train_engineered.columns 로그 출력 ---
         logger.info(f"[DEBUG] _save_best_model - feature_columns: {feature_columns}")
+        logger.info(f"[DEBUG] _save_best_model - train_engineered.columns: {list(train_engineered.columns)}")
+        # ---
+        
+        # 타겟 컬럼 매칭 문제 해결
         logger.info(f"[DEBUG] _save_best_model - target_columns: {target_columns}")
         
         # 타겟 컬럼이 비어있는 경우 수동으로 찾기
@@ -762,8 +772,15 @@ class HyperparameterTuner:
                 logger.error("타겟 컬럼을 찾을 수 없습니다!")
                 return
         
-        X_train = train_engineered[feature_columns]
-        y_train = train_engineered[target_columns]
+        try:
+            X_train = train_engineered[feature_columns]
+            y_train = train_engineered[target_columns]
+        except Exception as e:
+            logger.error(f"[DEBUG][EXCEPTION] _save_best_model - feature_columns: {feature_columns}")
+            logger.error(f"[DEBUG][EXCEPTION] _save_best_model - train_engineered.columns: {list(train_engineered.columns)}")
+            logger.error(f"[DEBUG][EXCEPTION] _save_best_model - target_columns: {target_columns}")
+            logger.error(f"[DEBUG][EXCEPTION] _save_best_model - Exception: {e}")
+            raise
         
         logger.info(f"[DEBUG] _save_best_model - X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
         logger.info(f"[DEBUG] _save_best_model - y_train 컬럼: {list(y_train.columns)}")
@@ -1147,7 +1164,8 @@ def log_optuna_visualizations_to_mlflow(study, experiment_name: str = "optuna_vi
         # MLflow에 모든 플롯 로깅
         for plot_name, plot_path in plots_created:
             try:
-                mlflow.log_artifact(plot_path, f"optuna_plots/{plot_name}")
+                # MLflow log_artifact: 두 번째 인자는 디렉토리 경로, 파일명은 자동 추출
+                mlflow.log_artifact(plot_path, "optuna_plots")
                 logger.info(f"MLflow에 로깅 완료: {plot_name}")
             except Exception as e:
                 logger.warning(f"MLflow 로깅 실패 ({plot_name}): {e}")

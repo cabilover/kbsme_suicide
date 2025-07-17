@@ -121,6 +121,69 @@ class SMOTEResampler(BaseResampler):
         
         # K-NN 모델 학습 (ID 컬럼 제외)
         feature_cols = [col for col in X.columns if col != id_column]
+        
+        # === NaN 검증 및 처리 추가 ===
+        logger.info("SMOTE 적용 전 NaN 검증 시작")
+        
+        # 전체 데이터의 NaN 상태 확인
+        total_nan_count = X[feature_cols].isnull().sum().sum()
+        logger.info(f"전체 데이터 NaN 개수: {total_nan_count}")
+        
+        if total_nan_count > 0:
+            # NaN이 있는 컬럼들 식별
+            nan_columns = X[feature_cols].columns[X[feature_cols].isnull().any()].tolist()
+            logger.warning(f"NaN이 발견된 컬럼들: {nan_columns}")
+            
+            # 각 컬럼별 NaN 개수 출력
+            for col in nan_columns:
+                nan_count = X[col].isnull().sum()
+                logger.warning(f"  - {col}: {nan_count}개 NaN")
+            
+            # NaN 처리: 수치형 컬럼은 median으로, 범주형 컬럼은 mode로 대체
+            X_cleaned = X.copy()
+            for col in feature_cols:
+                if X_cleaned[col].isnull().any():
+                    if X_cleaned[col].dtype in ['int64', 'float64']:
+                        # 수치형 컬럼: median으로 대체
+                        median_val = X_cleaned[col].median()
+                        X_cleaned[col].fillna(median_val, inplace=True)
+                        logger.info(f"  - {col}: NaN을 median({median_val:.4f})으로 대체")
+                    else:
+                        # 범주형 컬럼: mode로 대체
+                        mode_val = X_cleaned[col].mode().iloc[0] if len(X_cleaned[col].mode()) > 0 else 'unknown'
+                        X_cleaned[col].fillna(mode_val, inplace=True)
+                        logger.info(f"  - {col}: NaN을 mode('{mode_val}')으로 대체")
+            
+            # 소수 클래스 샘플도 업데이트
+            minority_samples = X_cleaned[y == minority_class].copy()
+            
+            # NaN 처리 후 재검증
+            final_nan_count = X_cleaned[feature_cols].isnull().sum().sum()
+            logger.info(f"NaN 처리 후 남은 NaN 개수: {final_nan_count}")
+            
+            if final_nan_count > 0:
+                logger.error(f"NaN 처리가 완료되지 않았습니다. 남은 NaN 개수: {final_nan_count}")
+                # 마지막 수단: NaN이 있는 행 제거
+                X_cleaned = X_cleaned.dropna(subset=feature_cols)
+                y_cleaned = y.loc[X_cleaned.index]
+                minority_samples = X_cleaned[y_cleaned == minority_class].copy()
+                minority_labels = y_cleaned[y_cleaned == minority_class].copy()
+                logger.warning(f"NaN이 있는 행을 제거했습니다. 남은 데이터: {len(X_cleaned)}행")
+        else:
+            logger.info("NaN이 발견되지 않았습니다.")
+            X_cleaned = X.copy()
+            y_cleaned = y.copy()
+        
+        # NaN 처리 후 소수 클래스 샘플 수 재확인
+        if len(minority_samples) <= self.k_neighbors:
+            logger.warning(f"NaN 처리 후 소수 클래스 샘플 수({len(minority_samples)})가 k_neighbors({self.k_neighbors})보다 작습니다.")
+            if len(minority_samples) < 2:
+                logger.error("소수 클래스 샘플이 너무 적어 SMOTE를 적용할 수 없습니다.")
+                return X_cleaned, y_cleaned
+            self.k_neighbors = min(self.k_neighbors, len(minority_samples) - 1)
+            logger.info(f"k_neighbors를 {self.k_neighbors}로 조정했습니다.")
+        
+        # K-NN 모델 학습 (NaN 처리된 데이터 사용)
         knn = NearestNeighbors(n_neighbors=self.k_neighbors + 1, algorithm='auto')
         knn.fit(minority_samples[feature_cols])
         
@@ -155,8 +218,8 @@ class SMOTEResampler(BaseResampler):
         synthetic_df = pd.DataFrame(synthetic_samples)
         synthetic_series = pd.Series(synthetic_labels, index=synthetic_df.index)
         
-        X_resampled = pd.concat([X, synthetic_df], ignore_index=True)
-        y_resampled = pd.concat([y, synthetic_series], ignore_index=True)
+        X_resampled = pd.concat([X_cleaned, synthetic_df], ignore_index=True)
+        y_resampled = pd.concat([y_cleaned, synthetic_series], ignore_index=True)
         
         # 결과 검증
         final_class_counts = self._get_class_distribution(y_resampled)
@@ -222,8 +285,71 @@ class BorderlineSMOTEResampler(BaseResampler):
         
         # K-NN 모델 학습 (전체 데이터에 대해)
         feature_cols = [col for col in X.columns if col != id_column]
+        
+        # === NaN 검증 및 처리 추가 ===
+        logger.info("Borderline SMOTE 적용 전 NaN 검증 시작")
+        
+        # 전체 데이터의 NaN 상태 확인
+        total_nan_count = X[feature_cols].isnull().sum().sum()
+        logger.info(f"전체 데이터 NaN 개수: {total_nan_count}")
+        
+        if total_nan_count > 0:
+            # NaN이 있는 컬럼들 식별
+            nan_columns = X[feature_cols].columns[X[feature_cols].isnull().any()].tolist()
+            logger.warning(f"NaN이 발견된 컬럼들: {nan_columns}")
+            
+            # 각 컬럼별 NaN 개수 출력
+            for col in nan_columns:
+                nan_count = X[col].isnull().sum()
+                logger.warning(f"  - {col}: {nan_count}개 NaN")
+            
+            # NaN 처리: 수치형 컬럼은 median으로, 범주형 컬럼은 mode로 대체
+            X_cleaned = X.copy()
+            for col in feature_cols:
+                if X_cleaned[col].isnull().any():
+                    if X_cleaned[col].dtype in ['int64', 'float64']:
+                        # 수치형 컬럼: median으로 대체
+                        median_val = X_cleaned[col].median()
+                        X_cleaned[col].fillna(median_val, inplace=True)
+                        logger.info(f"  - {col}: NaN을 median({median_val:.4f})으로 대체")
+                    else:
+                        # 범주형 컬럼: mode로 대체
+                        mode_val = X_cleaned[col].mode().iloc[0] if len(X_cleaned[col].mode()) > 0 else 'unknown'
+                        X_cleaned[col].fillna(mode_val, inplace=True)
+                        logger.info(f"  - {col}: NaN을 mode('{mode_val}')으로 대체")
+            
+            # 소수 클래스 샘플도 업데이트
+            minority_samples = X_cleaned[y == minority_class].copy()
+            
+            # NaN 처리 후 재검증
+            final_nan_count = X_cleaned[feature_cols].isnull().sum().sum()
+            logger.info(f"NaN 처리 후 남은 NaN 개수: {final_nan_count}")
+            
+            if final_nan_count > 0:
+                logger.error(f"NaN 처리가 완료되지 않았습니다. 남은 NaN 개수: {final_nan_count}")
+                # 마지막 수단: NaN이 있는 행 제거
+                X_cleaned = X_cleaned.dropna(subset=feature_cols)
+                y_cleaned = y.loc[X_cleaned.index]
+                minority_samples = X_cleaned[y_cleaned == minority_class].copy()
+                minority_labels = y_cleaned[y_cleaned == minority_class].copy()
+                logger.warning(f"NaN이 있는 행을 제거했습니다. 남은 데이터: {len(X_cleaned)}행")
+        else:
+            logger.info("NaN이 발견되지 않았습니다.")
+            X_cleaned = X.copy()
+            y_cleaned = y.copy()
+        
+        # NaN 처리 후 소수 클래스 샘플 수 재확인
+        if len(minority_samples) <= self.k_neighbors:
+            logger.warning(f"NaN 처리 후 소수 클래스 샘플 수({len(minority_samples)})가 k_neighbors({self.k_neighbors})보다 작습니다.")
+            if len(minority_samples) < 2:
+                logger.error("소수 클래스 샘플이 너무 적어 Borderline SMOTE를 적용할 수 없습니다.")
+                return X_cleaned, y_cleaned
+            self.k_neighbors = min(self.k_neighbors, len(minority_samples) - 1)
+            logger.info(f"k_neighbors를 {self.k_neighbors}로 조정했습니다.")
+        
+        # K-NN 모델 학습 (NaN 처리된 데이터 사용)
         knn = NearestNeighbors(n_neighbors=self.k_neighbors + 1, algorithm='auto')
-        knn.fit(X[feature_cols])
+        knn.fit(X_cleaned[feature_cols])
         
         # 각 소수 클래스 샘플의 위험도 계산
         danger_samples = []
@@ -294,11 +420,11 @@ class BorderlineSMOTEResampler(BaseResampler):
             synthetic_df = pd.DataFrame(synthetic_samples)
             synthetic_series = pd.Series(synthetic_labels, index=synthetic_df.index)
             
-            X_resampled = pd.concat([X, synthetic_df], ignore_index=True)
-            y_resampled = pd.concat([y, synthetic_series], ignore_index=True)
+            X_resampled = pd.concat([X_cleaned, synthetic_df], ignore_index=True)
+            y_resampled = pd.concat([y_cleaned, synthetic_series], ignore_index=True)
         else:
-            X_resampled = X.copy()
-            y_resampled = y.copy()
+            X_resampled = X_cleaned.copy()
+            y_resampled = y_cleaned.copy()
         
         # 결과 검증
         final_class_counts = self._get_class_distribution(y_resampled)
@@ -364,8 +490,71 @@ class ADASYNResampler(BaseResampler):
         
         # K-NN 모델 학습 (전체 데이터에 대해)
         feature_cols = [col for col in X.columns if col != id_column]
+        
+        # === NaN 검증 및 처리 추가 ===
+        logger.info("ADASYN 적용 전 NaN 검증 시작")
+        
+        # 전체 데이터의 NaN 상태 확인
+        total_nan_count = X[feature_cols].isnull().sum().sum()
+        logger.info(f"전체 데이터 NaN 개수: {total_nan_count}")
+        
+        if total_nan_count > 0:
+            # NaN이 있는 컬럼들 식별
+            nan_columns = X[feature_cols].columns[X[feature_cols].isnull().any()].tolist()
+            logger.warning(f"NaN이 발견된 컬럼들: {nan_columns}")
+            
+            # 각 컬럼별 NaN 개수 출력
+            for col in nan_columns:
+                nan_count = X[col].isnull().sum()
+                logger.warning(f"  - {col}: {nan_count}개 NaN")
+            
+            # NaN 처리: 수치형 컬럼은 median으로, 범주형 컬럼은 mode로 대체
+            X_cleaned = X.copy()
+            for col in feature_cols:
+                if X_cleaned[col].isnull().any():
+                    if X_cleaned[col].dtype in ['int64', 'float64']:
+                        # 수치형 컬럼: median으로 대체
+                        median_val = X_cleaned[col].median()
+                        X_cleaned[col].fillna(median_val, inplace=True)
+                        logger.info(f"  - {col}: NaN을 median({median_val:.4f})으로 대체")
+                    else:
+                        # 범주형 컬럼: mode로 대체
+                        mode_val = X_cleaned[col].mode().iloc[0] if len(X_cleaned[col].mode()) > 0 else 'unknown'
+                        X_cleaned[col].fillna(mode_val, inplace=True)
+                        logger.info(f"  - {col}: NaN을 mode('{mode_val}')으로 대체")
+            
+            # 소수 클래스 샘플도 업데이트
+            minority_samples = X_cleaned[y == minority_class].copy()
+            
+            # NaN 처리 후 재검증
+            final_nan_count = X_cleaned[feature_cols].isnull().sum().sum()
+            logger.info(f"NaN 처리 후 남은 NaN 개수: {final_nan_count}")
+            
+            if final_nan_count > 0:
+                logger.error(f"NaN 처리가 완료되지 않았습니다. 남은 NaN 개수: {final_nan_count}")
+                # 마지막 수단: NaN이 있는 행 제거
+                X_cleaned = X_cleaned.dropna(subset=feature_cols)
+                y_cleaned = y.loc[X_cleaned.index]
+                minority_samples = X_cleaned[y_cleaned == minority_class].copy()
+                minority_labels = y_cleaned[y_cleaned == minority_class].copy()
+                logger.warning(f"NaN이 있는 행을 제거했습니다. 남은 데이터: {len(X_cleaned)}행")
+        else:
+            logger.info("NaN이 발견되지 않았습니다.")
+            X_cleaned = X.copy()
+            y_cleaned = y.copy()
+        
+        # NaN 처리 후 소수 클래스 샘플 수 재확인
+        if len(minority_samples) <= self.k_neighbors:
+            logger.warning(f"NaN 처리 후 소수 클래스 샘플 수({len(minority_samples)})가 k_neighbors({self.k_neighbors})보다 작습니다.")
+            if len(minority_samples) < 2:
+                logger.error("소수 클래스 샘플이 너무 적어 ADASYN을 적용할 수 없습니다.")
+                return X_cleaned, y_cleaned
+            self.k_neighbors = min(self.k_neighbors, len(minority_samples) - 1)
+            logger.info(f"k_neighbors를 {self.k_neighbors}로 조정했습니다.")
+        
+        # K-NN 모델 학습 (NaN 처리된 데이터 사용)
         knn = NearestNeighbors(n_neighbors=self.k_neighbors + 1, algorithm='auto')
-        knn.fit(X[feature_cols])
+        knn.fit(X_cleaned[feature_cols])
         
         # 각 소수 클래스 샘플의 학습 난이도 계산
         learning_difficulties = []
@@ -439,11 +628,11 @@ class ADASYNResampler(BaseResampler):
             synthetic_df = pd.DataFrame(synthetic_samples)
             synthetic_series = pd.Series(synthetic_labels, index=synthetic_df.index)
             
-            X_resampled = pd.concat([X, synthetic_df], ignore_index=True)
-            y_resampled = pd.concat([y, synthetic_series], ignore_index=True)
+            X_resampled = pd.concat([X_cleaned, synthetic_df], ignore_index=True)
+            y_resampled = pd.concat([y_cleaned, synthetic_series], ignore_index=True)
         else:
-            X_resampled = X.copy()
-            y_resampled = y.copy()
+            X_resampled = X_cleaned.copy()
+            y_resampled = y_cleaned.copy()
         
         # 결과 검증
         final_class_counts = self._get_class_distribution(y_resampled)
@@ -752,8 +941,58 @@ def get_numerical_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]
     # 실제 존재하는 컬럼만 필터링
     available_numerical = [col for col in numerical_cols if col in df.columns]
     
-    logger.info(f"수치형 컬럼: {available_numerical}")
-    return available_numerical
+    # 피처 엔지니어링으로 생성된 시계열 피처들도 수치형으로 분류
+    feature_engineering_numerical = []
+    
+    # 지연 피처 (lag)
+    lag_periods = config['features'].get('lag_periods', [1, 2])
+    lagged_columns = config['features'].get('lagged_features', {}).get('columns', [])
+    for col in lagged_columns:
+        for lag in lag_periods:
+            lag_col = f'{col}_lag_{lag}'
+            if lag_col in df.columns:
+                feature_engineering_numerical.append(lag_col)
+    
+    # 이동 통계 피처 (rolling)
+    rolling_config = config['features'].get('rolling_stats', {})
+    window_sizes = rolling_config.get('window_sizes', [2, 3])
+    rolling_columns = rolling_config.get('columns', [])
+    for col in rolling_columns:
+        for window in window_sizes:
+            # rolling_mean
+            rolling_mean_col = f'{col}_rolling_mean_{window}y'
+            if rolling_mean_col in df.columns:
+                feature_engineering_numerical.append(rolling_mean_col)
+            
+            # rolling_std
+            rolling_std_col = f'{col}_rolling_std_{window}y'
+            if rolling_std_col in df.columns:
+                feature_engineering_numerical.append(rolling_std_col)
+    
+    # 연도별 변화율 피처 (yoy_change)
+    for col in rolling_columns:  # rolling_columns와 동일한 컬럼들에서 yoy_change 생성
+        yoy_col = f'{col}_yoy_change'
+        if yoy_col in df.columns:
+            feature_engineering_numerical.append(yoy_col)
+    
+    # 결측치 플래그 컬럼들도 수치형으로 분류 (0/1 값)
+    missing_flags_config = config['preprocessing'].get('missing_flags', {})
+    if missing_flags_config.get('enabled', True):
+        missing_flag_columns = missing_flags_config.get('columns', ['sleep_score', 'depress_score', 'anxiety_score'])
+        for col in missing_flag_columns:
+            flag_col = f'{col}_missing'
+            if flag_col in df.columns:
+                feature_engineering_numerical.append(flag_col)
+    
+    # 중복 제거 및 정렬
+    all_numerical = available_numerical + feature_engineering_numerical
+    all_numerical = sorted(list(set(all_numerical)))
+    
+    logger.info(f"수치형 컬럼: {all_numerical}")
+    logger.info(f"  - 설정 기반: {len(available_numerical)}개")
+    logger.info(f"  - 피처 엔지니어링 기반: {len(feature_engineering_numerical)}개")
+    
+    return all_numerical
 
 
 def get_categorical_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
@@ -790,8 +1029,8 @@ def get_passthrough_columns(df: pd.DataFrame, config: Dict[str, Any]) -> List[st
     """
     # 기본적으로 제외할 컬럼들 (ID 컬럼은 리샘플링을 위해 포함)
     exclude_columns = [
-        config['time_series']['date_column'],
-        config['time_series']['year_column']
+        config['time_series']['date_column'],  # dov (모델 입력에서 제외)
+        config['time_series']['year_column']   # yov (모델 입력에서 제외)
     ]
     
     # 타겟 컬럼들은 반드시 포함 (피처 엔지니어링 후 분리하기 위해)
@@ -949,6 +1188,12 @@ def fit_preprocessing_pipeline(df: pd.DataFrame, config: Dict[str, Any]) -> Tupl
     categorical_cols = get_categorical_columns(df_imputed, config)
     passthrough_cols = get_passthrough_columns(df_imputed, config)
     
+    # [테스트용] remainder='passthrough'로 들어가는 컬럼 로그 (나중에 삭제)
+    all_cols = set(df_imputed.columns)
+    handled_cols = set(numerical_cols + categorical_cols + passthrough_cols)
+    remainder_cols = list(all_cols - handled_cols)
+    logger.info(f"[TEST] remainder='passthrough'로 들어가는 컬럼: {remainder_cols}")
+
     # 전처리 파이프라인 생성
     preprocessor = create_preprocessing_pipeline(config)
     
@@ -998,18 +1243,25 @@ def transform_data(df: pd.DataFrame, preprocessor: ColumnTransformer, config: Di
     Returns:
         변환된 데이터프레임
     """
-    # create_missing_flags(df, config) 호출 제거 (fit 시점에만 플래그 생성)
-    transformed_array = preprocessor.transform(df)
+    # 결측치 플래그 생성 (fit 시점과 동일한 구조 보장)
+    df_with_flags = create_missing_flags(df, config)
+    
+    # 시계열 보간 적용 (fit 시점과 동일한 전처리)
+    df_imputed = apply_timeseries_imputation(df_with_flags, config)
+    
+    transformed_array = preprocessor.transform(df_imputed)
     
     # 변환된 배열을 데이터프레임으로 변환
     feature_names = preprocessor.get_feature_names_out()
     transformed_df = pd.DataFrame(transformed_array, columns=feature_names, index=df.index)
     
-    # 'remainder__'로 시작하는 컬럼명을 원래 이름으로 복원
+    # 'remainder__'와 'pass__'로 시작하는 컬럼명을 원래 이름으로 복원
     new_columns = []
     for col in transformed_df.columns:
         if col.startswith('remainder__'):
             new_columns.append(col.replace('remainder__', '', 1))
+        elif col.startswith('pass__'):
+            new_columns.append(col.replace('pass__', '', 1))
         else:
             new_columns.append(col)
     transformed_df.columns = new_columns
@@ -1020,6 +1272,24 @@ def transform_data(df: pd.DataFrame, preprocessor: ColumnTransformer, config: Di
         transformed_df[id_column] = df[id_column]
     
     logger.info(f"데이터 변환 완료: {transformed_df.shape}")
+    
+    # 결측치 플래그 컬럼 존재 여부 확인 로그 추가
+    missing_flags_config = config['preprocessing'].get('missing_flags', {})
+    if missing_flags_config.get('enabled', True):
+        missing_flag_columns = missing_flags_config.get('columns', ['sleep_score', 'depress_score', 'anxiety_score'])
+        logger.info(f"[DEBUG] transform_data - 전체 컬럼 수: {len(transformed_df.columns)}")
+        logger.info(f"[DEBUG] transform_data - 전체 컬럼 목록: {list(transformed_df.columns)}")
+        
+        for col in missing_flag_columns:
+            flag_col = f'{col}_missing'
+            # 원본 이름과 pass__ 접두사가 붙은 이름 모두 확인
+            if flag_col in transformed_df.columns:
+                logger.info(f"[DEBUG] transform_data - 결측치 플래그 '{flag_col}' 존재함")
+            elif f'pass__{flag_col}' in transformed_df.columns:
+                logger.info(f"[DEBUG] transform_data - 결측치 플래그 'pass__{flag_col}' 존재함")
+            else:
+                logger.warning(f"[DEBUG] transform_data - 결측치 플래그 '{flag_col}' 누락됨")
+    
     return transformed_df
 
 
