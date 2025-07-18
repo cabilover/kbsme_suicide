@@ -95,7 +95,7 @@ features:
     "anxiety_score", "depress_score", "sleep_score", "comp",
     
     # 자살 관련 변수 (원본 데이터에 존재)
-    "suicide_t", "suicide_a",
+    # "suicide_t", "suicide_a",  # 제외
     
     # 정신과 분류 (원본 데이터에 존재)
     "psychia_cate",
