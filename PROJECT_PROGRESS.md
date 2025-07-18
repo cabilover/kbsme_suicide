@@ -57,6 +57,25 @@
 3. **SMOTE 안전성 강화**: NaN 검증 및 자동 처리 로직 추가
 4. **전처리 파이프라인 완성**: 피처 엔지니어링 → 전처리 → 리샘플링 순서로 안정적 파이프라인 구축
 
+### ✅ 2025-07-17 기준 최신 업데이트: suicide_t, suicide_a 컬럼 제거 및 pandas FutureWarning 해결
+
+#### **suicide_t, suicide_a 컬럼 제거**
+- **문제**: `suicide_t`와 `suicide_a` 컬럼이 `selected_features`에 포함되어 있어 SMOTE 리샘플링 시 NaN 문제 발생
+- **해결**: `configs/base/common.yaml`의 `selected_features`에서 `suicide_t`와 `suicide_a` 제거
+  - 이 두 컬럼은 타겟 변수와 관련된 컬럼으로, 피처로 사용하면 데이터 누수(data leakage) 위험
+  - 제거 후 SMOTE 리샘플링에서 NaN 문제 해결됨
+
+#### **pandas FutureWarning 해결**
+- **문제**: `X_cleaned[col].fillna(mode_val, inplace=True)` 형태의 연쇄 할당(chained assignment) 사용으로 인한 FutureWarning
+- **해결**: pandas 3.0 호환성을 위해 `X_cleaned[col] = X_cleaned[col].fillna(mode_val)` 형태로 수정 필요
+- **영향**: 현재는 경고만 발생하지만, 향후 pandas 3.0에서는 동작하지 않을 수 있음
+
+#### **현재 테스트 결과**
+- **CatBoost + SMOTE 리샘플링**: 3-fold CV, 3 trials로 전체 데이터에 대해 테스트 완료
+- **결과**: 모든 trial에서 `Input X contains NaN` 오류 발생하여 SMOTE 실패
+- **원인**: 여전히 일부 컬럼에서 NaN이 완전히 처리되지 않아 SMOTE에 전달됨
+- **다음 단계**: fillna 연쇄 할당 문제 해결 및 추가 NaN 처리 로직 강화 필요
+
 ### ✅ 2025-07-16 기준 최신 업데이트: 리샘플링 하이퍼파라미터 튜닝 시스템 대폭 개선
 
 #### **run_hyperparameter_tuning.py 리샘플링 기능 대폭 개선**
