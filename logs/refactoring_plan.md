@@ -169,11 +169,11 @@
 
 ## 📋 **체크리스트**
 
-### Phase 1 체크리스트
-- [ ] `configs/experiments/hyperparameter_tuning.yaml`에서 resampling 섹션 제거
-- [ ] `src/hyperparameter_tuning.py`에서 리샘플링 로직 제거
-- [ ] `scripts/run_hyperparameter_tuning.py` 단순화
-- [ ] 하이퍼파라미터 튜닝 실험 테스트 통과
+### Phase 1 체크리스트 ✅ **완료**
+- [x] `configs/experiments/hyperparameter_tuning.yaml`에서 resampling 섹션 제거
+- [x] `src/hyperparameter_tuning.py`에서 리샘플링 로직 제거
+- [x] `scripts/run_hyperparameter_tuning.py` 단순화
+- [x] 하이퍼파라미터 튜닝 실험 테스트 통과
 
 ### Phase 2 체크리스트
 - [ ] `scripts/run_resampling_experiment.py` 생성
@@ -181,12 +181,12 @@
 - [ ] `configs/experiments/resampling.yaml` 정리
 - [ ] 리샘플링 실험 테스트 통과
 
-### Phase 3 체크리스트
-- [ ] `src/utils/logging_utils.py` 생성
-- [ ] 로그 파일명 개선 구현
-- [ ] 전체 터미널 화면 저장 구현
-- [ ] PROJECT_PROGRESS.md 자동 업데이트 구현
-- [ ] 통합 테스트 통과
+### Phase 3 체크리스트 ✅ **완료**
+- [x] `src/utils/logging_utils.py` 생성 (기존 시스템 확장으로 대체)
+- [x] 로그 파일명 개선 구현 (`{experiment_type}_{model_type}_{timestamp}.log`)
+- [x] 전체 터미널 화면 저장 구현 (`ConsoleCapture` 클래스)
+- [x] PROJECT_PROGRESS.md 자동 업데이트 구현 (`log_experiment_summary()`)
+- [x] 통합 테스트 통과 (CatBoost 테스트로 검증 완료)
 
 ## 🚀 **시작하기**
 

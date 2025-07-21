@@ -31,7 +31,7 @@ from src.splits import (
     log_splits_info
 )
 from src.utils.config_manager import ConfigManager
-from src.utils import setup_logging
+from src.utils import setup_logging, setup_experiment_logging, log_experiment_summary, experiment_logging_context
 
 # 로깅 설정
 setup_logging(level="INFO")
@@ -615,151 +615,140 @@ def run_resampling_tuning_comparison_with_configmanager(
 
 def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str = None, nrows: int = None, resampling_comparison: bool = False, resampling_methods: List[str] = None):
     """
-    ConfigManager 기반 하이퍼파라미터 튜닝을 실행합니다.
+    설정 기반 하이퍼파라미터 튜닝을 실행합니다.
     
     Args:
-        config: 완전한 설정 딕셔너리
-        data_path: 데이터 파일 경로 (None이면 config에서 가져옴)
-        nrows: 사용할 데이터 행 수 (None이면 전체 사용)
-        resampling_comparison: 리샘플링 비교 실험 여부
-        resampling_methods: 비교할 리샘플링 기법들
+        config: 설정 딕셔너리
+        data_path: 데이터 파일 경로
+        nrows: 사용할 데이터 행 수
+        resampling_comparison: 리샘플링 비교 실험 여부 (사용하지 않음)
+        resampling_methods: 리샘플링 방법들 (사용하지 않음)
         
     Returns:
-        튜닝 결과 (best_params, best_score, experiment_id, run_id) 또는 리샘플링 비교 결과
+        튜닝 결과 튜플 (best_params, best_score, study, tuner)
     """
-    logger.info("=== ConfigManager 기반 하이퍼파라미터 튜닝 시작 ===")
+    import time
+    start_time = time.time()
     
-    # 데이터 경로 설정
-    if data_path is None:
-        data_path = config['data'].get('file_path', 'data/processed/processed_data_with_features.csv')
+    # 실험 정보 추출
+    model_type = config.get('model', {}).get('model_type', 'unknown')
+    experiment_type = config.get('experiment_type', 'hyperparameter_tuning')
     
-    # 데이터 로드
-    logger.info(f"데이터 로드 중: {data_path}")
-    if nrows:
-        df = pd.read_csv(data_path, nrows=nrows)
-        logger.info(f"테스트용 데이터 로드: {len(df):,} 행")
-    else:
-        df = pd.read_csv(data_path)
-        logger.info(f"전체 데이터 로드: {len(df):,} 행")
-    
-    # 데이터 정보 수집
-    data_info = collect_data_info(df, config)
-    logger.info(f"데이터 정보 수집 완료: {data_info['total_rows']} 행, {data_info['total_columns']} 열")
-    
-    # 테스트 세트 분리
-    logger.info("=== 테스트 세트 분리 ===")
-    train_val_df, test_df, test_ids = split_test_set(df, config)
-    
-    # 데이터 정보 업데이트 (테스트 세트 정보 추가)
-    data_info = collect_data_info(df, config, train_val_df, test_df)
-    
-    # 분할 검증
-    if not validate_splits(train_val_df, test_df, config):
-        logger.error("분할 검증 실패!")
-        return None
-    
-    # 리샘플링 비교 실험
-    if resampling_comparison:
-        logger.info("=== 리샘플링 비교 실험 시작 ===")
-        if resampling_methods is None:
-            resampling_methods = ['none', 'smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid', 'time_series_adapted']
+    # 새로운 로깅 시스템 적용
+    with experiment_logging_context(
+        experiment_type=experiment_type,
+        model_type=model_type,
+        log_level="INFO",
+        capture_console=True
+    ) as log_file_path:
         
-        result = run_resampling_tuning_comparison_with_configmanager(
-            config.get('model', {}).get('model_type', 'xgboost'),
-            'hyperparameter_tuning',
-            data_path,
-            resampling_methods,
-            nrows
-        )
+        logger.info(f"=== 하이퍼파라미터 튜닝 시작 ===")
+        logger.info(f"모델 타입: {model_type}")
+        logger.info(f"실험 타입: {experiment_type}")
+        logger.info(f"로그 파일: {log_file_path}")
         
-        # 실험 결과 저장 (리샘플링 비교)
-        save_experiment_results(
-            result, 
-            config.get('model', {}).get('model_type', 'xgboost'), 
-            'hyperparameter_tuning', 
-            nrows, 
-            config=config, 
-            data_info=data_info
-        )
-        
-        return result
-    
-    # 일반 하이퍼파라미터 튜닝
-    logger.info("=== 일반 하이퍼파라미터 튜닝 시작 ===")
-    
-    # MLflow 실험 설정
-    experiment_name = config['mlflow']['experiment_name']
-    experiment_id = setup_mlflow_experiment(experiment_name)
-    
-    # 튜너 생성
-    tuner = HyperparameterTuner(config, train_val_df, nrows=nrows)
-    
-    # 튜닝 실행
-    with mlflow.start_run(experiment_id=experiment_id) as run:
-        logger.info(f"MLflow Run 시작: {run.info.run_id}")
-        
-        # 설정 로깅
-        log_tuning_params(config, config)  # config를 base_config로도 사용
-        
-        # 튜닝 실행
-        result = tuner.optimize(start_mlflow_run=False)  # 이미 run이 시작되어 있으므로 False
-        
-        # 결과 저장
         try:
-            tuner.save_results()
-            logger.info("=== 하이퍼파라미터 튜닝 완료 ===")
+            # 데이터 경로 설정
+            if data_path is None:
+                data_path = config['data'].get('file_path', 'data/processed/processed_data_with_features.csv')
+            
+            # 데이터 로드
+            logger.info(f"데이터 로드 중: {data_path}")
+            if nrows:
+                df = pd.read_csv(data_path, nrows=nrows)
+                logger.info(f"테스트용 데이터 로드: {len(df):,} 행")
+            else:
+                df = pd.read_csv(data_path)
+                logger.info(f"전체 데이터 로드: {len(df):,} 행")
+            
+            # 데이터 정보 수집
+            data_info = collect_data_info(df, config)
+            logger.info(f"데이터 정보 수집 완료: {data_info['total_rows']} 행, {data_info['total_columns']} 열")
+            
+            # 테스트 세트 분리
+            logger.info("=== 테스트 세트 분리 ===")
+            train_val_df, test_df, test_ids = split_test_set(df, config)
+            
+            # 데이터 정보 업데이트 (테스트 세트 정보 추가)
+            data_info = collect_data_info(df, config, train_val_df, test_df)
+            
+            # 분할 검증
+            if not validate_splits(train_val_df, test_df, config):
+                logger.error("분할 검증 실패!")
+                return None
+            
+            # MLflow 실험 설정
+            experiment_name = config['mlflow']['experiment_name']
+            experiment_id = setup_mlflow_experiment(experiment_name)
+            
+            # 튜너 생성
+            tuner = HyperparameterTuner(config, train_val_df, nrows=nrows)
+            
+            # 튜닝 실행
+            with mlflow.start_run(experiment_id=experiment_id) as run:
+                logger.info(f"MLflow Run 시작: {run.info.run_id}")
+                
+                # 설정 로깅
+                log_tuning_params(config, config)  # config를 base_config로도 사용
+                
+                # 튜닝 실행
+                result = tuner.optimize(start_mlflow_run=False)  # 이미 run이 시작되어 있으므로 False
+                
+                # 결과 저장
+                try:
+                    tuner.save_results()
+                    logger.info("=== 하이퍼파라미터 튜닝 완료 ===")
+                except Exception as e:
+                    logger.error(f"결과 저장 실패: {e}")
+                    # 결과 저장 실패해도 계속 진행
+                
+                # 결과 추출 (안전하게)
+                if result is None:
+                    best_params = {}
+                    best_score = 0.0
+                    logger.warning("튜닝 결과가 None입니다. 기본값을 사용합니다.")
+                elif isinstance(result, tuple) and len(result) >= 2:
+                    best_params = result[0] if result[0] is not None else {}
+                    best_score = result[1] if result[1] is not None else 0.0
+                elif isinstance(result, dict):
+                    best_params = result.get('best_params', {})
+                    best_score = result.get('best_score', 0.0)
+                else:
+                    best_params = {}
+                    best_score = 0.0
+                    logger.warning(f"예상치 못한 결과 타입: {type(result)}")
+                
+                logger.info(f"최고 성능: {best_score:.4f}")
+                logger.info("최적 파라미터:")
+                for param, value in best_params.items():
+                    logger.info(f"  {param}: {value}")
+                
+                # 실행 시간 계산
+                execution_time = time.time() - start_time
+                
+                # 실험 요약 로깅
+                n_trials = len(tuner.study.trials) if hasattr(tuner, 'study') and tuner.study else 0
+                log_experiment_summary(
+                    experiment_type=experiment_type,
+                    model_type=model_type,
+                    best_score=best_score,
+                    best_params=best_params,
+                    execution_time=execution_time,
+                    n_trials=n_trials,
+                    data_info=data_info,
+                    log_file_path=log_file_path
+                )
+                
+                logger.info(f"=== 하이퍼파라미터 튜닝 완료 ===")
+                logger.info(f"최고 성능: {best_score:.6f}")
+                logger.info(f"실행 시간: {execution_time:.2f}초")
+                logger.info(f"시도 횟수: {n_trials}")
+                
+                return best_params, best_score, run.info.experiment_id, run.info.run_id
+                
         except Exception as e:
-            logger.error(f"결과 저장 실패: {e}")
-            # 결과 저장 실패해도 계속 진행
-        
-        # 결과 추출 (안전하게)
-        if result is None:
-            best_params = {}
-            best_score = 0.0
-            logger.warning("튜닝 결과가 None입니다. 기본값을 사용합니다.")
-        elif isinstance(result, tuple) and len(result) >= 2:
-            best_params = result[0] if result[0] is not None else {}
-            best_score = result[1] if result[1] is not None else 0.0
-        elif isinstance(result, dict):
-            best_params = result.get('best_params', {})
-            best_score = result.get('best_score', 0.0)
-        else:
-            best_params = {}
-            best_score = 0.0
-            logger.warning(f"예상치 못한 결과 타입: {type(result)}")
-        
-        logger.info(f"최고 성능: {best_score:.4f}")
-        logger.info("최적 파라미터:")
-        for param, value in best_params.items():
-            logger.info(f"  {param}: {value}")
-        
-        # 튜닝 로그 저장 (로그 파일 경로 전달)
-        try:
-            save_tuning_log(
-                result=result,
-                model_type=config.get('model', {}).get('model_type', 'unknown'),
-                experiment_type='hyperparameter_tuning',
-                nrows=nrows,
-                experiment_id=run.info.experiment_id,
-                run_id=run.info.run_id,
-                log_file_path=getattr(tuner, 'log_file_path', None)
-            )
-        except Exception as e:
-            logger.error(f"튜닝 로그 저장 실패: {e}")
-        
-        # 실험 결과 저장 (일반 튜닝)
-        save_experiment_results(
-            (best_params, best_score), 
-            config.get('model', {}).get('model_type', 'xgboost'), 
-            'hyperparameter_tuning', 
-            nrows, 
-            run.info.experiment_id, 
-            run.info.run_id,
-            config=config,
-            data_info=data_info
-        )
-        
-        return best_params, best_score, run.info.experiment_id, run.info.run_id
+            logger.error(f"하이퍼파라미터 튜닝 중 오류 발생: {e}")
+            raise
 
 
 def save_tuning_log(result, model_type, experiment_type, nrows=None, experiment_id=None, run_id=None, log_file_path=None):
