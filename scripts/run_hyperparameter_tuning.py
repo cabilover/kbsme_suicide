@@ -48,13 +48,9 @@ def setup_mlflow_experiment(experiment_name: str):
     Returns:
         experiment_id: 실험 ID
     """
-    mlflow.set_experiment(experiment_name)
-    experiment = mlflow.get_experiment_by_name(experiment_name)
-    if experiment is None:
-        experiment_id = mlflow.create_experiment(experiment_name)
-    else:
-        experiment_id = experiment.experiment_id
+    from src.utils.mlflow_manager import setup_mlflow_experiment_safely
     
+    experiment_id = setup_mlflow_experiment_safely(experiment_name)
     logger.info(f"MLflow 실험 설정: {experiment_name} (ID: {experiment_id})")
     return experiment_id
 
