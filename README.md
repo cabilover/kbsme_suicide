@@ -3,9 +3,35 @@
 ## 프로젝트 개요
 개인별 연간 정신 건강 지표 데이터를 활용하여 다음 해의 불안/우울/수면 점수 및 자살 사고/시도 여부를 예측하는 머신러닝 프로젝트입니다.
 
-## 🎯 최근 주요 개선사항 (2025-07-17)
+## 🎯 최근 주요 개선사항 (2025-07-21)
 
-### ✅ **SMOTE NaN 문제 해결 및 피처 엔지니어링 문제 해결**
+### ✅ **대규모 리팩토링 작업 완료 - 하이퍼파라미터 튜닝과 리샘플링 실험 분리**
+- **리팩토링 배경**: 기존 하이퍼파라미터 튜닝 스크립트에 리샘플링 관련 코드가 혼재되어 있어 코드 복잡성 증가 및 유지보수 어려움
+- **작업 1 완료 - 하이퍼파라미터 튜닝 실험 정리**:
+  - **설정 파일 정리**: `configs/experiments/hyperparameter_tuning.yaml`에서 리샘플링 설정 제거 확인
+  - **Python 모듈 정리**: `src/hyperparameter_tuning.py`에서 리샘플링 관련 코드 없음 확인
+  - **스크립트 정리**: `scripts/run_hyperparameter_tuning.py`에서 5개 리샘플링 관련 함수 완전 제거
+    - 제거된 함수: `run_resampling_tuning_comparison()`, `add_resampling_hyperparameters_to_tuning_config()`, `run_resampling_tuning_comparison_with_configmanager()`, `apply_resampling_hyperparameters_to_config()`, `update_class_distributions_after_resampling()`
+    - 수정된 함수: `log_tuning_params()`, `run_hyperparameter_tuning_with_config()`, `main()`
+    - 제거된 명령행 인자: `--resampling-comparison`, `--resampling-methods`, `--resampling-method`, `--resampling-ratio`, `--resampling-enabled` 등
+
+- **다중 모델 테스트 완료**:
+  - **CatBoost**: 최고 성능 0.0008, ~8분 소요 ✅
+  - **LightGBM**: 최고 성능 0.0269, ~10분 소요 ✅
+  - **XGBoost, Random Forest**: 백그라운드 실행 중 🔄
+  - **검증 완료**: Resampling 코드 완전 제거, 순수한 하이퍼파라미터 튜닝만 수행, 교차 검증 정상 동작, MLflow 연동 정상
+
+- **리팩토링 성과**:
+  - **코드 분리**: 하이퍼파라미터 튜닝과 리샘플링 실험이 명확히 분리됨
+  - **유지보수성 향상**: 각 실험의 책임이 명확해져 유지보수 용이
+  - **재사용성 증대**: 공통 컴포넌트를 공유하면서도 실험별 특화 가능
+  - **확장성 개선**: 새로운 실험 타입 추가 시 기존 코드 영향 최소화
+
+- **다음 단계 계획**:
+  - 작업 2: 새로운 리샘플링 실험 스크립트 작성 (`scripts/run_resampling_experiment.py`)
+  - 작업 3: 로깅 시스템 개선 (터미널 출력 로그 저장, 프로젝트 진행 상황 추적 강화)
+
+## 🎯 최근 주요 개선사항 (2025-07-17)
 - **SMOTE NaN 문제 원인 분석**: 피처 엔지니어링에서 생성된 시계열 피처들(지연 피처, 이동 통계, 연도별 변화율)에서 의도적으로 NaN이 생성되지만, 전처리 파이프라인에서 이 NaN들이 처리되지 않아 SMOTE 적용 시 `Input X contains NaN` 오류 발생
 - **`get_numerical_columns()` 함수 대폭 개선**: 피처 엔지니어링으로 생성된 시계열 피처들도 자동으로 수치형으로 분류하도록 수정
   - 지연 피처: `*_lag_1`, `*_lag_2` 패턴 자동 인식
