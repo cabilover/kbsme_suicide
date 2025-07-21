@@ -27,7 +27,7 @@ class MLflowExperimentManager:
     MLflow 디렉토리 관리를 자동화합니다.
     """
     
-    def __init__(self, tracking_uri: str = "file:./mlruns", backup_dir: str = "mlruns/backups"):
+    def __init__(self, tracking_uri: str = "file:./mlruns", backup_dir: str = "mlruns_backups"):
         """
         MLflow 실험 관리자 초기화
         

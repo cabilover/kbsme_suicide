@@ -270,6 +270,9 @@ def main():
     Path('logs').mkdir(exist_ok=True)
     
     logger.info(f"MLflow 정리 작업 시작: {args.action}")
+    # 백업 디렉토리 명시적으로 지정
+    from src.utils.mlflow_manager import MLflowExperimentManager
+    manager = MLflowExperimentManager(backup_dir='mlruns_backups')
     
     if args.action == 'list':
         list_experiments_info(args.mlruns_path)
