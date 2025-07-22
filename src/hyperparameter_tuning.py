@@ -368,7 +368,7 @@ class HyperparameterTuner:
             variability = analyze_fold_variability(fold_results)
             
             # 주요 지표 추출 및 고급 메트릭 로깅
-            primary_metric = self.tuning_config['evaluation']['primary_metric']
+            primary_metric = self.config.get('evaluation', {}).get('primary_metric', 'f1')
             cv_scores = []
             
             # MLflow 로깅 전에 실제 메트릭 값이 있는지 확인
@@ -444,7 +444,7 @@ class HyperparameterTuner:
                         mlflow.log_param(f"trial_{trial.number}_error", "invalid_mean_score")
                     except Exception as e:
                         logger.warning(f"Trial {trial.number} 실패 로깅 실패: {e}")
-                    return float('-inf') if self.tuning_config['tuning']['direction'] == 'maximize' else float('inf')
+                    return float('-inf') if self.config.get('tuning', {}).get('direction', 'maximize') == 'maximize' else float('inf')
                 
                 # 5. Trial 성공 로깅 및 성능 지표
                 try:
@@ -545,25 +545,15 @@ class HyperparameterTuner:
         logger.info("최적화 시작 전 메모리 상태:")
         monitor_memory_usage()
         
-        try:
-            mlflow.log_param("optimization_algorithm", self.tuning_config['sampler']['type'])
-        except Exception as e:
-            logger.warning(f"MLflow 최적화 알고리즘 로깅 실패: {e}")
+        # 안전한 MLflow 로깅 사용
+        from src.utils.mlflow_manager import safe_log_param
         
-        try:
-            mlflow.log_param("n_trials", n_trials)
-        except Exception as e:
-            logger.warning(f"MLflow n_trials 로깅 실패: {e}")
-        
-        try:
-            mlflow.log_param("direction", self.tuning_config['tuning']['direction'])
-        except Exception as e:
-            logger.warning(f"MLflow direction 로깅 실패: {e}")
-        
-        try:
-            mlflow.log_param("primary_metric", self.tuning_config['evaluation']['primary_metric'])
-        except Exception as e:
-            logger.warning(f"MLflow primary_metric 로깅 실패: {e}")
+        safe_log_param("optimization_algorithm", self.tuning_config['sampler']['type'], logger)
+        safe_log_param("n_trials", n_trials, logger)
+        safe_log_param("direction", self.tuning_config['tuning']['direction'], logger)
+        # primary_metric 안전한 참조
+        primary_metric = self.config.get('evaluation', {}).get('primary_metric', 'f1')
+        safe_log_param("primary_metric", primary_metric, logger)
         
         self.study.optimize(
             self._objective,
@@ -583,59 +573,51 @@ class HyperparameterTuner:
         logger.info("최적화 완료 후 안전한 메모리 정리:")
         safe_cleanup_memory()
         
-        # 7. 전체 튜닝 과정 요약 로깅
-        try:
-            # 전체 trial 통계
-            all_trials = self.study.trials
-            successful_trials = [t for t in all_trials if t.state == optuna.trial.TrialState.COMPLETE]
-            failed_trials = [t for t in all_trials if t.state == optuna.trial.TrialState.FAIL]
-            
-            mlflow.log_param("total_trials", len(all_trials))
-            mlflow.log_param("successful_trials", len(successful_trials))
-            mlflow.log_param("failed_trials", len(failed_trials))
-            mlflow.log_param("success_rate", len(successful_trials) / len(all_trials) if all_trials else 0)
-            
-            # 성능 통계
-            if successful_trials:
-                scores = [t.value for t in successful_trials if t.value is not None]
-                if scores:
-                    mlflow.log_metric("all_trials_mean_score", safe_float(np.mean(scores)))
-                    mlflow.log_metric("all_trials_std_score", safe_float(np.std(scores)))
-                    mlflow.log_metric("all_trials_min_score", safe_float(np.min(scores)))
-                    mlflow.log_metric("all_trials_max_score", safe_float(np.max(scores)))
-                    mlflow.log_metric("all_trials_median_score", safe_float(np.median(scores)))
-            
-            # 최적화 진행 상황
-            mlflow.log_param("best_trial_number", self.study.best_trial.number)
-            mlflow.log_param("optimization_duration_seconds", 
-                           (self.study.best_trial.datetime_complete - self.study.best_trial.datetime_start).total_seconds() 
-                           if self.study.best_trial.datetime_complete else 0)
-            
-        except Exception as e:
-            logger.warning(f"전체 튜닝 과정 요약 로깅 실패: {e}")
+        # 7. 전체 튜닝 과정 요약 로깅 (안전한 로깅 사용)
+        from src.utils.mlflow_manager import safe_log_param, safe_log_metric
+        
+        # 전체 trial 통계
+        all_trials = self.study.trials
+        successful_trials = [t for t in all_trials if t.state == optuna.trial.TrialState.COMPLETE]
+        failed_trials = [t for t in all_trials if t.state == optuna.trial.TrialState.FAIL]
+        
+        safe_log_param("total_trials", len(all_trials), logger)
+        safe_log_param("successful_trials", len(successful_trials), logger)
+        safe_log_param("failed_trials", len(failed_trials), logger)
+        safe_log_param("success_rate", len(successful_trials) / len(all_trials) if all_trials else 0, logger)
+        
+        # 성능 통계
+        if successful_trials:
+            scores = [t.value for t in successful_trials if t.value is not None]
+            if scores:
+                safe_log_metric("all_trials_mean_score", safe_float(np.mean(scores)), logger=logger)
+                safe_log_metric("all_trials_std_score", safe_float(np.std(scores)), logger=logger)
+                safe_log_metric("all_trials_min_score", safe_float(np.min(scores)), logger=logger)
+                safe_log_metric("all_trials_max_score", safe_float(np.max(scores)), logger=logger)
+                safe_log_metric("all_trials_median_score", safe_float(np.median(scores)), logger=logger)
+        
+        # 최적화 진행 상황
+        safe_log_param("best_trial_number", self.study.best_trial.number, logger)
+        safe_log_param("optimization_duration_seconds", 
+                       (self.study.best_trial.datetime_complete - self.study.best_trial.datetime_start).total_seconds() 
+                       if self.study.best_trial.datetime_complete else 0, logger)
         
         # 최적 파라미터를 best_ 접두사로 로깅하여 중복 방지
         for param_name, param_value in self.best_params.items():
-            try:
-                mlflow.log_param(f"best_{param_name}", param_value)
-            except Exception as e:
-                logger.warning(f"MLflow 최적 파라미터 로깅 실패 (best_{param_name}): {e}")
+            safe_log_param(f"best_{param_name}", param_value, logger)
         
         if isinstance(self.best_score, (int, float)) and not np.isnan(self.best_score) and not np.isinf(self.best_score):
-            try:
-                mlflow.log_metric("best_score", safe_float(self.best_score))
-            except Exception as e:
-                logger.warning(f"MLflow best_score 로깅 실패: {e}")
+            safe_log_metric("best_score", safe_float(self.best_score), logger=logger)
         else:
             logger.warning(f"유효하지 않은 best_score: {self.best_score}")
             # best_score가 유효하지 않은 경우 0.0으로 설정
             try:
                 self.best_score = float(self.best_score) if self.best_score != float('-inf') and self.best_score != float('inf') else 0.0
-                mlflow.log_metric("best_score", safe_float(self.best_score))
+                safe_log_metric("best_score", safe_float(self.best_score), logger=logger)
             except (ValueError, TypeError) as e:
                 logger.warning(f"best_score 타입 변환 실패: {self.best_score} ({type(self.best_score)}): {e}")
                 self.best_score = 0.0
-                mlflow.log_metric("best_score", safe_float(self.best_score))
+                safe_log_metric("best_score", safe_float(self.best_score), logger=logger)
         
         logger.info(f"최적화 완료!")
         logger.info(f"  - 최고 성능: {self.best_score:.4f}")

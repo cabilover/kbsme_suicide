@@ -1,0 +1,338 @@
+# 리샘플링 실험 설정
+# 하이퍼파라미터 튜닝과 동일한 구조를 유지하면서 리샘플링 방법을 튜닝 범위에 포함
+
+experiment:
+  name: resampling_experiment
+  description: 리샘플링 방법을 포함한 하이퍼파라미터 최적화 실험
+  tags: [resampling, hyperparameter_tuning, optuna, optimization]
+
+# MLflow 설정
+mlflow:
+  experiment_name: resampling_experiment
+  experiment_description: 리샘플링 방법을 포함한 자살 위험 예측 모델 실험
+  tags: [suicide_prediction, healthcare, classification, resampling]
+  nested_runs: true
+  save_artifacts: true
+  log_params: true
+  log_metrics: true
+  log_model: true
+  tracking:
+    tracking_uri: file:./mlruns
+    experiment_name: suicide_prediction
+    nested_runs: true
+    artifact_location: ./mlruns
+  logging:
+    param_logging_level: INFO
+    metric_logging_level: INFO
+    artifact_logging_level: INFO
+    log_experiment_info: true
+    log_fold_results: true
+    log_model_info: true
+  log_optimization: true
+
+# 튜닝 설정
+tuning:
+  direction: maximize
+  n_trials: 50  # 리샘플링 실험은 더 많은 시도가 필요할 수 있음
+  n_jobs: 1
+  early_stopping:
+    enabled: true
+    patience: 50
+    min_trials: 100
+
+# 샘플러 설정
+sampler:
+  type: tpe
+  tpe:
+    n_startup_trials: 10
+    n_ei_candidates: 24
+    multivariate: true
+    group: false
+  cmaes:
+    x0:
+      n_estimators: 100
+      max_depth: 6
+      learning_rate: 0.1
+      subsample: 0.8
+      colsample_bytree: 0.8
+      min_child_weight: 1
+      reg_alpha: 0.1
+      reg_lambda: 1.0
+    sigma0: 0.1
+
+# 불균형 데이터 처리 설정 (리샘플링 실험의 핵심)
+imbalanced_data:
+  # 리샘플링 설정 (튜닝 대상)
+  resampling:
+    enabled: true  # 기본적으로 활성화 (튜닝에서 none도 포함)
+    method: smote  # 기본값 (튜닝에서 변경됨)
+    
+    # SMOTE 설정 (튜닝 대상)
+    smote:
+      k_neighbors: 5  # 기본값 (튜닝에서 3-10 범위)
+      sampling_strategy: auto  # 기본값 (튜닝에서 0.05-0.3 범위)
+    
+    # Borderline SMOTE 설정 (튜닝 대상)
+    borderline_smote:
+      k_neighbors: 5  # 기본값 (튜닝에서 3-10 범위)
+      m_neighbors: 10  # 기본값 (튜닝에서 5-15 범위)
+      sampling_strategy: auto  # 기본값 (튜닝에서 0.05-0.3 범위)
+    
+    # ADASYN 설정 (튜닝 대상)
+    adasyn:
+      k_neighbors: 5  # 기본값 (튜닝에서 3-10 범위)
+      n_neighbors: 5  # 기본값 (튜닝에서 3-10 범위)
+      sampling_strategy: auto  # 기본값 (튜닝에서 0.05-0.3 범위)
+    
+    # Under Sampling 설정 (튜닝 대상)
+    under_sampling:
+      strategy: random  # 기본값 (튜닝에서 random, tomek_links, edited_nearest_neighbours)
+      sampling_strategy: auto  # 기본값 (튜닝에서 0.1-0.5 범위)
+    
+    # Hybrid 설정 (튜닝 대상) - SMOTE + Under Sampling 조합
+    hybrid:
+      smote_k_neighbors: 5  # 기본값 (튜닝에서 3-10 범위)
+      smote_sampling_strategy: auto  # 기본값 (튜닝에서 0.05-0.3 범위)
+      under_sampling_strategy: random  # 기본값 (튜닝에서 random, tomek_links)
+      under_sampling_sampling_strategy: auto  # 기본값 (튜닝에서 0.1-0.5 범위)
+  
+  # 클래스 가중치 설정 (기본값)
+  class_weights: Balanced
+  auto_class_weights: Balanced
+  scale_pos_weight: 1.0
+
+# 모델별 하이퍼파라미터 튜닝 범위 (기존과 동일)
+xgboost_params:
+  n_estimators:
+    type: int
+    low: 50
+    high: 1000
+    log: false
+  max_depth:
+    type: int
+    low: 3
+    high: 15
+    log: false
+  learning_rate:
+    type: float
+    low: 0.01
+    high: 0.3
+    log: true
+  subsample:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  colsample_bytree:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  colsample_bylevel:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  min_child_weight:
+    type: int
+    low: 1
+    high: 10
+    log: false
+  gamma:
+    type: float
+    low: 0.1
+    high: 5.0
+    log: true
+  max_delta_step:
+    type: int
+    low: 0
+    high: 10
+    log: false
+  reg_alpha:
+    type: float
+    low: 1e-8
+    high: 10.0
+    log: true
+  scale_pos_weight:
+    type: float
+    low: 50.0
+    high: 1000.0
+    log: true
+  tree_method:
+    type: categorical
+    choices: [auto, exact, approx, hist]
+
+lightgbm_params:
+  n_estimators:
+    type: int
+    low: 50
+    high: 1000
+    log: false
+  max_depth:
+    type: int
+    low: 3
+    high: 12
+    log: false
+  num_leaves:
+    type: int
+    low: 10
+    high: 200
+    log: false
+  learning_rate:
+    type: float
+    low: 0.01
+    high: 0.3
+    log: true
+  subsample:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  colsample_bytree:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  feature_fraction:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  bagging_fraction:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  bagging_freq:
+    type: int
+    low: 0
+    high: 10
+    log: false
+  min_data_in_leaf:
+    type: int
+    low: 10
+    high: 100
+    log: false
+  min_child_weight:
+    type: int
+    low: 1
+    high: 10
+    log: false
+  reg_alpha:
+    type: float
+    low: 1e-8
+    high: 10.0
+    log: true
+  scale_pos_weight:
+    type: float
+    low: 50.0
+    high: 1000.0
+    log: true
+  boosting_type:
+    type: categorical
+    choices: [gbdt, dart, goss]
+
+catboost_params:
+  iterations:
+    type: int
+    low: 100
+    high: 1000
+    log: false
+  depth:
+    type: int
+    low: 4
+    high: 12
+    log: false
+  learning_rate:
+    type: float
+    low: 0.005
+    high: 0.15
+    log: true
+  l2_leaf_reg:
+    type: float
+    low: 0.1
+    high: 50.0
+    log: true
+  border_count:
+    type: int
+    low: 32
+    high: 128
+    log: false
+  min_data_in_leaf:
+    type: int
+    low: 1
+    high: 20
+    log: false
+  max_bin:
+    type: int
+    low: 128
+    high: 512
+    log: false
+  subsample:
+    type: float
+    low: 0.6
+    high: 1.0
+    log: false
+  od_type:
+    type: categorical
+    choices: [Iter, IncToDec]
+  od_wait:
+    type: int
+    low: 20
+    high: 100
+    log: false
+  bagging_temperature:
+    type: float
+    low: 0.1
+    high: 1.0
+    log: false
+  random_strength:
+    type: float
+    low: 0.1
+    high: 10.0
+    log: true
+
+random_forest_params:
+  n_estimators:
+    type: int
+    low: 50
+    high: 500
+    log: false
+  max_depth:
+    type: int
+    low: 3
+    high: 20
+    log: false
+  min_samples_split:
+    type: int
+    low: 2
+    high: 20
+    log: false
+  min_samples_leaf:
+    type: int
+    low: 1
+    high: 10
+    log: false
+  max_features:
+    type: categorical
+    choices: [sqrt, log2, auto]
+
+# 교차 검증 설정
+cv:
+  strategy: stratified_group_kfold
+  n_folds: 5
+  shuffle: false
+  stratification:
+    enabled: true
+    method: id_based
+    min_positive_samples_per_fold: 1
+    balance_threshold: 0.1
+
+# 결과 저장 설정
+results:
+  save_best_model: true
+  model_save_path: models/best_resampling_model.joblib
+  save_study: true
+  study_save_path: models/optuna_resampling_study.pkl
+  create_plots: true
+  plots_save_path: data/resampling_results/ 

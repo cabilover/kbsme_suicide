@@ -14,6 +14,81 @@
 
 ## 현재 진행 상황
 
+### ✅ 2025-07-23 기준 최신 업데이트: MLflow 실험 관리 시스템 대폭 개선 - meta.yaml 손상 문제 완전 해결
+
+#### **MLflow 실험 관리 시스템 개선 배경 및 목표**
+- **문제점**: MLflow 실험 중 `meta.yaml` 파일이 반복적으로 손상되어 실험 추적 불가능, 파라미터 중복 로깅으로 인한 오류 발생
+- **목표**: 
+  1. 안전한 MLflow run 관리 시스템 구축
+  2. 실험 무결성 검증 및 자동 복구 기능 구현
+  3. 모든 MLflow 로깅에 예외 처리 적용
+
+#### **작업 1: MLflow meta.yaml 손상 문제 해결 완료**
+
+##### **1.1 문제 상황 분석**
+- **손상 원인**: 실험 중단 시 run이 제대로 종료되지 않아 메타데이터 불완전
+- **동시 접근 문제**: 여러 프로세스가 동시에 MLflow 디렉토리에 접근할 때 파일 쓰기 충돌
+- **중복 로깅 문제**: `resampling_enabled` 파라미터가 `True`/`False`로 중복 로깅
+
+##### **1.2 안전한 MLflow Run 관리 시스템 구축**
+- **`safe_mlflow_run` 컨텍스트 매니저 추가**:
+  - 예외 발생 시 자동으로 run을 `FAILED` 상태로 종료
+  - 정상 종료 시 `FINISHED` 상태로 종료
+  - `src/utils/mlflow_manager.py`에 구현
+
+- **안전한 로깅 함수들 구현**:
+  - `safe_log_param`: 파라미터 로깅에 예외 처리 적용
+  - `safe_log_metric`: 메트릭 로깅에 예외 처리 적용
+  - `safe_log_artifact`: 아티팩트 로깅에 예외 처리 적용
+
+##### **1.3 실험 무결성 검증 및 복구 시스템**
+- **실험 무결성 검증**: `validate_experiment_integrity()` 함수로 `meta.yaml` 파일 검증
+- **손상된 실험 복구**: `repair_experiment()` 함수로 기본 `meta.yaml` 재생성
+- **Orphaned 실험 정리**: `cleanup_orphaned_experiments()` 함수로 `meta.yaml` 없는 실험 자동 정리
+
+#### **작업 2: MLflow 파라미터 중복 로깅 문제 해결 완료**
+
+##### **2.1 중복 로깅 제거**
+- **`src/training.py`**: 교차 검증 중 중복 로깅 제거
+- **`scripts/run_resampling_experiment.py`**: 안전한 로깅 방식 적용
+- **`src/preprocessing.py`**: 폴드별 리샘플링 파라미터 로깅에 예외 처리 추가
+
+##### **2.2 안전한 로깅 시스템 적용**
+- 모든 MLflow 파라미터 로깅에 `try-except` 블록 추가
+- 실험 진행에 영향을 주지 않으면서 로깅 실패 시 경고 메시지 출력
+
+#### **작업 3: primary_metric 로깅 실패 문제 해결 완료**
+
+##### **3.1 설정 파일 수정**
+- **`configs/base/evaluation.yaml`**: `primary_metric: "f1"` 설정 추가
+- **목적**: 하이퍼파라미터 튜닝의 목표 지표 명확화
+
+##### **3.2 안전한 참조 방식 적용**
+- **`src/hyperparameter_tuning.py`**: `self.config.get('evaluation', {}).get('primary_metric', 'f1')` 방식으로 안전한 참조
+- **기본값 설정**: 설정 누락 시에도 `'f1'`으로 정상 작동
+
+#### **작업 4: 실험 전 사전 정리 시스템 구현**
+
+##### **4.1 실험 시작 전 자동 정리**
+- **현재 실험 상태 확인**: `print_experiment_summary()` 함수로 MLflow 상태 출력
+- **Orphaned 실험 정리**: 실험 실행 전 자동 백업 및 정리
+- **실험 무결성 검증**: 실험 시작 전 무결성 검증 및 복구 시도
+
+##### **4.2 적용된 파일들**
+- **`src/utils/mlflow_manager.py`**: MLflow 관리 시스템 대폭 확장
+- **`scripts/run_hyperparameter_tuning.py`**: 안전한 MLflow run 관리 적용
+- **`scripts/run_resampling_experiment.py`**: 무결성 검증 및 안전한 run 관리 적용
+- **`src/hyperparameter_tuning.py`**: 안전한 로깅 및 참조 방식 적용
+- **`src/preprocessing.py`**: 안전한 로깅 방식 적용
+- **`configs/base/evaluation.yaml`**: `primary_metric` 설정 추가
+
+#### **검증된 개선 효과**
+- ✅ **MLflow `meta.yaml` 손상 경고 메시지 없음**
+- ✅ **MLflow 파라미터 중복 로깅 경고 없음**
+- ✅ **`primary_metric` 로깅 실패 경고 없음**
+- ✅ **실험 중단 시에도 깔끔한 종료**
+- ✅ **실험 전 자동 정리 및 무결성 검증**
+
 ### ✅ 2025-07-21 기준 최신 업데이트: 대규모 리팩토링 작업 완료 - 하이퍼파라미터 튜닝과 리샘플링 실험 분리 + 로깅 시스템 대폭 개선
 
 #### **대규모 리팩토링 배경 및 목표**

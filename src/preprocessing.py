@@ -1345,19 +1345,21 @@ def apply_resampling(X: pd.DataFrame, y: pd.Series, config: Dict[str, Any],
         for class_label, count in resampled_dist.items():
             mlflow.log_metric(f"fold_{fold_num}_resampled_class_{class_label}_count", count)
         
-        # 리샘플링 파라미터 로깅
+        # 리샘플링 파라미터 로깅 (안전한 로깅)
+        from src.utils.mlflow_manager import safe_log_param
+        
         method = resampling_config.get('method', 'unknown')
-        mlflow.log_param(f"fold_{fold_num}_resampling_method", method)
+        safe_log_param(f"fold_{fold_num}_resampling_method", method, logger)
         
         if method == 'smote':
             k_neighbors = resampling_config.get('smote_k_neighbors', 5)
-            mlflow.log_param(f"fold_{fold_num}_smote_k_neighbors", k_neighbors)
+            safe_log_param(f"fold_{fold_num}_smote_k_neighbors", k_neighbors, logger)
         elif method == 'borderline_smote':
             k_neighbors = resampling_config.get('borderline_smote_k_neighbors', 5)
-            mlflow.log_param(f"fold_{fold_num}_borderline_smote_k_neighbors", k_neighbors)
+            safe_log_param(f"fold_{fold_num}_borderline_smote_k_neighbors", k_neighbors, logger)
         elif method == 'adasyn':
             k_neighbors = resampling_config.get('adasyn_k_neighbors', 5)
-            mlflow.log_param(f"fold_{fold_num}_adasyn_k_neighbors", k_neighbors)
+            safe_log_param(f"fold_{fold_num}_adasyn_k_neighbors", k_neighbors, logger)
     
     return X_resampled, y_resampled
 

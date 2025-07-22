@@ -3,6 +3,39 @@
 ## 프로젝트 개요
 개인별 연간 정신 건강 지표 데이터를 활용하여 다음 해의 불안/우울/수면 점수 및 자살 사고/시도 여부를 예측하는 머신러닝 프로젝트입니다.
 
+## 🎯 최근 주요 개선사항 (2025-07-23)
+
+### ✅ **MLflow 실험 관리 시스템 대폭 개선 - meta.yaml 손상 문제 완전 해결**
+- **문제 상황**: MLflow 실험 중 `meta.yaml` 파일이 반복적으로 손상되어 실험 추적 불가능
+- **해결 방안**:
+  - **안전한 MLflow Run 관리**: `safe_mlflow_run` 컨텍스트 매니저로 예외 발생 시 자동 `FAILED` 상태 종료
+  - **안전한 로깅 시스템**: `safe_log_param`, `safe_log_metric`, `safe_log_artifact` 함수로 모든 로깅에 예외 처리
+  - **실험 무결성 검증**: 실험 시작 전 `meta.yaml` 파일 무결성 검증 및 자동 복구
+  - **Orphaned 실험 정리**: `meta.yaml` 없는 실험 디렉토리 자동 감지 및 백업 후 정리
+
+- **MLflow 파라미터 중복 로깅 문제 해결**:
+  - **문제**: `resampling_enabled` 파라미터가 `True`/`False`로 중복 로깅되어 MLflow 오류 발생
+  - **해결**: 중복 로깅 제거 및 안전한 로깅 방식 적용으로 모든 경고 메시지 해결
+
+- **primary_metric 로깅 실패 문제 해결**:
+  - **문제**: `configs/base/evaluation.yaml`에 `primary_metric` 설정 누락으로 KeyError 발생
+  - **해결**: `primary_metric: "f1"` 설정 추가 및 안전한 참조 방식 적용
+
+- **적용된 파일들**:
+  - `src/utils/mlflow_manager.py`: MLflow 관리 시스템 대폭 확장
+  - `scripts/run_hyperparameter_tuning.py`: 안전한 MLflow run 관리 적용
+  - `scripts/run_resampling_experiment.py`: 무결성 검증 및 안전한 run 관리 적용
+  - `src/hyperparameter_tuning.py`: 안전한 로깅 및 참조 방식 적용
+  - `src/preprocessing.py`: 안전한 로깅 방식 적용
+  - `configs/base/evaluation.yaml`: `primary_metric` 설정 추가
+
+- **예상 효과**:
+  - ✅ MLflow `meta.yaml` 손상 경고 메시지 없음
+  - ✅ MLflow 파라미터 중복 로깅 경고 없음
+  - ✅ `primary_metric` 로깅 실패 경고 없음
+  - ✅ 실험 중단 시에도 깔끔한 종료
+  - ✅ 실험 전 자동 정리 및 무결성 검증
+
 ## 🎯 최근 주요 개선사항 (2025-07-21)
 
 ### ✅ **대규모 리팩토링 작업 완료 - 하이퍼파라미터 튜닝과 리샘플링 실험 분리 + 로깅 시스템 대폭 개선**

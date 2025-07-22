@@ -407,19 +407,8 @@ def run_cross_validation(train_val_df: pd.DataFrame, config: Dict[str, Any]) -> 
             except Exception as e:
                 logger.warning(f"MLflow 집계 메트릭 로깅 실패 (cv_{metric_name}): {e}")
         
-        # 리샘플링 사용 여부 로깅
+        # 리샘플링 사용 여부 확인 (로깅은 상위 레벨에서 이미 수행됨)
         resampling_enabled = config.get('resampling', {}).get('enabled', False)
-        try:
-            mlflow.log_param("resampling_enabled", resampling_enabled)
-        except Exception as e:
-            logger.warning(f"MLflow 리샘플링 파라미터 로깅 실패: {e}")
-        
-        if resampling_enabled:
-            resampling_method = config.get('resampling', {}).get('method', 'unknown')
-            try:
-                mlflow.log_param("resampling_method", resampling_method)
-            except Exception as e:
-                logger.warning(f"MLflow 리샘플링 메서드 로깅 실패: {e}")
         
         logger.info(f"교차 검증 완료: {fold_count}개 폴드")
         logger.info(f"집계 성능: {aggregate_metrics}")

@@ -1,5 +1,28 @@
 # MLflow 실험 디렉토리 관리 개선사항
 
+## [2025-07-23] 최신 코드 반영 내역
+
+### 🔧 **MLflow meta.yaml 손상 문제 완전 해결**
+- **문제 상황**: MLflow 실험 중 `meta.yaml` 파일이 반복적으로 손상되어 실험 추적 불가능
+- **해결 방안**:
+  - **안전한 MLflow Run 관리**: `safe_mlflow_run` 컨텍스트 매니저로 예외 발생 시 자동 `FAILED` 상태 종료
+  - **안전한 로깅 시스템**: `safe_log_param`, `safe_log_metric`, `safe_log_artifact` 함수로 모든 로깅에 예외 처리
+  - **실험 무결성 검증**: 실험 시작 전 `meta.yaml` 파일 무결성 검증 및 자동 복구
+  - **Orphaned 실험 정리**: `meta.yaml` 없는 실험 디렉토리 자동 감지 및 백업 후 정리
+
+### 🔧 **MLflow 파라미터 중복 로깅 문제 해결**
+- **문제**: `resampling_enabled` 파라미터가 `True`/`False`로 중복 로깅되어 MLflow 오류 발생
+- **해결**: 중복 로깅 제거 및 안전한 로깅 방식 적용으로 모든 경고 메시지 해결
+
+### 🔧 **primary_metric 로깅 실패 문제 해결**
+- **문제**: `configs/base/evaluation.yaml`에 `primary_metric` 설정 누락으로 KeyError 발생
+- **해결**: `primary_metric: "f1"` 설정 추가 및 안전한 참조 방식 적용
+
+### 🔧 **실험 전 사전 정리 시스템 구현**
+- **현재 실험 상태 확인**: `print_experiment_summary()` 함수로 MLflow 상태 출력
+- **Orphaned 실험 정리**: 실험 실행 전 자동 백업 및 정리
+- **실험 무결성 검증**: 실험 시작 전 무결성 검증 및 복구 시도
+
 ## [2025-07-21] 최신 코드 반영 내역
 
 - **신규 유틸리티/스크립트**

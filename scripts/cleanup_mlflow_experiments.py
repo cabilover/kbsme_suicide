@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pathlib import Path
 from typing import List, Tuple
 

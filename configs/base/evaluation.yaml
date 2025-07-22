@@ -3,6 +3,9 @@
 
 # 평가 설정
 evaluation:
+  # 주요 평가 지표 (하이퍼파라미터 튜닝의 목표)
+  primary_metric: "f1"
+  
   # 회귀 메트릭
   regression_metrics: ["mae", "rmse", "r2"]
   

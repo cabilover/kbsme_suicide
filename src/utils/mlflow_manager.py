@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 
 import mlflow
 import pandas as pd
@@ -91,7 +92,29 @@ class MLflowExperimentManager:
         except Exception as e:
             logger.error(f"실험 생성 실패: {e}")
             raise
-    
+
+    def print_experiment_summary(self):
+        """현재 실험들의 요약 정보를 출력합니다."""
+        try:
+            experiments = mlflow.search_experiments()
+            
+            print("=== MLflow 실험 정보 ===")
+            print(f"{'실험 ID':<20} {'이름':<40} {'상태':<10} {'Run 수':<8}")
+            print("-" * 78)
+            
+            for exp in experiments:
+                # Run 수 계산
+                try:
+                    runs = mlflow.search_runs(exp.experiment_id, max_results=1)
+                    run_count = len(runs) if runs is not None else 0
+                except:
+                    run_count = 0
+                
+                print(f"{exp.experiment_id:<20} {exp.name:<40} {exp.lifecycle_stage:<10} {run_count:<8}")
+                
+        except Exception as e:
+            logger.error(f"실험 요약 출력 실패: {e}")
+
     def cleanup_orphaned_experiments(self, backup: bool = True) -> List[str]:
         """
         Orphaned 실험들을 정리합니다.
@@ -100,35 +123,42 @@ class MLflowExperimentManager:
             backup: 삭제 전 백업 여부
             
         Returns:
-            삭제된 실험 ID 리스트
+            삭제된 실험 ID 목록
         """
-        orphaned_experiments = self._find_orphaned_experiments()
         deleted_experiments = []
         
-        if not orphaned_experiments:
-            logger.info("정리할 orphaned 실험이 없습니다.")
-            return deleted_experiments
-        
-        logger.info(f"발견된 orphaned 실험: {len(orphaned_experiments)}개")
-        
-        for experiment_path in orphaned_experiments:
-            experiment_id = Path(experiment_path).name
+        for experiment_dir in self.mlruns_path.iterdir():
+            if not experiment_dir.is_dir():
+                continue
+                
+            # 관리용 디렉토리는 제외
+            if experiment_dir.name in ['models', '.trash', 'backups']:
+                continue
+                
+            meta_file = experiment_dir / 'meta.yaml'
             
-            try:
+            if not meta_file.exists():
+                logger.warning(f"Orphaned 실험 발견: {experiment_dir.name}")
+                
                 if backup:
-                    self._backup_experiment(experiment_path)
+                    # 백업 생성
+                    backup_path = self.backup_dir / f"{experiment_dir.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    try:
+                        shutil.copytree(experiment_dir, backup_path)
+                        logger.info(f"Orphaned 실험 백업: {experiment_dir.name} -> {backup_path}")
+                    except Exception as e:
+                        logger.error(f"백업 생성 실패: {experiment_dir.name} - {e}")
                 
-                # 디렉토리 삭제
-                shutil.rmtree(experiment_path)
-                deleted_experiments.append(experiment_id)
-                logger.info(f"Orphaned 실험 삭제 완료: {experiment_id}")
-                
-            except Exception as e:
-                logger.error(f"실험 삭제 실패: {experiment_id} - {e}")
+                # 실험 디렉토리 삭제
+                try:
+                    shutil.rmtree(experiment_dir)
+                    deleted_experiments.append(experiment_dir.name)
+                    logger.info(f"Orphaned 실험 삭제: {experiment_dir.name}")
+                except Exception as e:
+                    logger.error(f"실험 삭제 실패: {experiment_dir.name} - {e}")
         
-        logger.info(f"정리 완료: {len(deleted_experiments)}/{len(orphaned_experiments)} 실험 삭제")
         return deleted_experiments
-    
+
     def cleanup_old_runs(self, days_old: int = 30) -> int:
         """
         오래된 run들을 정리합니다.
@@ -142,19 +172,15 @@ class MLflowExperimentManager:
         cutoff_date = datetime.now() - timedelta(days=days_old)
         deleted_count = 0
         
-        logger.info(f"{days_old}일 이상 오래된 run 정리 시작")
-        
         for experiment_dir in self.mlruns_path.iterdir():
             if not experiment_dir.is_dir() or experiment_dir.name in ['models', '.trash', 'backups']:
                 continue
-            
+                
             # meta.yaml이 있는 실험만 처리
             meta_file = experiment_dir / 'meta.yaml'
             if not meta_file.exists():
                 continue
-            
-            experiment_id = experiment_dir.name
-            
+                
             # run 디렉토리들 확인
             for run_dir in experiment_dir.iterdir():
                 if not run_dir.is_dir():
@@ -180,120 +206,233 @@ class MLflowExperimentManager:
         
         logger.info(f"오래된 run 정리 완료: {deleted_count}개 삭제")
         return deleted_count
-    
 
-    
-    def print_experiment_summary(self) -> None:
-        """실험 요약 정보를 출력합니다."""
-        summary = self.get_experiment_summary()
-        
-        print("\n=== MLflow 실험 요약 ===")
-        print(f"총 실험 수: {summary['total_experiments']}")
-        print(f"  - 활성 실험: {summary['active_experiments']}")
-        print(f"  - 삭제된 실험: {summary['deleted_experiments']}")
-        print(f"  - Orphaned 실험: {summary['orphaned_experiments']}")
-        print(f"총 Run 수: {summary['total_runs']}")
-        
-        if summary['experiments']:
-            print("\n=== 실험 상세 정보 ===")
-            print(f"{'실험 ID':<20} {'이름':<30} {'상태':<12} {'Run 수':<8} {'메타':<6}")
-            print("-" * 80)
-            
-            for exp in summary['experiments']:
-                meta_status = "✓" if exp['has_meta'] else "✗"
-                print(f"{exp['experiment_id']:<20} {exp['name']:<30} {exp['lifecycle_stage']:<12} {exp['run_count']:<8} {meta_status:<6}")
-    
-    def _find_orphaned_experiments(self) -> List[str]:
-        """meta.yaml이 없는 실험 디렉토리를 찾습니다."""
-        orphaned_dirs = []
-        
-        for item in self.mlruns_path.iterdir():
-            if item.is_dir() and item.name not in ['models', '.trash', 'backups']:
-                meta_file = item / 'meta.yaml'
-                if not meta_file.exists():
-                    orphaned_dirs.append(str(item))
-        
-        return orphaned_dirs
-    
-    def get_experiment_summary(self) -> Dict[str, Any]:
+    def backup_experiment(self, experiment_id: str, backup_name: str = None) -> str:
         """
-        실험 요약 정보를 반환합니다.
+        실험을 백업합니다.
         
+        Args:
+            experiment_id: 실험 ID
+            backup_name: 백업 이름 (None이면 자동 생성)
+            
         Returns:
-            실험 요약 정보 딕셔너리
+            백업 경로
         """
-        summary = {
-            'total_experiments': 0,
-            'active_experiments': 0,
-            'deleted_experiments': 0,
-            'orphaned_experiments': 0,
-            'total_runs': 0,
-            'experiments': []
-        }
+        experiment_dir = self.mlruns_path / experiment_id
         
-        for experiment_dir in self.mlruns_path.iterdir():
-            if not experiment_dir.is_dir() or experiment_dir.name in ['models', '.trash', 'backups']:
-                continue
-            
-            experiment_id = experiment_dir.name
-            meta_file = experiment_dir / 'meta.yaml'
-            
-            experiment_info = {
-                'experiment_id': experiment_id,
-                'name': 'Unknown',
-                'lifecycle_stage': 'orphaned',
-                'run_count': 0,
-                'has_meta': meta_file.exists()
-            }
-            
-            if meta_file.exists():
-                try:
-                    with open(meta_file, 'r') as f:
-                        lines = f.readlines()
-                        
-                        for line in lines:
-                            if line.startswith('name:'):
-                                experiment_info['name'] = line.split(':', 1)[1].strip()
-                            elif line.startswith('lifecycle_stage:'):
-                                experiment_info['lifecycle_stage'] = line.split(':', 1)[1].strip()
-                    
-                    # run 수 계산
-                    run_count = len([d for d in experiment_dir.iterdir() if d.is_dir()])
-                    experiment_info['run_count'] = run_count
-                    summary['total_runs'] += run_count
-                    
-                    # 상태별 카운트
-                    if experiment_info['lifecycle_stage'] == 'active':
-                        summary['active_experiments'] += 1
-                    elif experiment_info['lifecycle_stage'] == 'deleted':
-                        summary['deleted_experiments'] += 1
-                    
-                except Exception as e:
-                    logger.warning(f"실험 메타데이터 읽기 실패: {experiment_id} - {e}")
-            else:
-                summary['orphaned_experiments'] += 1
-            
-            summary['experiments'].append(experiment_info)
-            summary['total_experiments'] += 1
+        if not experiment_dir.exists():
+            raise ValueError(f"실험 디렉토리가 존재하지 않습니다: {experiment_id}")
         
-        return summary
-    
-    def _backup_experiment(self, experiment_path: str) -> bool:
-        """실험 데이터를 백업합니다."""
+        if backup_name is None:
+            backup_name = f"{experiment_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        backup_path = self.backup_dir / backup_name
+        
         try:
-            experiment_name = Path(experiment_path).name
-            backup_path = self.backup_dir / f"backup_{experiment_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            
-            if Path(experiment_path).exists():
-                shutil.copytree(experiment_path, backup_path)
-                logger.info(f"실험 데이터 백업 완료: {backup_path}")
-                return True
-            else:
-                logger.warning(f"실험 디렉토리가 존재하지 않습니다: {experiment_path}")
-                return False
+            shutil.copytree(experiment_dir, backup_path)
+            logger.info(f"실험 백업 완료: {experiment_id} -> {backup_path}")
+            return str(backup_path)
         except Exception as e:
-            logger.error(f"백업 실패: {e}")
+            logger.error(f"실험 백업 실패: {experiment_id} - {e}")
+            raise
+
+    def restore_experiment(self, backup_path: str, experiment_id: str = None) -> str:
+        """
+        백업된 실험을 복원합니다.
+        
+        Args:
+            backup_path: 백업 경로
+            experiment_id: 복원할 실험 ID (None이면 백업에서 추출)
+            
+        Returns:
+            복원된 실험 ID
+        """
+        backup_path = Path(backup_path)
+        
+        if not backup_path.exists():
+            raise ValueError(f"백업 경로가 존재하지 않습니다: {backup_path}")
+        
+        if experiment_id is None:
+            experiment_id = backup_path.name
+        
+        restore_path = self.mlruns_path / experiment_id
+        
+        try:
+            if restore_path.exists():
+                shutil.rmtree(restore_path)
+            
+            shutil.copytree(backup_path, restore_path)
+            logger.info(f"실험 복원 완료: {backup_path} -> {experiment_id}")
+            return experiment_id
+        except Exception as e:
+            logger.error(f"실험 복원 실패: {backup_path} - {e}")
+            raise
+
+    def validate_experiment_integrity(self, experiment_id: str) -> bool:
+        """
+        실험의 무결성을 검증합니다.
+        
+        Args:
+            experiment_id: 실험 ID
+            
+        Returns:
+            무결성 검증 결과
+        """
+        experiment_dir = self.mlruns_path / experiment_id
+        
+        if not experiment_dir.exists():
             return False
+        
+        meta_file = experiment_dir / 'meta.yaml'
+        if not meta_file.exists():
+            return False
+        
+        try:
+            # meta.yaml 파일 읽기 테스트
+            with open(meta_file, 'r') as f:
+                content = f.read()
+                if not content.strip():
+                    return False
+        except Exception:
+            return False
+        
+        return True
+
+    def repair_experiment(self, experiment_id: str) -> bool:
+        """
+        손상된 실험을 복구합니다.
+        
+        Args:
+            experiment_id: 실험 ID
+            
+        Returns:
+            복구 성공 여부
+        """
+        experiment_dir = self.mlruns_path / experiment_id
+        
+        if not experiment_dir.exists():
+            return False
+        
+        meta_file = experiment_dir / 'meta.yaml'
+        
+        if not meta_file.exists() or meta_file.stat().st_size == 0:
+            try:
+                # 기본 meta.yaml 생성
+                basic_meta = f"""artifact_uri: ./mlruns/{experiment_id}
+experiment_id: {experiment_id}
+lifecycle_stage: active
+name: experiment_{experiment_id}
+"""
+                with open(meta_file, 'w') as f:
+                    f.write(basic_meta)
+                
+                logger.info(f"실험 복구 완료: {experiment_id}")
+                return True
+            except Exception as e:
+                logger.error(f"실험 복구 실패: {experiment_id} - {e}")
+                return False
+        
+        return True
+
+
+@contextmanager
+def safe_mlflow_run(experiment_id: str = None, run_name: str = None, nested: bool = False):
+    """
+    안전한 MLflow run 관리를 위한 컨텍스트 매니저
+    
+    Args:
+        experiment_id: 실험 ID
+        run_name: run 이름
+        nested: 중첩 실행 여부
+        
+    Yields:
+        MLflow run 객체
+    """
+    run = None
+    try:
+        # MLflow run 시작
+        run = mlflow.start_run(
+            experiment_id=experiment_id,
+            run_name=run_name,
+            nested=nested
+        )
+        logger.info(f"MLflow Run 시작: {run.info.run_id}")
+        
+        yield run
+        
+    except Exception as e:
+        logger.error(f"MLflow Run 실행 중 오류 발생: {e}")
+        # run이 시작되었지만 예외가 발생한 경우
+        if run is not None:
+            try:
+                mlflow.end_run(status="FAILED")
+                logger.info(f"MLflow Run 종료 (FAILED): {run.info.run_id}")
+            except Exception as end_error:
+                logger.error(f"MLflow Run 종료 실패: {end_error}")
+        raise
+    else:
+        # 정상 종료
+        if run is not None:
+            try:
+                mlflow.end_run(status="FINISHED")
+                logger.info(f"MLflow Run 종료 (FINISHED): {run.info.run_id}")
+            except Exception as end_error:
+                logger.error(f"MLflow Run 종료 실패: {end_error}")
+
+
+def safe_log_param(param_name: str, param_value: Any, logger_instance: logging.Logger = None):
+    """
+    안전한 MLflow 파라미터 로깅
+    
+    Args:
+        param_name: 파라미터 이름
+        param_value: 파라미터 값
+        logger_instance: 로거 인스턴스
+    """
+    if logger_instance is None:
+        logger_instance = logger
+    
+    try:
+        mlflow.log_param(param_name, param_value)
+    except Exception as e:
+        logger_instance.warning(f"MLflow 파라미터 로깅 실패 ({param_name}): {e}")
+
+
+def safe_log_metric(metric_name: str, metric_value: Any, step: int = None, logger_instance: logging.Logger = None):
+    """
+    안전한 MLflow 메트릭 로깅
+    
+    Args:
+        metric_name: 메트릭 이름
+        metric_value: 메트릭 값
+        step: 스텝 번호
+        logger_instance: 로거 인스턴스
+    """
+    if logger_instance is None:
+        logger_instance = logger
+    
+    try:
+        mlflow.log_metric(metric_name, metric_value, step=step)
+    except Exception as e:
+        logger_instance.warning(f"MLflow 메트릭 로깅 실패 ({metric_name}): {e}")
+
+
+def safe_log_artifact(local_path: str, artifact_path: str = None, logger_instance: logging.Logger = None):
+    """
+    안전한 MLflow 아티팩트 로깅
+    
+    Args:
+        local_path: 로컬 파일 경로
+        artifact_path: 아티팩트 경로
+        logger_instance: 로거 인스턴스
+    """
+    if logger_instance is None:
+        logger_instance = logger
+    
+    try:
+        mlflow.log_artifact(local_path, artifact_path)
+    except Exception as e:
+        logger_instance.warning(f"MLflow 아티팩트 로깅 실패 ({local_path}): {e}")
 
 
 def setup_mlflow_experiment_safely(experiment_name: str, tracking_uri: str = "file:./mlruns") -> str:

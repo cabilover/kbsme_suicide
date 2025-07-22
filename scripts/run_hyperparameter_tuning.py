@@ -156,259 +156,10 @@ def log_tuning_params(tuning_config: Dict[str, Any], base_config: Dict[str, Any]
         # 예외가 발생해도 실험은 계속 진행
 
 
-def run_resampling_tuning_comparison(tuning_config_path: str, base_config_path: str,
-                                   data_path: str, resampling_methods: List[str],
-                                   nrows: int = None) -> Dict[str, Any]:
-    """
-    다양한 리샘플링 기법에 대해 하이퍼파라미터 튜닝을 비교하는 실험을 실행합니다.
-    
-    Args:
-        tuning_config_path: 튜닝 설정 파일 경로
-        base_config_path: 기본 설정 파일 경로
-        data_path: 데이터 파일 경로
-        resampling_methods: 테스트할 리샘플링 기법 리스트
-        nrows: 사용할 데이터 행 수 (None이면 전체 사용)
-        
-    Returns:
-        비교 실험 결과
-    """
-    logger.info("=== 리샘플링 하이퍼파라미터 튜닝 비교 실험 시작 ===")
-    
-    # 기본 설정 로드
-    base_config = load_config(base_config_path)
-    
-    # 데이터 로드
-    logger.info(f"데이터 로드 중: {data_path}")
-    if nrows:
-        df = pd.read_csv(data_path, nrows=nrows)
-        logger.info(f"테스트용 데이터 로드: {len(df):,} 행")
-    else:
-        df = pd.read_csv(data_path)
-        logger.info(f"전체 데이터 로드: {len(df):,} 행")
-    
-    # 테스트 세트 분리
-    logger.info("=== 테스트 세트 분리 ===")
-    train_val_df, test_df, test_ids = split_test_set(df, base_config)
-    
-    # 분할 검증
-    if not validate_splits(train_val_df, test_df, base_config):
-        logger.error("분할 검증 실패!")
-        return {}
-    
-    comparison_results = {
-        'methods': {},
-        'best_method': None,
-        'best_score': -np.inf,
-        'summary': {}
-    }
-    
-    for method in resampling_methods:
-        logger.info(f"\n--- {method.upper()} 하이퍼파라미터 튜닝 시작 ---")
-        
-        # 설정 복사 및 리샘플링 설정 업데이트
-        method_base_config = base_config.copy()
-        method_base_config['resampling'] = {
-            'enabled': method != 'none',
-            'method': method if method != 'none' else 'smote',  # none이 아닌 경우에만 설정
-            'random_state': 42
-        }
-        
-        # 리샘플링 기법별 기본 파라미터 설정 (하이퍼파라미터 튜닝 대상)
-        if method == 'smote':
-            method_base_config['resampling']['smote_k_neighbors'] = 5  # 기본값, 튜닝 대상
-            method_base_config['resampling']['smote_sampling_strategy'] = 0.1  # 기본값, 튜닝 대상
-        elif method == 'borderline_smote':
-            method_base_config['resampling']['borderline_smote_k_neighbors'] = 5  # 기본값, 튜닝 대상
-            method_base_config['resampling']['borderline_smote_sampling_strategy'] = 0.1  # 기본값, 튜닝 대상
-            method_base_config['resampling']['borderline_smote_m_neighbors'] = 10  # 기본값, 튜닝 대상
-        elif method == 'adasyn':
-            method_base_config['resampling']['adasyn_k_neighbors'] = 5  # 기본값, 튜닝 대상
-            method_base_config['resampling']['adasyn_sampling_strategy'] = 0.1  # 기본값, 튜닝 대상
-        elif method == 'under_sampling':
-            method_base_config['resampling']['under_sampling_strategy'] = 'random'  # 기본값, 튜닝 대상
-        elif method == 'hybrid':
-            method_base_config['resampling']['hybrid_strategy'] = 'smote_tomek'  # 기본값, 튜닝 대상
-        elif method == 'time_series_adapted':
-            # 시계열 특화 리샘플링 파라미터
-            method_base_config['resampling']['time_series_adapted'] = {
-                'enabled': True,
-                'time_weight': 0.3,  # 기본값, 튜닝 대상
-                'pattern_preservation': True,  # 기본값, 튜닝 대상
-                'temporal_window': 3,  # 기본값, 튜닝 대상
-                'seasonality_weight': 0.2,  # 기본값, 튜닝 대상
-                'trend_preservation': True  # 기본값, 튜닝 대상
-            }
-        
-        # MLflow 중첩 실행
-        with mlflow.start_run(run_name=f"resampling_tuning_{method}", nested=True):
-            # 튜닝 설정 로드
-            with open(tuning_config_path, 'r', encoding='utf-8') as f:
-                method_tuning_config = yaml.safe_load(f)
-            
-            # 리샘플링 파라미터를 하이퍼파라미터 튜닝에 추가
-            method_tuning_config = add_resampling_hyperparameters_to_tuning_config(
-                method_tuning_config, method
-            )
-            
-            # 실험 파라미터 로깅
-            log_tuning_params(method_tuning_config, method_base_config)
-            
-            # 하이퍼파라미터 튜너 생성 (임시 설정 파일 사용)
-            import tempfile
-            import os
-            
-            # 임시 기본 설정 파일 생성
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                yaml.dump(method_base_config, f, default_flow_style=False)
-                temp_base_config_path = f.name
-            
-            try:
-                # 하이퍼파라미터 튜너 생성
-                tuner = HyperparameterTuner(temp_base_config_path, temp_base_config_path, nrows=nrows)
-                
-                # 최적화 실행
-                logger.info(f"{method} 하이퍼파라미터 최적화 실행 중...")
-                best_params, best_score = tuner.optimize(start_mlflow_run=False)
-                
-                # 결과 저장
-                logger.info(f"{method} 튜닝 결과 저장 중...")
-                tuner.save_results()
-                
-                # 결과 수집
-                method_results = {
-                    'best_params': best_params,
-                    'best_score': best_score,
-                    'tuning_config': method_tuning_config,
-                    'base_config': method_base_config
-                }
-                
-                comparison_results['methods'][method] = method_results
-                
-                # 최고 성능 업데이트
-                if best_score > comparison_results['best_score']:
-                    comparison_results['best_score'] = best_score
-                    comparison_results['best_method'] = method
-                
-                logger.info(f"{method} 하이퍼파라미터 튜닝 완료: {best_score:.4f}")
-                
-            finally:
-                # 임시 파일 정리
-                if os.path.exists(temp_base_config_path):
-                    os.unlink(temp_base_config_path)
-    
-    # 비교 결과 요약
-    logger.info("\n=== 리샘플링 하이퍼파라미터 튜닝 비교 결과 요약 ===")
-    for method, results in comparison_results['methods'].items():
-        best_score = results['best_score']
-        logger.info(f"{method}: 최고 성능 = {best_score:.4f}")
-    
-    logger.info(f"최고 성능 기법: {comparison_results['best_method']} (성능: {comparison_results['best_score']:.4f})")
-    
-    return comparison_results
 
 
-def add_resampling_hyperparameters_to_tuning_config(tuning_config: Dict[str, Any], resampling_method: str) -> Dict[str, Any]:
-    """
-    리샘플링 파라미터를 하이퍼파라미터 튜닝 설정에 추가합니다.
-    
-    Args:
-        tuning_config: 기존 튜닝 설정
-        resampling_method: 리샘플링 기법
-        
-    Returns:
-        리샘플링 파라미터가 추가된 튜닝 설정
-    """
-    # 기존 설정 복사
-    updated_config = tuning_config.copy()
-    
-    # 리샘플링 파라미터를 하이퍼파라미터 튜닝에 추가
-    if 'resampling_params' not in updated_config:
-        updated_config['resampling_params'] = {}
-    
-    resampling_params = updated_config['resampling_params']
-    
-    if resampling_method == 'smote':
-        resampling_params.update({
-            'smote_k_neighbors': {
-                'type': 'int',
-                'low': 3,
-                'high': 10,
-                'log': False
-            },
-            'smote_sampling_strategy': {
-                'type': 'float',
-                'low': 0.05,
-                'high': 0.3,
-                'log': False
-            }
-        })
-    elif resampling_method == 'borderline_smote':
-        resampling_params.update({
-            'borderline_smote_k_neighbors': {
-                'type': 'int',
-                'low': 3,
-                'high': 10,
-                'log': False
-            },
-            'borderline_smote_sampling_strategy': {
-                'type': 'float',
-                'low': 0.05,
-                'high': 0.3,
-                'log': False
-            },
-            'borderline_smote_m_neighbors': {
-                'type': 'int',
-                'low': 5,
-                'high': 15,
-                'log': False
-            }
-        })
-    elif resampling_method == 'adasyn':
-        resampling_params.update({
-            'adasyn_k_neighbors': {
-                'type': 'int',
-                'low': 3,
-                'high': 10,
-                'log': False
-            },
-            'adasyn_sampling_strategy': {
-                'type': 'float',
-                'low': 0.05,
-                'high': 0.3,
-                'log': False
-            }
-        })
-    elif resampling_method == 'time_series_adapted':
-        resampling_params.update({
-            'time_weight': {
-                'type': 'float',
-                'low': 0.1,
-                'high': 0.8,
-                'log': False
-            },
-            'temporal_window': {
-                'type': 'int',
-                'low': 1,
-                'high': 6,
-                'log': False
-            },
-            'seasonality_weight': {
-                'type': 'float',
-                'low': 0.0,
-                'high': 0.5,
-                'log': False
-            },
-            'pattern_preservation': {
-                'type': 'categorical',
-                'choices': [True, False]
-            },
-            'trend_preservation': {
-                'type': 'categorical',
-                'choices': [True, False]
-            }
-        })
-    
-    return updated_config
+
+
 
 
 def validate_config_files(tuning_config_path: str, base_config_path: str):
@@ -450,166 +201,10 @@ def validate_config_files(tuning_config_path: str, base_config_path: str):
     logger.info("설정 파일 검증 완료")
 
 
-def run_resampling_tuning_comparison_with_configmanager(
-    model_type: str,
-    experiment_type: str,
-    data_path: str,
-    resampling_methods: List[str],
-    nrows: int = None
-) -> Dict[str, Any]:
-    """
-    ConfigManager 기반 다양한 리샘플링 기법에 대해 하이퍼파라미터 튜닝을 비교하는 실험을 실행합니다.
-    """
-    logger.info("=== [ConfigManager] 리샘플링 하이퍼파라미터 튜닝 비교 실험 시작 ===")
-    config_manager = ConfigManager()
-
-    # 데이터 로드
-    logger.info(f"데이터 로드 중: {data_path}")
-    if nrows:
-        df = pd.read_csv(data_path, nrows=nrows)
-        logger.info(f"테스트용 데이터 로드: {len(df):,} 행")
-    else:
-        df = pd.read_csv(data_path)
-        logger.info(f"전체 데이터 로드: {len(df):,} 행")
-
-    # 테스트 세트 분리
-    logger.info("=== 테스트 세트 분리 ===")
-    # config는 리샘플링과 무관하게 분할에만 사용
-    base_config = config_manager.create_experiment_config(model_type, experiment_type)
-    train_val_df, test_df, test_ids = split_test_set(df, base_config)
-
-    # 분할 검증
-    if not validate_splits(train_val_df, test_df, base_config):
-        logger.error("분할 검증 실패!")
-        return {}
-
-    # 데이터 정보 수집
-    data_info = collect_data_info(df, base_config, train_val_df, test_df)
-    logger.info(f"데이터 정보 수집 완료: {data_info['total_rows']} 행, {data_info['total_columns']} 열")
-
-    comparison_results = {
-        'methods': {},
-        'best_method': None,
-        'best_score': -np.inf,
-        'summary': {}
-    }
-
-    # 상위 MLflow run 시작
-    with mlflow.start_run(run_name=f"resampling_comparison_{model_type}"):
-        for method in resampling_methods:
-            logger.info(f"\n--- {method.upper()} 하이퍼파라미터 튜닝 시작 ---")
-            # config 생성 및 리샘플링 설정 수정
-            config = config_manager.create_experiment_config(model_type, experiment_type)
-            config['resampling'] = {
-                'enabled': method != 'none',
-                'method': method if method != 'none' else 'smote',
-                'random_state': 42
-            }
-            # 리샘플링 기법별 기본 파라미터 설정 (하이퍼파라미터 튜닝 대상)
-            if method == 'smote':
-                config['resampling']['smote_k_neighbors'] = 5  # 기본값, 튜닝 대상
-                config['resampling']['smote_sampling_strategy'] = 0.1  # 기본값, 튜닝 대상
-            elif method == 'borderline_smote':
-                config['resampling']['borderline_smote_k_neighbors'] = 5  # 기본값, 튜닝 대상
-                config['resampling']['borderline_smote_sampling_strategy'] = 0.1  # 기본값, 튜닝 대상
-                config['resampling']['borderline_smote_m_neighbors'] = 10  # 기본값, 튜닝 대상
-            elif method == 'adasyn':
-                config['resampling']['adasyn_k_neighbors'] = 5  # 기본값, 튜닝 대상
-                config['resampling']['adasyn_sampling_strategy'] = 0.1  # 기본값, 튜닝 대상
-            elif method == 'under_sampling':
-                config['resampling']['under_sampling_strategy'] = 'random'  # 기본값, 튜닝 대상
-            elif method == 'hybrid':
-                config['resampling']['hybrid_strategy'] = 'smote_tomek'  # 기본값, 튜닝 대상
-            elif method == 'time_series_adapted':
-                # 시계열 특화 리샘플링 파라미터
-                config['resampling']['time_series_adapted'] = {
-                    'enabled': True,
-                    'time_weight': 0.3,  # 기본값, 튜닝 대상
-                    'pattern_preservation': True,  # 기본값, 튜닝 대상
-                    'temporal_window': 3,  # 기본값, 튜닝 대상
-                    'seasonality_weight': 0.2,  # 기본값, 튜닝 대상
-                    'trend_preservation': True  # 기본값, 튜닝 대상
-                }
-            # 데이터 경로 반영
-            config['data']['data_path'] = data_path
-            # MLflow 중첩 실행
-            with mlflow.start_run(run_name=f"resampling_tuning_{method}", nested=True):
-                # 리샘플링 파라미터를 하이퍼파라미터 튜닝에 추가
-                if 'tuning' in config:
-                    config['tuning'] = add_resampling_hyperparameters_to_tuning_config(
-                        config['tuning'], method
-                    )
-                
-                # 튜닝 파라미터 로깅 
-                log_tuning_params(config, config)
-                
-                # 튜너 생성 및 튜닝 실행
-                tuner = HyperparameterTuner(config, train_val_df, nrows=nrows)
-                result = tuner.optimize(start_mlflow_run=False)
-                
-                # 결과 추출
-                if result is None:
-                    best_params = {}
-                    best_score = 0.0
-                    logger.warning(f"{method} 튜닝 결과가 None입니다.")
-                elif isinstance(result, tuple) and len(result) >= 2:
-                    best_params = result[0] if result[0] is not None else {}
-                    best_score = result[1] if result[1] is not None else 0.0
-                else:
-                    best_params = {}
-                    best_score = 0.0
-                    logger.warning(f"{method} 예상치 못한 결과 타입: {type(result)}")
-                
-                # 결과 저장
-                comparison_results['methods'][method] = {
-                    'best_params': best_params,
-                    'best_score': best_score
-                }
-                
-                # 최고 성능 업데이트
-                if best_score > comparison_results['best_score']:
-                    comparison_results['best_score'] = best_score
-                    comparison_results['best_method'] = method
-                
-                logger.info(f"{method} 최고 성능: {best_score:.4f}")
-                logger.info(f"{method} 최적 파라미터: {best_params}")
-                
-                # 튜닝 로그 저장
-                try:
-                    save_tuning_log(
-                        result=(best_params, best_score),
-                        model_type=model_type,
-                        experiment_type=experiment_type,
-                        nrows=nrows,
-                        experiment_id=mlflow.active_run().info.experiment_id,
-                        run_id=mlflow.active_run().info.run_id,
-                        log_file_path=getattr(tuner, 'log_file_path', None)
-                    )
-                except Exception as e:
-                    logger.error(f"{method} 튜닝 로그 저장 실패: {e}")
-
-    # 최종 결과 요약
-    logger.info("\n=== 리샘플링 비교 실험 완료 ===")
-    logger.info(f"최고 성능 기법: {comparison_results['best_method']}")
-    logger.info(f"최고 성능: {comparison_results['best_score']:.4f}")
-    logger.info("\n각 기법별 성능:")
-    for method, method_result in comparison_results['methods'].items():
-        logger.info(f"  {method}: {method_result['best_score']:.4f}")
-
-    # 실험 결과 저장
-    save_experiment_results(
-        comparison_results,
-        model_type,
-        experiment_type,
-        nrows,
-        config=base_config,
-        data_info=data_info
-    )
-
-    return comparison_results
 
 
-def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str = None, nrows: int = None, resampling_comparison: bool = False, resampling_methods: List[str] = None):
+
+def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str = None, nrows: int = None):
     """
     설정 기반 하이퍼파라미터 튜닝을 실행합니다.
     
@@ -644,6 +239,20 @@ def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str
         logger.info(f"로그 파일: {log_file_path}")
         
         try:
+            # MLflow 실험 무결성 검증 및 복구
+            from src.utils.mlflow_manager import MLflowExperimentManager
+            manager = MLflowExperimentManager()
+            
+            # 현재 실험 상태 확인
+            logger.info("MLflow 실험 상태 확인 중...")
+            manager.print_experiment_summary()
+            
+            # Orphaned 실험 정리
+            logger.info("Orphaned 실험 정리 중...")
+            deleted_experiments = manager.cleanup_orphaned_experiments(backup=True)
+            if deleted_experiments:
+                logger.info(f"정리된 orphaned 실험: {deleted_experiments}")
+            
             # 데이터 경로 설정
             if data_path is None:
                 data_path = config['data'].get('file_path', 'data/processed/processed_data_with_features.csv')
@@ -677,11 +286,21 @@ def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str
             experiment_name = config['mlflow']['experiment_name']
             experiment_id = setup_mlflow_experiment(experiment_name)
             
+            # 실험 무결성 검증
+            if not manager.validate_experiment_integrity(experiment_id):
+                logger.warning(f"실험 {experiment_id} 무결성 검증 실패, 복구 시도 중...")
+                if manager.repair_experiment(experiment_id):
+                    logger.info(f"실험 {experiment_id} 복구 완료")
+                else:
+                    logger.error(f"실험 {experiment_id} 복구 실패")
+            
             # 튜너 생성
             tuner = HyperparameterTuner(config, train_val_df, nrows=nrows)
             
-            # 튜닝 실행
-            with mlflow.start_run(experiment_id=experiment_id) as run:
+            # 튜닝 실행 (안전한 MLflow run 관리)
+            from src.utils.mlflow_manager import safe_mlflow_run
+            
+            with safe_mlflow_run(experiment_id=experiment_id) as run:
                 logger.info(f"MLflow Run 시작: {run.info.run_id}")
                 
                 # 설정 로깅
@@ -1485,84 +1104,10 @@ def collect_data_info(df: pd.DataFrame, config: Dict[str, Any], train_val_df: pd
     return data_info
 
 
-def apply_resampling_hyperparameters_to_config(config: Dict[str, Any], trial_params: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Optuna trial에서 생성된 리샘플링 하이퍼파라미터를 config에 적용합니다.
-    
-    Args:
-        config: 기존 설정
-        trial_params: Optuna trial에서 생성된 파라미터
-        
-    Returns:
-        리샘플링 파라미터가 적용된 설정
-    """
-    updated_config = config.copy()
-    resampling_config = updated_config.get('resampling', {})
-    method = resampling_config.get('method', 'none')
-    
-    # 리샘플링 파라미터 적용
-    if method == 'smote':
-        if 'smote_k_neighbors' in trial_params:
-            resampling_config['smote_k_neighbors'] = trial_params['smote_k_neighbors']
-        if 'smote_sampling_strategy' in trial_params:
-            resampling_config['smote_sampling_strategy'] = trial_params['smote_sampling_strategy']
-    elif method == 'borderline_smote':
-        if 'borderline_smote_k_neighbors' in trial_params:
-            resampling_config['borderline_smote_k_neighbors'] = trial_params['borderline_smote_k_neighbors']
-        if 'borderline_smote_sampling_strategy' in trial_params:
-            resampling_config['borderline_smote_sampling_strategy'] = trial_params['borderline_smote_sampling_strategy']
-        if 'borderline_smote_m_neighbors' in trial_params:
-            resampling_config['borderline_smote_m_neighbors'] = trial_params['borderline_smote_m_neighbors']
-    elif method == 'adasyn':
-        if 'adasyn_k_neighbors' in trial_params:
-            resampling_config['adasyn_k_neighbors'] = trial_params['adasyn_k_neighbors']
-        if 'adasyn_sampling_strategy' in trial_params:
-            resampling_config['adasyn_sampling_strategy'] = trial_params['adasyn_sampling_strategy']
-    elif method == 'time_series_adapted':
-        time_series_config = resampling_config.get('time_series_adapted', {})
-        if 'time_weight' in trial_params:
-            time_series_config['time_weight'] = trial_params['time_weight']
-        if 'temporal_window' in trial_params:
-            time_series_config['temporal_window'] = trial_params['temporal_window']
-        if 'seasonality_weight' in trial_params:
-            time_series_config['seasonality_weight'] = trial_params['seasonality_weight']
-        if 'pattern_preservation' in trial_params:
-            time_series_config['pattern_preservation'] = trial_params['pattern_preservation']
-        if 'trend_preservation' in trial_params:
-            time_series_config['trend_preservation'] = trial_params['trend_preservation']
-        resampling_config['time_series_adapted'] = time_series_config
-    
-    updated_config['resampling'] = resampling_config
-    return updated_config
 
 
-def update_class_distributions_after_resampling(data_info: Dict[str, Any], X_resampled: pd.DataFrame, y_resampled: pd.Series, config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    리샘플링 후 클래스 분포 정보를 업데이트합니다.
-    
-    Args:
-        data_info: 기존 데이터 정보
-        X_resampled: 리샘플링된 피처 데이터
-        y_resampled: 리샘플링된 타겟 데이터
-        config: 설정 딕셔너리
-        
-    Returns:
-        업데이트된 데이터 정보
-    """
-    if 'class_distributions' not in data_info:
-        data_info['class_distributions'] = {}
-    
-    # 리샘플링 후 클래스 분포 계산
-    target_columns = config.get('features', {}).get('target_columns', [])
-    train_resampled = {}
-    
-    for target in target_columns:
-        if target in y_resampled.columns:
-            train_resampled[target] = y_resampled[target].value_counts().to_dict()
-    
-    data_info['class_distributions']['train_resampled'] = train_resampled
-    
-    return data_info
+
+
 
 
 def main():
@@ -1584,8 +1129,7 @@ def main():
     parser.add_argument("--base_config", type=str, default=None, help="(legacy) 기본 설정 파일 경로")
     parser.add_argument("--data_path", type=str, default=None, help="데이터 파일 경로")
     parser.add_argument("--nrows", type=int, default=None, help="사용할 데이터 행 수")
-    parser.add_argument("--resampling-comparison", action="store_true", help="리샘플링 기법 비교 실험 실행")
-    parser.add_argument("--resampling-methods", nargs="+", choices=['none', 'smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid', 'time_series_adapted'], default=None, help="비교할 리샘플링 기법들")
+
     parser.add_argument("--mlflow_ui", action="store_true", help="튜닝 완료 후 MLflow UI 실행")
     
     # 자동화된 실험을 위한 추가 인자들
@@ -1603,9 +1147,7 @@ def main():
     parser.add_argument("--feature-selection", action="store_true", help="피처 선택 활성화")
     parser.add_argument("--feature-selection-method", type=str, choices=['mutual_info', 'chi2', 'f_classif', 'recursive'], default=None, help="피처 선택 방법")
     parser.add_argument("--feature-selection-k", type=int, default=None, help="선택할 피처 수")
-    parser.add_argument("--resampling-enabled", action="store_true", help="리샘플링 활성화")
-    parser.add_argument("--resampling-method", type=str, choices=['smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid', 'time_series_adapted'], default=None, help="리샘플링 방법")
-    parser.add_argument("--resampling-ratio", type=float, default=None, help="리샘플링 후 양성 클래스 비율")
+
     parser.add_argument("--experiment-name", type=str, default=None, help="MLflow 실험 이름 (기본값: model_type_experiment_type)")
     parser.add_argument("--save-model", action="store_true", help="최적 모델 저장")
     parser.add_argument("--save-predictions", action="store_true", help="예측 결과 저장")
@@ -1626,36 +1168,18 @@ def main():
             result = run_hyperparameter_tuning_with_config(
                 config,
                 data_path=args.data_path,
-                nrows=args.nrows,
-                resampling_comparison=args.resampling_comparison,
-                resampling_methods=args.resampling_methods
+                nrows=args.nrows
             )
             # 실험 결과 저장은 run_hyperparameter_tuning_with_config 내부에서 처리됨
         elif args.tuning_config and args.base_config:
-            # legacy: 단일 파일 기반
-            result = run_resampling_tuning_comparison(
-                tuning_config_path=args.tuning_config,
-                base_config_path=args.base_config,
-                data_path=args.data_path,
-                resampling_methods=args.resampling_methods,
-                nrows=args.nrows
-            )
-            # 실험 결과는 MLflow를 통해 자동으로 저장됨
-            pass
+            # legacy: 단일 파일 기반 (리샘플링 기능 제거됨)
+            raise NotImplementedError("Legacy 모드는 지원하지 않습니다. ConfigManager를 사용해주세요.")
         else:
             raise ValueError("model-type 또는 tuning_config+base_config 중 하나는 반드시 지정해야 합니다.")
-        if args.resampling_comparison:
-            print(f"\n🎉 리샘플링 하이퍼파라미터 튜닝 비교 실험이 성공적으로 완료되었습니다!")
-            print(f"📊 최고 성능 기법: {result.get('best_method', 'none')}")
-            print(f"⚙️  최고 성능: {result.get('best_score', 0.0):.4f}")
-            print(f"\n📈 각 기법별 성능:")
-            for method, method_result in result.get('methods', {}).items():
-                print(f"  {method}: {method_result['best_score']:.4f}")
-        else:
-            best_params, best_score, _, _ = result
-            print(f"\n🎉 하이퍼파라미터 튜닝이 성공적으로 완료되었습니다!")
-            print(f"📊 최고 성능: {best_score:.4f}")
-            print(f"⚙️  최적 파라미터: {best_params}")
+        best_params, best_score, _, _ = result
+        print(f"\n🎉 하이퍼파라미터 튜닝이 성공적으로 완료되었습니다!")
+        print(f"📊 최고 성능: {best_score:.4f}")
+        print(f"⚙️  최적 파라미터: {best_params}")
         if args.mlflow_ui:
             print(f"\n🌐 MLflow UI를 실행합니다...")
             print(f"   브라우저에서 http://localhost:5000 으로 접속하세요.")
