@@ -130,6 +130,7 @@ dmypy.json
 
 # MLflow
 mlruns/
+mlruns_backups/
 
 # Data files (excluded as requested)
 data/
