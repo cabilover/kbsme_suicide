@@ -35,6 +35,7 @@
   - ✅ `primary_metric` 로깅 실패 경고 없음
   - ✅ 실험 중단 시에도 깔끔한 종료
   - ✅ 실험 전 자동 정리 및 무결성 검증
+  - ✅ safe_log_metric 함수의 logger_instance 인자 사용 버그 수정 (TypeError 완전 해결)
 
 ## 🎯 최근 주요 개선사항 (2025-07-21)
 

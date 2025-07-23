@@ -590,11 +590,11 @@ class HyperparameterTuner:
         if successful_trials:
             scores = [t.value for t in successful_trials if t.value is not None]
             if scores:
-                safe_log_metric("all_trials_mean_score", safe_float(np.mean(scores)), logger=logger)
-                safe_log_metric("all_trials_std_score", safe_float(np.std(scores)), logger=logger)
-                safe_log_metric("all_trials_min_score", safe_float(np.min(scores)), logger=logger)
-                safe_log_metric("all_trials_max_score", safe_float(np.max(scores)), logger=logger)
-                safe_log_metric("all_trials_median_score", safe_float(np.median(scores)), logger=logger)
+                safe_log_metric("all_trials_mean_score", safe_float(np.mean(scores)), logger_instance=logger)
+                safe_log_metric("all_trials_std_score", safe_float(np.std(scores)), logger_instance=logger)
+                safe_log_metric("all_trials_min_score", safe_float(np.min(scores)), logger_instance=logger)
+                safe_log_metric("all_trials_max_score", safe_float(np.max(scores)), logger_instance=logger)
+                safe_log_metric("all_trials_median_score", safe_float(np.median(scores)), logger_instance=logger)
         
         # 최적화 진행 상황
         safe_log_param("best_trial_number", self.study.best_trial.number, logger)
@@ -607,17 +607,17 @@ class HyperparameterTuner:
             safe_log_param(f"best_{param_name}", param_value, logger)
         
         if isinstance(self.best_score, (int, float)) and not np.isnan(self.best_score) and not np.isinf(self.best_score):
-            safe_log_metric("best_score", safe_float(self.best_score), logger=logger)
+            safe_log_metric("best_score", safe_float(self.best_score), logger_instance=logger)
         else:
             logger.warning(f"유효하지 않은 best_score: {self.best_score}")
             # best_score가 유효하지 않은 경우 0.0으로 설정
             try:
                 self.best_score = float(self.best_score) if self.best_score != float('-inf') and self.best_score != float('inf') else 0.0
-                safe_log_metric("best_score", safe_float(self.best_score), logger=logger)
+                safe_log_metric("best_score", safe_float(self.best_score), logger_instance=logger)
             except (ValueError, TypeError) as e:
                 logger.warning(f"best_score 타입 변환 실패: {self.best_score} ({type(self.best_score)}): {e}")
                 self.best_score = 0.0
-                safe_log_metric("best_score", safe_float(self.best_score), logger=logger)
+                safe_log_metric("best_score", safe_float(self.best_score), logger_instance=logger)
         
         logger.info(f"최적화 완료!")
         logger.info(f"  - 최고 성능: {self.best_score:.4f}")
