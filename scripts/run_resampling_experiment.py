@@ -901,6 +901,18 @@ class ResamplingHyperparameterTuner(HyperparameterTuner):
         except Exception as e:
             logger.error(f"Trial {trial.number} 실패: {e}")
             return 0.0
+        finally:
+            # === 로그 핸들러 및 표준출력 flush 추가 ===
+            import sys
+            for handler in logger.handlers:
+                try:
+                    handler.flush()
+                except Exception:
+                    pass
+            try:
+                sys.stdout.flush()
+            except Exception:
+                pass
 
 
 def main():
