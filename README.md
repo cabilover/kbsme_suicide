@@ -3,6 +3,52 @@
 ## 프로젝트 개요
 개인별 연간 정신 건강 지표 데이터를 활용하여 다음 해의 불안/우울/수면 점수 및 자살 사고/시도 여부를 예측하는 머신러닝 프로젝트입니다.
 
+## 🎯 최근 주요 개선사항 (2025-07-26)
+
+### ✅ **모든 모델의 불균형 데이터 처리 하이퍼파라미터 통일 및 Random Forest 지원 추가**
+- **배경**: XGBoost, LightGBM, CatBoost는 불균형 데이터 처리를 위한 하이퍼파라미터가 설정되어 있었으나, Random Forest는 누락되어 있었음
+- **Random Forest `class_weight` 튜닝 지원 추가**:
+  - **설정 파일 수정**: `configs/experiments/hyperparameter_tuning.yaml`에 `class_weight_pos` 파라미터 추가
+    ```yaml
+    random_forest_params:
+      # ... 기존 파라미터들 ...
+      class_weight_pos:
+        type: "float"
+        low: 50.0
+        high: 1000.0
+        log: true
+    ```
+  - **실험 코드 수정**: `src/hyperparameter_tuning.py`의 `_suggest_parameters` 메서드에 변환 로직 추가
+    ```python
+    # Random Forest의 class_weight_pos를 class_weight 딕셔너리로 변환
+    if model_type == 'random_forest' and 'class_weight_pos' in params:
+        class_weight_pos = params.pop('class_weight_pos')
+        params['class_weight'] = {0: 1.0, 1: class_weight_pos}
+    ```
+
+- **모델별 불균형 처리 방식 통일**:
+  | 모델 | 파라미터 | 튜닝 범위 | 처리 방식 |
+  |------|----------|-----------|-----------|
+  | **XGBoost** | `scale_pos_weight` | 50.0-1000.0 | 양성 클래스에 X배 가중치 |
+  | **LightGBM** | `scale_pos_weight` | 50.0-1000.0 | 양성 클래스에 X배 가중치 |
+  | **CatBoost** | `class_weights` | 50.0-1000.0 | `[1.0, X]` 형태로 변환 |
+  | **Random Forest** | `class_weight_pos` | 50.0-1000.0 | `{0: 1.0, 1: X}` 형태로 변환 |
+
+- **LightGBM 추가 기능 확인**:
+  - **`is_unbalance`**: 자동으로 클래스 비율에 맞는 가중치 적용
+  - **`class_weight`**: 수동으로 클래스별 가중치 지정
+  - **충돌 방지 로직**: `scale_pos_weight`와 `is_unbalance`가 동시에 설정되지 않도록 처리
+
+- **적용된 파일들**:
+  - `configs/experiments/hyperparameter_tuning.yaml`: Random Forest `class_weight_pos` 파라미터 추가
+  - `src/hyperparameter_tuning.py`: Random Forest 변환 로직 추가
+
+- **예상 효과**:
+  - ✅ 모든 모델에서 일관된 불균형 데이터 처리
+  - ✅ Random Forest도 다른 모델들과 동일한 튜닝 범위 사용
+  - ✅ 실험 결과 비교 용이성 향상
+  - ✅ 극도 불균형 데이터(자살 시도 0.12%)에서 더 나은 성능 기대
+
 ## 🎯 최근 주요 개선사항 (2025-07-23)
 
 ### ✅ **MLflow 실험 관리 시스템 대폭 개선 - meta.yaml 손상 문제 완전 해결**

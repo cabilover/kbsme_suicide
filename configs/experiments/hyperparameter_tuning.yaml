@@ -286,6 +286,13 @@ catboost_params:
     high: 10.0
     log: true
 
+  # 불균형 데이터 처리 파라미터 (XGBoost와 동일한 범위)
+  scale_pos_weight:
+    type: "float"
+    low: 50.0
+    high: 1000.0
+    log: true
+
 # Random Forest 하이퍼파라미터 검색 범위
 random_forest_params:
   n_estimators:
@@ -315,6 +322,13 @@ random_forest_params:
   max_features:
     type: "categorical"
     choices: ["sqrt", "log2", "auto"]
+  
+  # 불균형 데이터 처리 파라미터 (XGBoost와 동일한 범위)
+  class_weight_pos:
+    type: "float"
+    low: 50.0
+    high: 1000.0
+    log: true
 
 # 평가 설정
 evaluation:

@@ -259,6 +259,13 @@ class HyperparameterTuner:
                     params[param_name] = trial.suggest_int(param_name, low, high, log=log)
                 elif param_type == "float":
                     params[param_name] = trial.suggest_float(param_name, low, high, log=log)
+        
+        # Random Forest의 class_weight_pos를 class_weight 딕셔너리로 변환
+        if model_type == 'random_forest' and 'class_weight_pos' in params:
+            class_weight_pos = params.pop('class_weight_pos')
+            params['class_weight'] = {0: 1.0, 1: class_weight_pos}
+            logger.info(f"Random Forest class_weight 설정: {params['class_weight']}")
+        
         # 튜닝/실험용 파라미터(n_jobs 등)는 모델 파라미터 dict에 포함하지 않음
         return params
     
