@@ -97,7 +97,7 @@ model:
     gradient_iterations: 1
     sampling_unit: "Object"
     mvs_reg: 0.1
-    thread_count: 28   # 병렬처리 코어 수
+    n_jobs: 4   # 병렬처리 코어 수 (안전한 기본값으로 조정)
 
 # 불균형 데이터 처리 설정
 imbalanced_data:

@@ -16,7 +16,7 @@ model:
     scale_pos_weight: 1.0  # 자동 계산됨 (코드에서 _calculate_scale_pos_weight 사용)
     early_stopping_rounds: 10
     verbose: 0
-    n_jobs: 28   # 병렬처리 코어 수
+    n_jobs: 4   # 병렬처리 코어 수 (안전한 기본값으로 조정)
     
     # Focal Loss 설정
     use_focal_loss: false  # Focal Loss 사용 여부 (true/false)

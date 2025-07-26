@@ -14,7 +14,7 @@ experiment:
 tuning:
   direction: "maximize"  # "maximize" 또는 "minimize"
   n_trials: 500  # 튜닝 횟수, 500회로 증가
-  n_jobs: 1  # 병렬 처리 설정 (MLflow 충돌 방지)
+  n_jobs: 4  # 병렬 처리 설정 (안전한 값으로 조정)
   
   # 조기 종료 설정
   early_stopping:

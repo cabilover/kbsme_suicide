@@ -56,8 +56,12 @@ class LightGBMModel(BaseModel):
         params = self.model_params.copy()
         params.pop('focal_loss', None)  # LightGBM은 focal_loss를 지원하지 않음
         params.pop('use_focal_loss', None)  # 내부 플래그도 제거
-        # 병렬 파라미터 추가
-        params['num_threads'] = self.model_params.get('num_threads', 4)
+        
+        # 병렬 파라미터 추가 - n_jobs로 통일
+        params['n_jobs'] = self.model_params.get('n_jobs', 4)
+        # LightGBM 내부적으로는 num_threads를 사용하므로 변환
+        params['num_threads'] = params['n_jobs']
+        params.pop('n_jobs', None)  # n_jobs는 LightGBM에서 지원하지 않으므로 제거
 
         # 타겟 접두사 제거
         clean_target = target

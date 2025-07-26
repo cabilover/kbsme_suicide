@@ -56,6 +56,12 @@ class CatBoostModel(BaseModel):
         """
         params = self.model_params.copy()
         
+        # 병렬 파라미터 추가 - n_jobs로 통일
+        params['n_jobs'] = self.model_params.get('n_jobs', 4)
+        # CatBoost 내부적으로는 thread_count를 사용하므로 변환
+        params['thread_count'] = params['n_jobs']
+        params.pop('n_jobs', None)  # n_jobs는 CatBoost에서 지원하지 않으므로 제거
+        
         # 분류 문제인 경우
         if target in self.classification_targets:
             # 기존 방식: class_weights 사용

@@ -24,7 +24,7 @@ model:
     sample_weight: "auto"  # 자동 계산됨
     
     # 성능 최적화
-    n_jobs: 28   # 병렬처리 코어 수
+    n_jobs: 4   # 병렬처리 코어 수 (안전한 기본값으로 조정)
     random_state: 42
     
     # 과적합 방지
