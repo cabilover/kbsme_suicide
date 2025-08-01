@@ -9,7 +9,7 @@ set -e  # 오류 발생 시 스크립트 중단
 # 설정 섹션
 # ========================================
 echo "=========================================="
-echo "실험 시작: [실험 이름]"
+echo "실험 시작: [실험 이름을 여기에 입력하세요]"
 echo "=========================================="
 echo "시작 시간: $(date '+%Y. %m. %d. (%a) %H:%M:%S KST')"
 echo "타임스탬프: $(date '+%Y%m%d_%H%M%S')"
@@ -24,7 +24,7 @@ echo "메모리 제한 설정: ${MEMORY_LIMIT}GB"
 
 # 병렬 처리 설정 - 안전한 값으로 설정
 N_JOBS=4
-echo "병렬 처리 설정: n_jobs=${N_JOBS}"
+echo "병렬 처리 설정: n_jobs=${N_JOBS} (메모리 안정성 확보)"
 
 # ========================================
 # 유틸리티 함수
@@ -68,6 +68,7 @@ run_model() {
         --experiment-name "${experiment_name}_${TIMESTAMP}" \
         --n-trials 100 \
         --n-jobs ${N_JOBS} \
+        --verbose 1 \
         ${additional_params} \
         > "logs/${model_type}_${TIMESTAMP}.log" 2>&1
     
@@ -151,6 +152,21 @@ run_model "catboost" "catboost_smote" "--resampling-enabled --resampling-method 
 run_model "random_forest" "random_forest_smote" "--resampling-enabled --resampling-method smote --resampling-ratio 0.5"
 
 # ========================================
+# Phase 3: 추가 실험 (필요시 주석 해제)
+# ========================================
+# echo "=========================================="
+# echo "Phase 3: 추가 실험 시작"
+# echo "=========================================="
+# 
+# # ADASYN 리샘플링 실험 예시
+# run_model "xgboost" "xgboost_adasyn" "--resampling-enabled --resampling-method adasyn --resampling-ratio 0.5"
+# run_model "catboost" "catboost_adasyn" "--resampling-enabled --resampling-method adasyn --resampling-ratio 0.5"
+# 
+# # 피처 선택 실험 예시
+# run_model "lightgbm" "lightgbm_feature_selection" "--feature-selection --feature-selection-method mutual_info --feature-selection-k 10"
+# run_model "random_forest" "random_forest_feature_selection" "--feature-selection --feature-selection-method chi2 --feature-selection-k 15"
+
+# ========================================
 # 최종 정리
 # ========================================
 echo "최종 메모리 정리..."
@@ -173,4 +189,10 @@ echo "Phase 2 (SMOTE):"
 echo "  - xgboost_smote_${TIMESTAMP}"
 echo "  - lightgbm_smote_${TIMESTAMP}"
 echo "  - catboost_smote_${TIMESTAMP}"
-echo "  - random_forest_smote_${TIMESTAMP}" 
+echo "  - random_forest_smote_${TIMESTAMP}"
+echo ""
+echo "사용법:"
+echo "1. 이 템플릿을 복사하여 새로운 실험 스크립트 생성"
+echo "2. 실험 이름과 파라미터 수정"
+echo "3. Phase 3 주석 해제하여 추가 실험 실행"
+echo "4. chmod +x 스크립트명 && ./스크립트명 으로 실행" 

@@ -20,54 +20,74 @@ kbsmc_suicide/
 │   ├── sourcedata_analysis/           # 분석 결과
 │   │   ├── figures/                   # 분석 그래프
 │   │   └── reports/                   # 분석 리포트 (.txt)
-│   └── processed/                     # 전처리된 데이터
-│       └── processed_data_with_features.csv
+│   ├── processed/                     # 전처리된 데이터
+│   │   └── processed_data_with_features.csv
+│   ├── tuning_results/                # 하이퍼파라미터 튜닝 결과
+│   ├── resampling_results/            # 리샘플링 실험 결과
+│   └── resampling_tuning_results/     # 리샘플링 하이퍼파라미터 튜닝 결과
 ├── src/
 │   ├── data_analysis.py              # 데이터 분석 및 전처리 스크립트
 │   ├── splits.py                     # 데이터 분할 전략
 │   ├── preprocessing.py              # 전처리 파이프라인
 │   ├── feature_engineering.py        # 피처 엔지니어링
 │   ├── models/
-│   │   ├── base_model.py             # BaseModel 추상 클래스 (✅ 모델별 데이터 검증 최적화)
-│   │   ├── xgboost_model.py          # XGBoost 모델 클래스 (✅ 범주형 변수 숫자 변환)
-│   │   ├── catboost_model.py         # CatBoost 모델 클래스 (✅ 범주형 변수 보존)
-│   │   ├── lightgbm_model.py         # LightGBM 모델 클래스 (✅ 범주형 변수 보존)
-│   │   ├── random_forest_model.py    # Random Forest 모델 클래스 (✅ 범주형 변수 보존)
-│   │   └── loss_functions.py         # 손실 함수 모듈 (Focal Loss 포함)
-│   ├── training.py                   # 훈련 파이프라인 (✅ 평가 로직 중앙화)
-│   ├── evaluation.py                 # 평가 모듈 (✅ 통합 평가 진입점)
-│   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝 (✅ 평가 로직 중앙화)
-│   ├── utils.py                      # 공통 유틸리티 함수 (✅ 숫자 변환/검증 함수 추가)
+│   │   ├── __init__.py               # 모델 패키지 초기화 (ModelFactory 포함)
+│   │   ├── base_model.py             # BaseModel 추상 클래스
+│   │   ├── model_factory.py          # 모델 팩토리 클래스
+│   │   ├── xgboost_model.py          # XGBoost 모델 클래스
+│   │   ├── catboost_model.py         # CatBoost 모델 클래스
+│   │   ├── lightgbm_model.py         # LightGBM 모델 클래스
+│   │   └── random_forest_model.py    # Random Forest 모델 클래스
+│   ├── utils/
+│   │   ├── __init__.py               # 유틸리티 패키지 초기화
+│   │   ├── config_manager.py         # ConfigManager 클래스
+│   │   └── mlflow_manager.py         # MLflow 실험 관리 클래스
+│   ├── training.py                   # 훈련 파이프라인
+│   ├── evaluation.py                 # 평가 모듈
+│   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝
+│   ├── utils.py                      # 공통 유틸리티 함수
 │   └── reference/                    # 참고 자료
 ├── configs/
-│   ├── base/                         # 기본 설정 (✅ 계층적 구조)
+│   ├── base/                         # 기본 설정
 │   │   ├── common.yaml               # 공통 설정
 │   │   ├── evaluation.yaml           # 평가 설정
 │   │   ├── mlflow.yaml               # MLflow 설정
 │   │   └── validation.yaml           # 검증 설정
-│   ├── models/                       # 모델별 설정 (✅ 계층적 구조)
+│   ├── models/                       # 모델별 설정
 │   │   ├── xgboost.yaml              # XGBoost 모델 설정
 │   │   ├── catboost.yaml             # CatBoost 모델 설정
 │   │   ├── lightgbm.yaml             # LightGBM 모델 설정
 │   │   └── random_forest.yaml        # Random Forest 모델 설정
-│   ├── experiments/                  # 실험별 설정 (✅ 계층적 구조)
+│   ├── experiments/                  # 실험별 설정
 │   │   ├── focal_loss.yaml           # Focal Loss 실험 설정
 │   │   ├── resampling.yaml           # 리샘플링 실험 설정
+│   │   ├── resampling_experiment.yaml # 리샘플링 비교 실험 설정
 │   │   └── hyperparameter_tuning.yaml # 하이퍼파라미터 튜닝 설정
-│   └── templates/                    # 설정 템플릿 (✅ 계층적 구조)
+│   └── templates/                    # 설정 템플릿
 │       ├── default.yaml              # 기본 템플릿
 │       └── tuning.yaml               # 튜닝 템플릿
 ├── scripts/
-│   ├── run_hyperparameter_tuning.py  # 통합 실험 실행 스크립트 (✅ ConfigManager 기반 리샘플링 비교 포함)
-│   ├── template_experiment.sh        # 실험 스크립트 템플릿 (✅ 메모리 안전한 기본 구조)
-│   └── run_individual_models.sh      # 개별 모델 실행 스크립트 (✅ 메모리 최적화)
+│   ├── run_hyperparameter_tuning.py  # 통합 실험 실행 스크립트
+│   ├── run_resampling_experiment.py  # 리샘플링 실험 실행 스크립트
+│   ├── cleanup_mlflow_experiments.py # MLflow 실험 정리 스크립트
+│   ├── check_cpu_usage.py            # CPU 사용량 체크 스크립트
+│   ├── template_experiment.sh        # 실험 스크립트 템플릿
+│   ├── run_individual_models.sh      # 개별 모델 실행 스크립트
+│   └── quick_test.sh                 # 빠른 테스트 스크립트
 ├── results/                          # 실험 결과 저장소
 │   ├── experiment_results_*.txt      # 상세한 실험 결과 파일
 │   ├── tuning_log_*.txt              # 튜닝 과정 로그
 │   └── test_logs/                    # 자동화 테스트 로그
-├── requirements.txt                  # 필요한 패키지 목록 (XGBoost 1.7.6 고정, psutil 추가)
+├── models/                           # 학습된 모델 저장소
+├── logs/                             # 로그 파일 저장소
+├── mlruns/                           # MLflow 실험 저장소
+├── mlruns_backups/                   # MLflow 실험 백업
+├── catboost_info/                    # CatBoost 정보 파일
+├── tests/                            # 테스트 코드
+├── requirements.txt                  # 필요한 패키지 목록
 ├── projectplan                       # 프로젝트 계획서
 ├── PROJECT_PROGRESS.md              # 프로젝트 진행 상황 문서
+├── refactoring_plan.md              # 리팩토링 계획서
 └── README.md                        # 이 파일
 ```
 
@@ -158,12 +178,36 @@ chmod +x scripts/my_experiment.sh
 - **오류 허용**: 한 모델이 실패해도 다음 모델로 계속 진행
 - **상세한 로깅**: 각 단계별 메모리 상태 및 진행 상황 기록
 - **모듈화된 구조**: `run_model()` 함수로 재사용 가능한 구조
+- **확장 가능**: Phase 3 주석 해제로 추가 실험 쉽게 추가
+- **현실적인 기본값**: n_trials=100, 전체 데이터셋 사용
 
 #### 2. 기존 검증된 스크립트 사용
 ```bash
 # 개별 모델 실행 (메모리 최적화)
 ./scripts/run_individual_models.sh
+
+# 특정 n_trials로 실행 (기본값: 100)
+./scripts/run_individual_models.sh 50
 ```
+
+**스크립트 특징:**
+- **Phase 1**: 기본 모델들 (catboost, random_forest, xgboost, lightgbm)
+- **Phase 2**: SMOTE 리샘플링 모델들
+- **메모리 최적화**: n_jobs=4, 강화된 메모리 정리, 15분 대기
+- **전체 데이터셋**: nrows 옵션 미지정으로 전체 데이터 사용
+
+#### 3. 빠른 테스트 스크립트 사용
+```bash
+# 빠른 테스트 실행 (소규모 데이터, 적은 n_trials)
+./scripts/quick_test.sh
+```
+
+**빠른 테스트 특징:**
+- **소규모 데이터**: nrows=1000 (전체 데이터의 일부)
+- **적은 시도 횟수**: n_trials=10 (빠른 결과 확인)
+- **낮은 병렬 처리**: n_jobs=2 (메모리 절약)
+- **상세 로깅**: verbose=2 (디버깅 용이)
+- **모든 모델 테스트**: 4개 모델 모두 빠른 테스트
 
 **참고**: 피처 선택은 `configs/base/common.yaml`의 `selected_features`에서 중앙 관리됩니다. 
 피처 조합을 변경하려면 설정 파일을 수정하세요.
@@ -179,7 +223,10 @@ N_JOBS=4  # 안전한 값: 4-8, 고성능: 16-28
 export MEMORY_LIMIT=50  # GB 단위
 
 # 실험 이름 수정
-echo "실험 시작: [실험 이름]"  # 원하는 실험 이름으로 변경
+echo "실험 시작: [실험 이름을 여기에 입력하세요]"  # 원하는 실험 이름으로 변경
+
+# n_trials 설정 (template_experiment.sh의 run_model 함수 내)
+--n-trials 100  # 기본값, 필요시 50-200으로 조정
 ```
 
 **모델 추가/제거:**
@@ -189,6 +236,10 @@ run_model "xgboost" "xgboost_basic" ""
 
 # Phase 2에 새로운 리샘플링 방법 추가
 run_model "lightgbm" "lightgbm_adasyn" "--resampling-enabled --resampling-method adasyn --resampling-ratio 0.5"
+
+# Phase 3 주석 해제하여 추가 실험 실행
+# run_model "xgboost" "xgboost_adasyn" "--resampling-enabled --resampling-method adasyn --resampling-ratio 0.5"
+# run_model "catboost" "catboost_feature_selection" "--feature-selection --feature-selection-method mutual_info --feature-selection-k 10"
 ```
 
 **추가 파라미터 설정:**
@@ -201,6 +252,9 @@ run_model "lightgbm" "lightgbm_adasyn" "--resampling-enabled --resampling-method
 
 # Early Stopping 추가
 --early-stopping --early-stopping-rounds 50
+
+# 로그 레벨 설정
+--verbose 1  # 기본 로그 레벨 (0: 최소, 1: 기본, 2: 상세)
 ```
 
 ### ConfigManager 기반 하이퍼파라미터 튜닝 실행
@@ -357,6 +411,15 @@ python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-ty
 python scripts/run_hyperparameter_tuning.py --model-type xgboost --experiment-type resampling --resampling-method time_series_adapted
 ```
 
+### 전용 리샘플링 실험 스크립트 사용법
+```bash
+# 리샘플링 비교 실험 (전용 스크립트)
+python scripts/run_resampling_experiment.py --model-type xgboost --resampling-methods smote adasyn borderline_smote
+
+# 리샘플링 하이퍼파라미터 튜닝
+python scripts/run_resampling_experiment.py --model-type catboost --resampling-method smote --tune-parameters
+```
+
 ### 리샘플링 하이퍼파라미터 튜닝 실행 (✅ 2025-07-16 신규 기능)
 ```bash
 # SMOTE k_neighbors 및 sampling_strategy 튜닝
@@ -397,6 +460,14 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **optuna_study.pkl**: Optuna study 객체
 - **optimization_plots.png**: 튜닝 과정 시각화
 
+### 리샘플링 실험 결과 (data/resampling_results/)
+- **resampling_comparison_*.csv**: 리샘플링 기법별 성능 비교
+- **resampling_parameters_*.csv**: 리샘플링 파라미터 튜닝 결과
+
+### 하이퍼파라미터 튜닝 결과 (data/tuning_results/)
+- **tuning_history_*.csv**: 튜닝 과정 히스토리
+- **best_parameters_*.json**: 최적 파라미터 저장
+
 ## 주요 특징
 
 ### 데이터 특성
@@ -423,6 +494,7 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **모델별 데이터 검증 최적화**: 각 모델의 특성에 맞는 `_validate_input_data` 메서드 오버라이드
   - XGBoost: 범주형 변수를 숫자로 변환 (XGBoost 호환성)
   - CatBoost/LightGBM/Random Forest: 범주형 변수 보존 (모델 자체 처리)
+- **ModelFactory 패턴**: 동적 모델 생성 및 등록 시스템으로 확장성 확보
 
 ### 평가 시스템 개선 (✅ 최신 업데이트)
 - **중앙화된 평가 로직**: `evaluation.py`의 `calculate_all_metrics`가 모든 평가의 단일 진입점
@@ -441,6 +513,7 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **리샘플링 실험 통합**: SMOTE, ADASYN, Borderline SMOTE 등 비교 실험
 - **MLflow 실험 추적**: 모든 실험 결과 자동 로깅 및 시각화
 - **결과 저장 자동화**: 모델, 예측 결과, 시각화 자동 저장
+- **실험 관리 시스템**: MLflowExperimentManager를 통한 실험 정리 및 백업 자동화
 
 ### 🔄 리샘플링 시스템 (✅ 2025-07-16 대폭 개선)
 - **7가지 리샘플링 기법 지원**: none, smote, borderline_smote, adasyn, under_sampling, hybrid, time_series_adapted
@@ -456,6 +529,9 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 ### 유틸리티 함수 (✅ 최신 추가)
 - **숫자 변환 및 검증**: `safe_float_conversion()`, `is_valid_number()` 함수로 하이퍼파라미터 튜닝 과정에서 안전한 숫자 처리
 - **데이터 품질 보장**: NaN/Inf 값 자동 감지 및 처리로 튜닝 과정의 안정성 향상
+- **ConfigManager**: 계층적 설정 파일 관리 및 자동 병합 시스템
+- **MLflowExperimentManager**: MLflow 실험 관리 및 정리 자동화
+- **실험 로깅 시스템**: 구조화된 로깅 및 콘솔 캡처 기능
 
 ### 데이터 품질 검증 시스템 (✅ 2025-07-16 신규 추가)
 - **Inf 값 검증**: 모든 수치형 컬럼에서 무한대 값 자동 감지 및 보고
@@ -516,6 +592,15 @@ deleted_experiments = manager.cleanup_orphaned_experiments(backup=True)
 
 # 오래된 run 정리 (30일 이상)
 deleted_runs = manager.cleanup_old_runs(days_old=30)
+```
+
+### CPU 사용량 모니터링
+```bash
+# CPU 사용량 체크
+python scripts/check_cpu_usage.py
+
+# 특정 프로세스 모니터링
+python scripts/check_cpu_usage.py --process python
 ```
 
 #### 실험 관리 시스템
@@ -684,6 +769,8 @@ mlflow.log_artifact("optimization_history.png", artifact_path="optuna_plots")
 
 ## 기술 스택
 - **Python**: 3.10.18
-- **주요 라이브러리**: pandas, numpy<2, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6, catboost, lightgbm, optuna
+- **주요 라이브러리**: pandas, numpy<2, matplotlib, seaborn, mlflow, scikit-learn, xgboost==1.7.6, catboost, lightgbm, optuna, shap, psutil
 - **환경 관리**: conda
-- **코드 품질**: PEP 8 준수, 모듈화, 문서화, 안정성 확보 
+- **코드 품질**: PEP 8 준수, 모듈화, 문서화, 안정성 확보
+- **설정 관리**: YAML 기반 계층적 설정 시스템
+- **실험 관리**: MLflow 기반 실험 추적 및 관리 

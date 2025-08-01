@@ -6,7 +6,7 @@
 set -e
 
 # Argument 파싱
-N_TRIALS=${1:-3}  # 기본값: 3
+N_TRIALS=${1:-100}  # 기본값: 100 (더 현실적인 값)
 
 # 타임스탬프 생성
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -14,7 +14,7 @@ echo "=== 개별 모델 실행 시작 ==="
 echo "시작 시간: $(date)"
 echo "타임스탬프: ${TIMESTAMP}"
 echo "n_trials: ${N_TRIALS}"
-echo "전체 데이터셋 사용"
+echo "전체 데이터셋 사용 (nrows 옵션 미지정)"
 
 # 메모리 제한 설정 (GB)
 MEMORY_LIMIT=50
@@ -49,15 +49,15 @@ print(f'Python 메모리 정리 완료. 참조 카운트: {sys.getrefcount({})}'
 echo "초기 메모리 상태:"
 check_memory
 
-# Phase 2: 기본 모델들 (n_jobs=4로 감소)
+# Phase 1: 기본 모델들 (n_jobs=4로 감소)
 echo ""
 echo "========================================"
-echo "Phase 2: 기본 모델 실행 시작"
+echo "Phase 1: 기본 모델 실행 시작"
 echo "========================================"
 
 # CatBoost (기본)
 echo ""
-echo "=== Phase 2 Step 1: catboost (기본) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 1 Step 1: catboost (기본) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type catboost \
@@ -89,7 +89,7 @@ done
 
 # Random Forest (기본)
 echo ""
-echo "=== Phase 2 Step 2: random_forest (기본) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 1 Step 2: random_forest (기본) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type random_forest \
@@ -121,7 +121,7 @@ done
 
 # XGBoost (기본)
 echo ""
-echo "=== Phase 2 Step 3: xgboost (기본) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 1 Step 3: xgboost (기본) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type xgboost \
@@ -153,7 +153,7 @@ done
 
 # LightGBM (기본)
 echo ""
-echo "=== Phase 2 Step 4: lightgbm (기본) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 1 Step 4: lightgbm (기본) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type lightgbm \
@@ -184,31 +184,31 @@ for i in {1..3}; do
 done
 
 echo ""
-echo "=== Phase 2 완료 ==="
+echo "=== Phase 1 완료 ==="
 echo "완료 시간: $(date)"
 
-# Phase 2와 Phase 3 사이 강력한 메모리 정리
+# Phase 1과 Phase 2 사이 강력한 메모리 정리
 echo ""
-echo "Phase 2와 Phase 3 사이 강력한 메모리 정리..."
+echo "Phase 1과 Phase 2 사이 강력한 메모리 정리..."
 cleanup_memory
 
 # 15분 대기
-echo "Phase 3 시작 전 15분 대기..."
+echo "Phase 2 시작 전 15분 대기..."
 for i in {1..15}; do
     echo "대기 중... ($i/15)"
     sleep 60
     check_memory
 done
 
-# Phase 3: SMOTE 리샘플링 모델들
+# Phase 2: SMOTE 리샘플링 모델들
 echo ""
 echo "========================================"
-echo "Phase 3: SMOTE 리샘플링 모델 실행 시작"
+echo "Phase 2: SMOTE 리샘플링 모델 실행 시작"
 echo "========================================"
 
 # XGBoost (SMOTE)
 echo ""
-echo "=== Phase 3 Step 1: xgboost (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 2 Step 1: xgboost (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type xgboost \
@@ -240,7 +240,7 @@ done
 
 # LightGBM (SMOTE)
 echo ""
-echo "=== Phase 3 Step 2: lightgbm (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 2 Step 2: lightgbm (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type lightgbm \
@@ -272,7 +272,7 @@ done
 
 # CatBoost (SMOTE)
 echo ""
-echo "=== Phase 3 Step 3: catboost (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 2 Step 3: catboost (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type catboost \
@@ -304,7 +304,7 @@ done
 
 # Random Forest (SMOTE)
 echo ""
-echo "=== Phase 3 Step 4: random_forest (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
+echo "=== Phase 2 Step 4: random_forest (SMOTE 리샘플링) 하이퍼파라미터 튜닝 시작 ==="
 echo "시작 시간: $(date)"
 python scripts/run_hyperparameter_tuning.py \
     --model-type random_forest \
