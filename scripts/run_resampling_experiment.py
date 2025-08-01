@@ -24,6 +24,7 @@ from datetime import datetime
 # 프로젝트 모듈 import
 from src.utils.config_manager import ConfigManager
 from src.utils import setup_logging, setup_experiment_logging, log_experiment_summary, experiment_logging_context
+from src.utils.experiment_results import save_experiment_results
 from src.hyperparameter_tuning import HyperparameterTuner
 from src.utils.config_manager import ConfigManager
 from src.splits import split_test_set, validate_splits
@@ -205,13 +206,8 @@ def run_resampling_experiment_with_config(
                 # 튜닝 실행
                 result = tuner.optimize(start_mlflow_run=False)  # 이미 run이 시작되어 있으므로 False
                 
-                # 결과 저장
-                try:
-                    tuner.save_results()
-                    logger.info("=== 리샘플링 실험 완료 ===")
-                except Exception as e:
-                    logger.error(f"결과 저장 실패: {e}")
-                    # 결과 저장 실패해도 계속 진행
+                # 결과 저장 (ResamplingHyperparameterTuner에는 save_results가 없으므로 제거)
+                logger.info("=== 리샘플링 실험 완료 ===")
                 
                 # 결과 추출 (안전하게)
                 if result is None:
@@ -254,6 +250,22 @@ def run_resampling_experiment_with_config(
                 logger.info(f"최고 성능: {best_score:.6f}")
                 logger.info(f"실행 시간: {execution_time:.2f}초")
                 logger.info(f"시도 횟수: {n_trials}")
+                
+                # 실험 결과 저장
+                try:
+                    save_experiment_results(
+                        result=(best_params, best_score),
+                        model_type=model_type,
+                        experiment_type=experiment_type,
+                        nrows=nrows,
+                        experiment_id=run.info.experiment_id,
+                        run_id=run.info.run_id,
+                        config=config,
+                        data_info=data_info
+                    )
+                    logger.info("실험 결과 저장 완료")
+                except Exception as e:
+                    logger.error(f"실험 결과 저장 실패: {e}")
                 
                 return best_params, best_score, run.info.experiment_id, run.info.run_id
                 
