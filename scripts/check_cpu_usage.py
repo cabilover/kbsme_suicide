@@ -19,6 +19,9 @@ from typing import Dict, Any, List
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
+# 현재 작업 디렉토리를 프로젝트 루트로 변경
+os.chdir(project_root)
+
 from src.utils.config_manager import ConfigManager
 from src.models import ModelFactory
 
@@ -79,12 +82,12 @@ def check_tuning_configs() -> Dict[str, Any]:
     """하이퍼파라미터 튜닝 설정을 점검합니다."""
     tuning_configs = {}
     
-    # 튜닝 설정 파일들 확인
+    # 튜닝 설정 파일들 확인 (절대 경로 사용)
     tuning_files = [
-        'configs/experiments/hyperparameter_tuning.yaml',
-        'configs/experiments/resampling.yaml',
-        'configs/experiments/resampling_experiment.yaml',
-        'configs/templates/tuning.yaml'
+        str(project_root / 'configs/experiments/hyperparameter_tuning.yaml'),
+        str(project_root / 'configs/experiments/resampling.yaml'),
+        str(project_root / 'configs/experiments/resampling_experiment.yaml'),
+        str(project_root / 'configs/templates/tuning.yaml')
     ]
     
     for file_path in tuning_files:
@@ -109,7 +112,7 @@ def check_model_implementation(model_type: str) -> Dict[str, Any]:
     """모델 구현에서 병렬 처리 파라미터 사용 방식을 점검합니다."""
     try:
         # 모델 팩토리에서 모델 생성
-        config_manager = ConfigManager()
+        config_manager = ConfigManager(str(project_root / "configs"))
         config = config_manager.create_experiment_config(model_type=model_type)
         
         # 모델 인스턴스 생성
@@ -246,8 +249,8 @@ def main():
     # 시스템 정보 수집
     system_info = get_system_info()
     
-    # ConfigManager 초기화
-    config_manager = ConfigManager()
+    # ConfigManager 초기화 (절대 경로 사용)
+    config_manager = ConfigManager(str(project_root / "configs"))
     
     # 모델 타입들
     model_types = ['xgboost', 'lightgbm', 'catboost', 'random_forest']

@@ -178,9 +178,9 @@ echo "실험 시작 시간: $start_time"
 echo "초기 메모리 상태:"
 check_memory
 
-# 메모리 사용량 체크
-echo "현재 시스템 상태 체크 중..."
-python scripts/check_cpu_usage.py
+    # 메모리 사용량 체크
+    echo "현재 시스템 상태 체크 중..."
+    python scripts/check_cpu_usage.py
 
 echo ""
 echo ">>> Phase 1-1: XGBoost 기준선 실험"
