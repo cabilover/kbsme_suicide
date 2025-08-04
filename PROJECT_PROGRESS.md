@@ -292,7 +292,7 @@ if trial_scores:
 - ✅ **자살 예측 성능 향상**: suicide_t, suicide_a 피처로 인한 예측력 개선
 - ✅ **결측치 정보 활용**: 자살 관련 변수의 결측치 정보도 모델에 반영
 
-### ✅ 2025-07-26 기준 최신 업데이트: 모든 모델의 불균형 데이터 처리 하이퍼파라미터 통일 및 Random Forest 지원 추가
+### ✅ 2025-07-26 기준 최신 업데이트: 모든 모델의 불균형 데이터 처리 하이퍼파라미터 통일 및 Random Forest 지원 추가 완료
 
 #### **불균형 데이터 처리 하이퍼파라미터 통일 배경 및 목표**
 - **문제점**: XGBoost, LightGBM, CatBoost는 불균형 데이터 처리를 위한 하이퍼파라미터가 설정되어 있었으나, Random Forest는 누락되어 있었음
@@ -427,6 +427,139 @@ if trial_scores:
 - ✅ **실험 중단 시에도 깔끔한 종료**
 - ✅ **실험 전 자동 정리 및 무결성 검증**
 - ✅ **safe_log_metric 함수의 logger_instance 인자 사용 버그 수정 (TypeError 완전 해결)**
+
+#### **불균형 데이터 처리 하이퍼파라미터 통일 배경 및 목표**
+- **문제점**: XGBoost, LightGBM, CatBoost는 불균형 데이터 처리를 위한 하이퍼파라미터가 설정되어 있었으나, Random Forest는 누락되어 있었음
+- **목표**: 
+  1. Random Forest에서도 다른 모델들과 동일한 불균형 데이터 처리 지원
+  2. 모든 모델에서 일관된 튜닝 범위와 처리 방식 적용
+  3. 실험 결과 비교 용이성 향상
+
+#### **작업 1: Random Forest `class_weight` 튜닝 지원 추가 완료**
+
+##### **1.1 설정 파일 수정**
+- **`configs/experiments/hyperparameter_tuning.yaml`**: Random Forest 파라미터에 `class_weight_pos` 추가
+  ```yaml
+  random_forest_params:
+    # ... 기존 파라미터들 ...
+    class_weight_pos:
+      type: "float"
+      low: 50.0
+      high: 1000.0
+      log: true
+  ```
+
+##### **1.2 실험 코드 수정**
+- **`src/hyperparameter_tuning.py`**: `_suggest_parameters` 메서드에 변환 로직 추가
+  ```python
+  # Random Forest의 class_weight_pos를 class_weight 딕셔너리로 변환
+  if model_type == 'random_forest' and 'class_weight_pos' in params:
+      class_weight_pos = params.pop('class_weight_pos')
+      params['class_weight'] = {0: 1.0, 1: class_weight_pos}
+      logger.info(f"Random Forest class_weight 설정: {params['class_weight']}")
+  ```
+
+#### **작업 2: 모델별 불균형 처리 방식 통일 완료**
+
+##### **2.1 통일된 처리 방식**
+| 모델 | 파라미터 | 튜닝 범위 | 처리 방식 |
+|------|----------|-----------|-----------|
+| **XGBoost** | `scale_pos_weight` | 50.0-1000.0 | 양성 클래스에 X배 가중치 |
+| **LightGBM** | `scale_pos_weight` | 50.0-1000.0 | 양성 클래스에 X배 가중치 |
+| **CatBoost** | `class_weights` | 50.0-1000.0 | `[1.0, X]` 형태로 변환 |
+| **Random Forest** | `class_weight_pos` | 50.0-1000.0 | `{0: 1.0, 1: X}` 형태로 변환 |
+
+##### **2.2 LightGBM 추가 기능 확인**
+- **`is_unbalance`**: 자동으로 클래스 비율에 맞는 가중치 적용
+- **`class_weight`**: 수동으로 클래스별 가중치 지정
+- **충돌 방지 로직**: `scale_pos_weight`와 `is_unbalance`가 동시에 설정되지 않도록 처리
+
+#### **작업 3: 적용된 파일들 및 예상 효과**
+
+##### **3.1 수정된 파일들**
+- **`configs/experiments/hyperparameter_tuning.yaml`**: Random Forest `class_weight_pos` 파라미터 추가
+- **`src/hyperparameter_tuning.py`**: Random Forest 변환 로직 추가
+
+##### **3.2 예상 효과**
+- ✅ **모든 모델에서 일관된 불균형 데이터 처리**
+- ✅ **Random Forest도 다른 모델들과 동일한 튜닝 범위 사용**
+- ✅ **실험 결과 비교 용이성 향상**
+- ✅ **극도 불균형 데이터(자살 시도 0.12%)에서 더 나은 성능 기대**
+
+### ✅ 2025-07-23 기준 최신 업데이트: MLflow 실험 관리 시스템 대폭 개선 - meta.yaml 손상 문제 완전 해결
+
+#### **MLflow 실험 관리 시스템 개선 배경 및 목표**
+- **문제점**: MLflow 실험 중 `meta.yaml` 파일이 반복적으로 손상되어 실험 추적 불가능, 파라미터 중복 로깅으로 인한 오류 발생
+- **목표**: 
+  1. 안전한 MLflow run 관리 시스템 구축
+  2. 실험 무결성 검증 및 자동 복구 기능 구현
+  3. 모든 MLflow 로깅에 예외 처리 적용
+
+#### **작업 1: MLflow meta.yaml 손상 문제 해결 완료**
+
+##### **1.1 문제 상황 분석**
+- **손상 원인**: 실험 중단 시 run이 제대로 종료되지 않아 메타데이터 불완전
+- **동시 접근 문제**: 여러 프로세스가 동시에 MLflow 디렉토리에 접근할 때 파일 쓰기 충돌
+- **중복 로깅 문제**: `resampling_enabled` 파라미터가 `True`/`False`로 중복 로깅
+
+##### **1.2 안전한 MLflow Run 관리 시스템 구축**
+- **`safe_mlflow_run` 컨텍스트 매니저 추가**:
+  - 예외 발생 시 자동으로 run을 `FAILED` 상태로 종료
+  - 정상 종료 시 `FINISHED` 상태로 종료
+  - `src/utils/mlflow_manager.py`에 구현
+
+- **안전한 로깅 함수들 구현**:
+  - `safe_log_param`: 파라미터 로깅에 예외 처리 적용
+  - `safe_log_metric`: 메트릭 로깅에 예외 처리 적용
+  - `safe_log_artifact`: 아티팩트 로깅에 예외 처리 적용
+
+##### **1.3 실험 무결성 검증 및 복구 시스템**
+- **실험 무결성 검증**: `validate_experiment_integrity()` 함수로 `meta.yaml` 파일 검증
+- **손상된 실험 복구**: `repair_experiment()` 함수로 기본 `meta.yaml` 재생성
+- **Orphaned 실험 정리**: `cleanup_orphaned_experiments()` 함수로 `meta.yaml` 없는 실험 자동 정리
+
+#### **작업 2: MLflow 파라미터 중복 로깅 문제 해결 완료**
+
+##### **2.1 중복 로깅 제거**
+- **`src/training.py`**: 교차 검증 중 중복 로깅 제거
+- **`scripts/run_resampling_experiment.py`**: 안전한 로깅 방식 적용
+- **`src/preprocessing.py`**: 폴드별 리샘플링 파라미터 로깅에 예외 처리 추가
+
+##### **2.2 안전한 로깅 시스템 적용**
+- 모든 MLflow 파라미터 로깅에 `try-except` 블록 추가
+- 실험 진행에 영향을 주지 않으면서 로깅 실패 시 경고 메시지 출력
+
+#### **작업 3: primary_metric 로깅 실패 문제 해결 완료**
+
+##### **3.1 설정 파일 수정**
+- **`configs/base/evaluation.yaml`**: `primary_metric: "f1"` 설정 추가
+- **목적**: 하이퍼파라미터 튜닝의 목표 지표 명확화
+
+##### **3.2 안전한 참조 방식 적용**
+- **`src/hyperparameter_tuning.py`**: `self.config.get('evaluation', {}).get('primary_metric', 'f1')` 방식으로 안전한 참조
+- **기본값 설정**: 설정 누락 시에도 `'f1'`으로 정상 작동
+
+#### **작업 4: 실험 전 사전 정리 시스템 구현**
+
+##### **4.1 실험 시작 전 자동 정리**
+- **현재 실험 상태 확인**: `print_experiment_summary()` 함수로 MLflow 상태 출력
+- **Orphaned 실험 정리**: 실험 실행 전 자동 백업 및 정리
+- **실험 무결성 검증**: 실험 시작 전 무결성 검증 및 복구 시도
+
+##### **4.2 적용된 파일들**
+- **`src/utils/mlflow_manager.py`**: MLflow 관리 시스템 대폭 확장
+- **`scripts/run_hyperparameter_tuning.py`**: 안전한 MLflow run 관리 적용
+- **`scripts/run_resampling_experiment.py`**: 무결성 검증 및 안전한 run 관리 적용
+- **`src/hyperparameter_tuning.py`**: 안전한 로깅 및 참조 방식 적용
+- **`src/preprocessing.py`**: 안전한 로깅 방식 적용
+- **`configs/base/evaluation.yaml`**: `primary_metric` 설정 추가
+
+#### **검증된 개선 효과**
+- ✅ **MLflow `meta.yaml` 손상 경고 메시지 없음**
+- ✅ **MLflow 파라미터 중복 로깅 경고 없음**
+- ✅ **`primary_metric` 로깅 실패 경고 없음**
+- ✅ **실험 중단 시에도 깔끔한 종료**
+- ✅ **실험 전 자동 정리 및 무결성 검증**
 
 #### **불균형 데이터 처리 하이퍼파라미터 통일 배경 및 목표**
 - **문제점**: XGBoost, LightGBM, CatBoost는 불균형 데이터 처리를 위한 하이퍼파라미터가 설정되어 있었으나, Random Forest는 누락되어 있었음
@@ -1705,3 +1838,194 @@ python scripts/run_resampling_experiment.py --model-type xgboost --resampling-me
 **최종 업데이트**: 2025년 08월 04일
 **작성자**: AI Assistant
 **프로젝트 상태**: Phase 5-5 진행 중 ✅ (로그 시스템 개선 및 시각화 파일 관리 체계화 완료)
+
+### ✅ 2025-08-04 기준 최신 업데이트: test_input_resampling 시스템 구축 완료
+
+#### **test_input_resampling 시스템 구축 배경 및 목표**
+- **문제점**: 기존 실험 스크립트들이 개별적으로 실행되어 실험 관리가 복잡하고, 메모리 관리가 부족하여 대규모 실험 시 시스템 안정성 문제 발생
+- **목표**: 
+  1. 체계적인 5단계 실험 파이프라인 구축
+  2. 강화된 메모리 관리 시스템으로 안정적인 대규모 실험 지원
+  3. 마스터 스크립트를 통한 통합 실험 관리
+  4. 실험 중단/재시작 기능으로 안전한 실험 환경 제공
+
+#### **작업 1: 5단계 실험 파이프라인 구축 완료**
+
+##### **1.1 Phase 1: 기준선 설정 (Baseline Establishment)**
+- **목적**: 4개 모델의 기본 성능 측정 및 기준선 확립
+- **실험 수**: 4개 (XGBoost, CatBoost, LightGBM, Random Forest)
+- **설정**: 각 모델 50 trials 하이퍼파라미터 튜닝
+- **예상 소요 시간**: 4-6시간
+- **파일**: `scripts/test_input_resampling/phase1_baseline.sh`
+
+##### **1.2 Phase 2: Input 범위 조정 (Input Range Adjustment)**
+- **목적**: 데이터 크기와 피처 선택이 성능에 미치는 영향 분석
+- **실험 수**: 8개
+- **구성**: 
+  - 데이터 크기별 (10K, 100K, 500K)
+  - 피처 선택 방법별 (mutual_info, chi2, recursive)
+- **예상 소요 시간**: 6-8시간
+- **파일**: `scripts/test_input_resampling/phase2_input_range.sh`
+
+##### **1.3 Phase 3: Resampling 비교 (Resampling Comparison)**
+- **목적**: 극도 불균형 데이터(849:1)에 최적화된 리샘플링 기법 발견
+- **실험 수**: 35개
+- **구성**:
+  - 전체 리샘플링 비교: 4개 모델 × 7개 기법
+  - 시계열 특화 리샘플링
+  - 특정 기법 집중 분석
+  - 하이브리드 접근
+- **예상 소요 시간**: 8-12시간
+- **파일**: `scripts/test_input_resampling/phase3_resampling.sh`
+
+##### **1.4 Phase 4: 모델 심층 분석 (Deep Model Analysis)**
+- **목적**: 각 모델의 특성과 최적 성능 도출
+- **실험 수**: 16개
+- **구성**:
+  - 고성능 튜닝 (200 trials)
+  - 시계열 분할 전략 비교
+  - 모델별 특성 분석
+  - 앙상블 준비
+- **예상 소요 시간**: 12-16시간
+- **파일**: `scripts/test_input_resampling/phase4_deep_analysis.sh`
+
+##### **1.5 Phase 5: 통합 최적화 (Final Optimization)**
+- **목적**: 최종 최적화된 모델 구축
+- **실험 수**: 14개
+- **구성**:
+  - 최적 조합 실험
+  - 시계열 최적화
+  - 앙상블 구축
+  - 배포 준비
+- **예상 소요 시간**: 4-6시간
+- **파일**: `scripts/test_input_resampling/phase5_final_optimization.sh`
+
+#### **작업 2: 강화된 메모리 관리 시스템 구현 완료**
+
+##### **2.1 메모리 관리 설정**
+- **메모리 제한**: `MEMORY_LIMIT=50` (50GB)
+- **병렬 처리 제한**: `N_JOBS=4` (메모리 안정성 확보)
+- **메모리 임계값**: `MEMORY_THRESHOLD=40` (40% 초과 시 자동 정리)
+
+##### **2.2 메모리 관리 함수들**
+- **`check_memory()`**: `free -h` 명령으로 메모리 사용량 출력
+- **`cleanup_memory()`**: Python 가비지 컬렉션 + 시스템 캐시 정리
+- **`monitor_memory()`**: 실시간 메모리 모니터링 및 임계값 초과 시 자동 정리
+- **`get_memory_usage()`**: 메모리 사용률 계산 (GB 단위)
+
+##### **2.3 안전한 실험 실행 함수**
+- **`run_model()`**: 메모리 모니터링 포함한 안전한 모델 실행
+- **`run_resampling_model()`**: 리샘플링 실험 전용 실행 함수
+- **백그라운드 모니터링**: 30초마다 메모리 상태 체크
+- **자동 프로세스 정리**: 실험 완료 후 모니터링 프로세스 자동 종료
+
+#### **작업 3: 마스터 실험 러너 구축 완료**
+
+##### **3.1 master_experiment_runner.sh 기능**
+- **통합 실험 관리**: 5단계 실험을 순차적으로 실행하거나 개별 실행
+- **실행 모드 선택**:
+  1. 전체 실험 순차 실행 (Phase 1-5)
+  2. 개별 Phase 선택
+  3. 빠른 테스트 모드
+  4. 환경 설정 및 초기 분석
+  5. 실험 상태 확인 및 MLflow UI
+  6. 실험 중단 및 정리
+
+##### **3.2 안전 기능**
+- **자동 검증**: 실행 전 필수 파일 및 환경 검증
+- **안전한 중단**: Ctrl+C로 언제든지 안전하게 중단
+- **오류 복구**: 실험 실패 시 계속 진행 여부 선택
+- **리소스 모니터링**: 시스템 리소스 상태 확인
+
+##### **3.3 명령어 인자 검증**
+- **파일 존재 확인**: 필수 스크립트 및 데이터 파일 자동 검증
+- **인자 호환성 검사**: 리샘플링 관련 명령어 올바른 사용법 적용
+- **환경 검증**: Python 환경 및 MLflow 설치 상태 확인
+
+#### **작업 4: 실험 중단/재시작 시스템 구현 완료**
+
+##### **4.1 안전한 실험 중단**
+- **시그널 핸들러**: `trap cleanup_on_exit INT TERM`
+- **프로세스 정리**: `pkill -f "run_hyperparameter_tuning"`
+- **메모리 정리**: 실험 중단 시에도 메모리 정리 수행
+
+##### **4.2 실험 재시작 지원**
+- **Phase별 독립 실행**: 각 Phase는 독립적으로 실행 가능
+- **중단된 Phase부터 재시작**: 중단된 Phase부터 재시작 가능
+- **MLflow 상태 확인**: 실험 진행 상황을 MLflow에서 확인 가능
+
+##### **4.3 오류 복구 시스템**
+- **실험 실패 시 계속 진행**: 실험 실패 시 계속 진행 여부 선택
+- **상세한 오류 로깅**: 실험 실패 시 상세한 오류 정보 기록
+- **자동 복구 시도**: 일부 오류 상황에서 자동 복구 시도
+
+#### **작업 5: 실험 설정 가이드 작성 완료**
+
+##### **5.1 experiment_setup_guide.md 내용**
+- **빠른 시작 가이드**: 스크립트 파일 생성 및 권한 설정
+- **환경 확인**: Python 환경 및 MLflow 설치 상태 확인
+- **실험 실행 방법**: 마스터 스크립트 사용법
+- **단계별 상세 설명**: 각 Phase의 목적, 실험 수, 예상 소요 시간
+- **예상 결과**: 모델별 성능 예상치 및 핵심 분석 포인트
+- **결과 분석 방법**: MLflow UI 사용법 및 주요 확인 사항
+- **주의사항**: 시스템 요구사항 및 리소스 관리
+- **문제 해결**: 일반적인 오류들 및 해결 방법
+- **실험 진행 추적**: 진행 상황 체크리스트 및 실험 로그 확인
+
+##### **5.2 개선된 기능 (2025-08-04)**
+- **실험 중단/재시작 기능**: 안전한 중단, 프로세스 정리, 재시작 지원
+- **명령어 인자 검증 강화**: 파일 존재 확인, 인자 호환성 검사, 환경 검증
+- **리샘플링 인자 수정**: 올바른 스크립트 사용, 인자 분리, 호환성 보장
+- **실험 관리 개선**: Phase 간 결과 확인, 시스템 리소스 모니터링, 자동 요약 리포트
+
+#### **작업 6: 적용된 파일들 및 개선 효과**
+
+##### **6.1 생성된 파일들**
+- **`scripts/test_input_resampling/phase1_baseline.sh`**: 기준선 설정 실험 (239줄)
+- **`scripts/test_input_resampling/phase2_input_range.sh`**: Input 범위 조정 실험 (251줄)
+- **`scripts/test_input_resampling/phase3_resampling.sh`**: 리샘플링 비교 실험 (384줄)
+- **`scripts/test_input_resampling/phase4_deep_analysis.sh`**: 모델 심층 분석 실험 (507줄)
+- **`scripts/test_input_resampling/phase5_final_optimization.sh`**: 통합 최적화 실험 (465줄)
+- **`scripts/test_input_resampling/master_experiment_runner.sh`**: 마스터 실험 러너 (356줄)
+- **`scripts/test_input_resampling/experiment_setup_guide.md`**: 실험 설정 가이드 (260줄)
+
+##### **6.2 개선 효과**
+- ✅ **체계적인 실험 관리**: 5단계 실험 파이프라인으로 체계적인 실험 진행
+- ✅ **강화된 메모리 관리**: 실시간 모니터링 및 자동 정리로 안정적인 대규모 실험 지원
+- ✅ **안전한 실험 환경**: 실험 중단/재시작 기능으로 안전한 실험 환경 제공
+- ✅ **통합 실험 관리**: 마스터 스크립트를 통한 통합 실험 관리
+- ✅ **상세한 가이드**: 실험 설정 가이드로 사용자 친화적인 실험 환경 제공
+- ✅ **오류 복구 시스템**: 실험 실패 시에도 안전하게 복구 가능
+- ✅ **리소스 모니터링**: 시스템 리소스 상태 실시간 모니터링
+
+#### **예상 실험 결과**
+
+##### **모델별 성능 예상치**
+- **CatBoost**: 85%+ 정확도, 0.91+ AUC-ROC (균형잡힌 최고 성능)
+- **XGBoost**: 99.87% 정확도 (극도 불균형 특화)
+- **LightGBM**: 84% 정확도, 0.90 AUC-ROC (속도-성능 균형)
+- **Random Forest**: 83% 정확도, 0.89 AUC-ROC (해석가능성)
+
+##### **핵심 분석 포인트**
+1. **극도 불균형 처리**: 자살 시도 0.12% (849:1) 비율에서 각 모델의 대응
+2. **리샘플링 효과**: SMOTE, ADASYN, Borderline SMOTE 등의 성능 차이
+3. **시계열 특성**: 시간 순서를 고려한 분할 전략의 중요성
+4. **피처 중요도**: 각 모델에서 중요하게 간주되는 피처들
+
+#### **시스템 요구사항**
+- **CPU**: 최소 8코어 (권장 16코어 이상)
+- **메모리**: 최소 16GB (권장 32GB 이상)
+- **저장공간**: 최소 50GB 여유공간
+- **시간**: 전체 실험 2-4일 소요
+
+#### **다음 단계 계획**
+1. **실제 실험 실행**: test_input_resampling 시스템을 활용한 대규모 실험 실행
+2. **성능 최적화**: 실험 결과를 바탕으로 모델 성능 최적화
+3. **앙상블 모델 개발**: 개별 모델 결과를 바탕으로 앙상블 모델 구축
+4. **배포 준비**: 최적화된 모델을 실제 운영 환경에 배포할 준비
+
+---
+
+**최종 업데이트**: 2025년 08월 04일
+**작성자**: AI Assistant
+**프로젝트 상태**: Phase 5-5 진행 중 ✅ (test_input_resampling 시스템 구축 완료)
