@@ -397,6 +397,33 @@ python scripts/run_hyperparameter_tuning.py \
   --mlflow_ui
 ```
 
+### 🔍 리샘플링 실험 동작 방식 상세 설명
+
+#### 기본 동작 원리
+리샘플링 실험은 **하이퍼파라미터 튜닝 + 리샘플링 튜닝을 동시에 수행**합니다:
+
+1. **Optuna가 매 trial에서 다음 중 하나 선택**:
+   ```python
+   ['none', 'smote', 'borderline_smote', 'adasyn', 'under_sampling', 'hybrid']
+   ```
+
+2. **선택된 방법에 따라**:
+   - **모델 하이퍼파라미터**: 항상 튜닝 (n_estimators, max_depth 등)
+   - **리샘플링 파라미터**: 선택된 방법에 따라 튜닝 (k_neighbors, sampling_strategy 등)
+
+#### 실험 결과 해석
+- **`리샘플링 적용: 아니오`**: Optuna가 `'none'`을 최적 방법으로 선택
+- **`리샘플링 적용: 예`**: 특정 리샘플링 방법이 최적으로 선택됨
+
+#### 실행 예시
+```bash
+# 자동 튜닝 (Optuna가 최적 방법 자동 선택)
+python scripts/run_resampling_experiment.py --model-type xgboost --n-trials 100
+
+# 비교 실험 (각 방법별 개별 튜닝)
+python scripts/run_resampling_experiment.py --model-type xgboost --resampling-comparison --resampling-methods smote adasyn --n-trials 50
+```
+
 ### ConfigManager 기반 리샘플링 비교 실험 실행 (✅ 최신 기능)
 ```bash
 # 모든 모델에 대해 리샘플링 비교 실험
