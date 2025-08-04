@@ -206,6 +206,21 @@ def run_resampling_experiment_with_config(
                 # 튜닝 실행
                 result = tuner.optimize(start_mlflow_run=False)  # 이미 run이 시작되어 있으므로 False
                 
+                # === 고급 로깅 기능 추가 ===
+                from src.utils.mlflow_logging import log_all_advanced_metrics
+                
+                # 모든 고급 로깅 기능 실행 (리샘플링 분석 포함)
+                logging_results = log_all_advanced_metrics(tuner, config, run, data_info)
+                
+                # 로깅 결과 요약
+                successful_features = [k for k, v in logging_results.items() if v]
+                failed_features = [k for k, v in logging_results.items() if not v]
+                
+                if successful_features:
+                    logger.info(f"고급 로깅 성공: {successful_features}")
+                if failed_features:
+                    logger.warning(f"고급 로깅 실패: {failed_features}")
+                
                 # 결과 저장 (ResamplingHyperparameterTuner에는 save_results가 없으므로 제거)
                 logger.info("=== 리샘플링 실험 완료 ===")
                 
@@ -556,6 +571,21 @@ def run_resampling_comparison_experiment(
                 # 튜너 생성 및 튜닝 실행
                 tuner = HyperparameterTuner(config, train_val_df, nrows=nrows)
                 result = tuner.optimize(start_mlflow_run=False)
+                
+                # === 고급 로깅 기능 추가 (리샘플링 비교 실험용) ===
+                from src.utils.mlflow_logging import log_all_advanced_metrics
+                
+                # 모든 고급 로깅 기능 실행 (리샘플링 분석 포함)
+                logging_results = log_all_advanced_metrics(tuner, config, mlflow.active_run(), data_info)
+                
+                # 로깅 결과 요약
+                successful_features = [k for k, v in logging_results.items() if v]
+                failed_features = [k for k, v in logging_results.items() if not v]
+                
+                if successful_features:
+                    logger.info(f"{method} 고급 로깅 성공: {successful_features}")
+                if failed_features:
+                    logger.warning(f"{method} 고급 로깅 실패: {failed_features}")
                 
                 # 결과 추출
                 if result is None:

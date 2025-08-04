@@ -78,6 +78,22 @@ def save_experiment_results(
             run_data = mlflow.get_run(run_id)
             detailed_metrics = run_data.data.metrics
             logger.info(f"MLflow에서 {len(detailed_metrics)}개 메트릭 추출 완료")
+            
+            # 메트릭 카테고리별 분류 및 로깅
+            metric_categories = {
+                'fold_metrics': [k for k in detailed_metrics.keys() if k.startswith('fold_')],
+                'trial_metrics': [k for k in detailed_metrics.keys() if k.startswith('trial_')],
+                'cv_metrics': [k for k in detailed_metrics.keys() if k.startswith('cv_')],
+                'feature_importance': [k for k in detailed_metrics.keys() if 'feature_importance' in k],
+                'model_complexity': [k for k in detailed_metrics.keys() if any(metric in k for metric in ['total_trees', 'max_depth', 'avg_depth', 'best_iteration', 'early_stopping'])],
+                'basic_metrics': [k for k in detailed_metrics.keys() if not any(prefix in k for prefix in ['fold_', 'trial_', 'cv_', 'feature_importance'])]
+            }
+            
+            for category, metrics in metric_categories.items():
+                logger.info(f"{category}: {len(metrics)}개 메트릭")
+                if metrics:
+                    logger.info(f"  예시: {metrics[:3]}")
+                    
         except Exception as e:
             logger.warning(f"MLflow에서 상세 메트릭 추출 실패: {e}")
     
@@ -281,6 +297,8 @@ def save_experiment_results(
                     f.write("\n")
         else:
             f.write("상세 메트릭 정보: MLflow에서 추출할 수 없음\n")
+            f.write("  - MLflow 서버가 실행되지 않았거나 메트릭이 로깅되지 않았을 수 있습니다.\n")
+            f.write("  - 실험 중에 폴드별 메트릭, 피처 중요도 등이 MLflow에 저장되지 않았습니다.\n")
         f.write("\n")
         
         # === 7. 하이퍼파라미터 튜닝 과정 ===
@@ -460,8 +478,11 @@ def save_experiment_results(
                         f.write(f"  ... (총 {len(cv_stats)}개 중 {displayed_stats}개 표시, {remaining_stats}개 생략)\n")
             else:
                 f.write("폴드별 상세 성능: MLflow에서 추출할 수 없음\n")
+                f.write("  - 실험 중에 폴드별 메트릭이 MLflow에 로깅되지 않았습니다.\n")
+                f.write("  - 하이퍼파라미터 튜닝 과정에서 폴드별 상세 결과가 저장되지 않았습니다.\n")
         else:
             f.write("교차 검증 결과: N/A\n")
+            f.write("  - MLflow에서 메트릭을 추출할 수 없습니다.\n")
         f.write("\n")
         
         # === 9. 모델 특성 분석 ===
@@ -479,6 +500,10 @@ def save_experiment_results(
                 sorted_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:10]
                 for i, (feature, importance) in enumerate(sorted_features, 1):
                     f.write(f"  {i}. {feature}: {importance:.4f}\n")
+            else:
+                f.write("피처 중요도: MLflow에서 추출할 수 없음\n")
+                f.write("  - 실험 중에 피처 중요도가 MLflow에 로깅되지 않았습니다.\n")
+                f.write("  - 모델에서 피처 중요도를 추출하는 기능이 활성화되지 않았을 수 있습니다.\n")
             
             # 모델 복잡도 정보
             model_complexity = {}
@@ -491,6 +516,9 @@ def save_experiment_results(
                 f.write("모델 복잡도:\n")
                 for metric, value in model_complexity.items():
                     f.write(f"  - {metric}: {value}\n")
+            else:
+                f.write("모델 복잡도: MLflow에서 추출할 수 없음\n")
+                f.write("  - 실험 중에 모델 복잡도 정보가 MLflow에 로깅되지 않았습니다.\n")
             
             # 학습 곡선 정보
             if 'best_iteration' in detailed_metrics:
@@ -511,6 +539,7 @@ def save_experiment_results(
                 f.write("  - Early Stopping: 사용되지 않음\n")
         else:
             f.write("모델 특성 분석: N/A\n")
+            f.write("  - MLflow에서 메트릭을 추출할 수 없습니다.\n")
         f.write("\n")
         
         # === 10. 데이터 품질 및 전처리 정보 ===
@@ -614,6 +643,22 @@ def save_experiment_results(
                     f.write(f"  - F1-Score: {cv_f1:.4f}\n")
                 if cv_roc_auc is not None:
                     f.write(f"  - ROC-AUC: {cv_roc_auc:.4f}\n")
+                
+                # Trial별 성능 요약 추가
+                trial_scores = []
+                for key, value in detailed_metrics.items():
+                    if key.startswith('trial_') and key.endswith('_score'):
+                        trial_scores.append(value)
+                
+                if trial_scores:
+                    f.write(f"\n📊 Trial별 성능 요약:\n")
+                    f.write(f"  - 최고 Trial 성능: {max(trial_scores):.4f}\n")
+                    f.write(f"  - 평균 Trial 성능: {sum(trial_scores)/len(trial_scores):.4f}\n")
+                    f.write(f"  - 최저 Trial 성능: {min(trial_scores):.4f}\n")
+                    f.write(f"  - 성공한 Trial 수: {len(trial_scores)}개\n")
+            else:
+                f.write("\n📈 교차 검증 성능 요약: MLflow에서 추출할 수 없음\n")
+                f.write("  - 실험 중에 교차 검증 메트릭이 MLflow에 로깅되지 않았습니다.\n")
         else:
             # 리샘플링 비교 결과
             f.write("🔄 리샘플링 비교 결과:\n")

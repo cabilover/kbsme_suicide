@@ -118,6 +118,29 @@ def setup_experiment_logging(
 class ConsoleCapture:
     """
     터미널 출력을 파일로 캡처하는 클래스
+    
+    이 클래스는 실험 중 발생하는 모든 터미널 출력(stdout, stderr)을 자동으로 캡처하여
+    로그 파일에 저장합니다. 실험의 완전한 추적성을 보장하며, 예외 발생 시에도
+    자동으로 예외 정보를 기록합니다.
+    
+    주요 기능:
+    - stdout/stderr 리다이렉트 및 캡처
+    - 예외 발생 시 자동 예외 정보 저장
+    - 실험 시작/종료 시간 자동 기록
+    - 컨텍스트 매니저 패턴으로 안전한 리소스 관리
+    
+    사용 예시:
+        with ConsoleCapture(log_file_path):
+            # 실험 코드 실행
+            result = run_experiment()
+            print("실험 완료:", result)
+    
+    캡처되는 정보:
+    - 모든 print() 출력
+    - 모든 로깅 메시지
+    - 모든 에러 메시지
+    - 예외 발생 시 상세 정보 (타입, 메시지, 시간)
+    - 실험 종료 시간
     """
     
     def __init__(self, log_file_path: str):
@@ -125,7 +148,7 @@ class ConsoleCapture:
         ConsoleCapture 초기화
         
         Args:
-            log_file_path: 로그 파일 경로
+            log_file_path: 로그 파일 경로 (캡처된 출력이 저장될 파일)
         """
         self.log_file_path = log_file_path
         self.original_stdout = None
@@ -134,7 +157,14 @@ class ConsoleCapture:
         self.stderr_capture = None
         
     def __enter__(self):
-        """컨텍스트 매니저 진입"""
+        """
+        컨텍스트 매니저 진입
+        
+        터미널 출력을 캡처 모드로 전환합니다.
+        
+        Returns:
+            self: ConsoleCapture 인스턴스
+        """
         # 원래 출력 저장
         self.original_stdout = sys.stdout
         self.original_stderr = sys.stderr
@@ -153,7 +183,17 @@ class ConsoleCapture:
         return self
         
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """컨텍스트 매니저 종료"""
+        """
+        컨텍스트 매니저 종료
+        
+        캡처된 모든 출력을 파일에 저장하고 원래 출력으로 복원합니다.
+        예외가 발생한 경우 예외 정보도 함께 저장합니다.
+        
+        Args:
+            exc_type: 예외 타입 (예외가 발생한 경우)
+            exc_val: 예외 값 (예외가 발생한 경우)
+            exc_tb: 예외 트레이스백 (예외가 발생한 경우)
+        """
         try:
             # 캡처된 출력을 파일에 저장
             with open(self.log_file_path, 'a', encoding='utf-8') as f:
@@ -203,16 +243,48 @@ def experiment_logging_context(
     capture_console: bool = True
 ):
     """
-    실험 로깅을 위한 컨텍스트 매니저
+    실험 로깅을 위한 통합 컨텍스트 매니저
+    
+    이 함수는 실험의 전체 생명주기를 관리하는 통합 로깅 시스템을 제공합니다.
+    실험별 로깅 설정, 터미널 출력 캡처, 예외 처리 등을 자동으로 처리하여
+    실험의 완전한 추적성을 보장합니다.
+    
+    주요 기능:
+    - 실험별 전용 로그 파일 자동 생성
+    - 실험 시작/종료 정보 자동 로깅
+    - 터미널 출력 자동 캡처 (선택적)
+    - 예외 발생 시 자동 예외 정보 저장
+    - 실험 요약 정보 자동 기록
+    
+    사용 예시:
+        with experiment_logging_context(
+            experiment_type="hyperparameter_tuning",
+            model_type="xgboost",
+            log_level="INFO",
+            capture_console=True
+        ) as log_file_path:
+            # 실험 코드 실행
+            result = run_hyperparameter_tuning()
+            # 실험 요약 로깅
+            log_experiment_summary(...)
+    
+    생성되는 로그 파일:
+    - 파일명: {experiment_type}_{model_type}_{timestamp}.log
+    - 위치: logs/ 디렉토리
+    - 내용: 실험 시작/종료 정보, 모든 출력, 예외 정보, 실험 요약
     
     Args:
-        experiment_type: 실험 타입
-        model_type: 모델 타입
-        log_level: 로깅 레벨
-        capture_console: 터미널 출력 캡처 여부
+        experiment_type: 실험 타입 (예: hyperparameter_tuning, resampling_experiment)
+        model_type: 모델 타입 (예: xgboost, catboost, lightgbm, random_forest)
+        log_level: 로깅 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        capture_console: 터미널 출력 캡처 여부 (True 권장)
         
     Yields:
-        로그 파일 경로
+        str: 로그 파일 경로 (실험 요약 로깅 시 사용)
+        
+    Raises:
+        ValueError: 잘못된 로깅 레벨이 지정된 경우
+        OSError: 로그 파일 생성/쓰기 권한이 없는 경우
     """
     # 실험별 로깅 설정
     log_file_path = setup_experiment_logging(
@@ -294,17 +366,67 @@ def log_experiment_summary(
     log_file_path: str = None
 ) -> None:
     """
-    실험 요약 정보를 로그 파일에 기록합니다.
+    실험 요약 정보를 로그 파일에 구조화된 형태로 기록합니다.
+    
+    이 함수는 실험의 핵심 결과와 성능 지표를 체계적으로 기록하여
+    실험 결과의 재현성과 분석 가능성을 높입니다.
+    
+    기록되는 정보:
+    - 실험 기본 정보 (타입, 모델, 시간)
+    - 성능 지표 (최고 점수, 실행 시간, 시도 횟수)
+    - 최적 파라미터 (하이퍼파라미터 튜닝 결과)
+    - 데이터 정보 (행 수, 열 수, 클래스 분포 등)
+    - 실험 완료 시간
+    
+    사용 예시:
+        log_experiment_summary(
+            experiment_type="hyperparameter_tuning",
+            model_type="xgboost",
+            best_score=0.85,
+            best_params={"max_depth": 6, "learning_rate": 0.1},
+            execution_time=3600.5,
+            n_trials=100,
+            data_info={"total_rows": 10000, "total_columns": 50},
+            log_file_path="logs/experiment.log"
+        )
+    
+    로그 파일 형식:
+        === 실험 요약 ===
+        실험 타입: hyperparameter_tuning
+        모델 타입: xgboost
+        최고 성능: 0.850000
+        실행 시간: 3600.50초
+        시도 횟수: 100
+        완료 시간: 2025-01-15 14:30:25
+        
+        === 최적 파라미터 ===
+          max_depth: 6
+          learning_rate: 0.1
+        
+        === 데이터 정보 ===
+          total_rows: 10000
+          total_columns: 50
     
     Args:
-        experiment_type: 실험 타입
-        model_type: 모델 타입
-        best_score: 최고 성능 점수
-        best_params: 최적 파라미터
-        execution_time: 실행 시간 (초)
-        n_trials: 시도 횟수
-        data_info: 데이터 정보
-        log_file_path: 로그 파일 경로
+        experiment_type: 실험 타입 (예: hyperparameter_tuning, resampling_experiment)
+        model_type: 모델 타입 (예: xgboost, catboost, lightgbm, random_forest)
+        best_score: 최고 성능 점수 (float)
+        best_params: 최적 파라미터 딕셔너리
+        execution_time: 실행 시간 (초, float)
+        n_trials: 시도 횟수 (int)
+        data_info: 데이터 정보 딕셔너리 (선택사항)
+            - total_rows: 전체 행 수
+            - total_columns: 전체 열 수
+            - class_distributions: 클래스 분포 정보
+            - 기타 데이터 관련 정보
+        log_file_path: 로그 파일 경로 (None이면 자동 생성)
+        
+    Returns:
+        None
+        
+    Raises:
+        OSError: 로그 파일 쓰기 권한이 없는 경우
+        ValueError: 필수 인자가 None이거나 잘못된 타입인 경우
     """
     if log_file_path is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -335,14 +457,43 @@ def log_experiment_summary(
 
 def find_column_with_remainder(df_columns: List[str], colname: str) -> Optional[str]:
     """
-    df_columns에서 colname 또는 remainder__colname이 존재하면 반환
+    데이터프레임 컬럼명에서 특정 컬럼을 찾는 함수 (scikit-learn 파이프라인 호환)
+    
+    이 함수는 scikit-learn의 ColumnTransformer나 Pipeline을 통과한 후
+    컬럼명이 변경된 경우를 처리합니다. 특히 'remainder__' 접두사가
+    추가된 컬럼명을 자동으로 찾아줍니다.
+    
+    컬럼명 변경 패턴:
+    - 원본: 'target_column'
+    - 변경 후: 'remainder__target_column' (ColumnTransformer의 remainder 옵션 사용 시)
+    
+    사용 예시:
+        # 전처리 후 컬럼명 확인
+        columns = ['remainder__anxiety_score', 'remainder__depress_score', 'num__age']
+        
+        # 원본 컬럼명으로 찾기
+        found_col = find_column_with_remainder(columns, 'anxiety_score')
+        # 결과: 'remainder__anxiety_score'
+        
+        # 이미 접두사가 있는 경우도 처리
+        found_col = find_column_with_remainder(columns, 'remainder__anxiety_score')
+        # 결과: 'remainder__anxiety_score'
     
     Args:
-        df_columns: 데이터프레임 컬럼명 리스트
-        colname: 찾을 컬럼명
+        df_columns: 데이터프레임의 컬럼명 리스트
+        colname: 찾을 컬럼명 (원본명 또는 remainder__ 접두사 포함)
         
     Returns:
-        실제 존재하는 컬럼명(str) 또는 None
+        str: 실제 존재하는 컬럼명 또는 None (찾지 못한 경우)
+        
+    Examples:
+        >>> columns = ['remainder__target', 'num__feature1', 'cat__feature2']
+        >>> find_column_with_remainder(columns, 'target')
+        'remainder__target'
+        >>> find_column_with_remainder(columns, 'feature1')
+        None
+        >>> find_column_with_remainder(columns, 'remainder__target')
+        'remainder__target'
     """
     if colname in df_columns:
         return colname
@@ -369,10 +520,46 @@ def safe_feature_name(feature_name: str) -> str:
 
 def set_random_seed(seed: int = 42):
     """
-    재현성을 위한 랜덤 시드를 설정합니다.
+    재현성을 위한 랜덤 시드를 통합 설정합니다.
+    
+    이 함수는 실험의 재현성을 보장하기 위해 여러 라이브러리의
+    랜덤 시드를 한 번에 설정합니다. 머신러닝 실험에서 일관된
+    결과를 얻기 위해 필수적인 함수입니다.
+    
+    설정되는 시드:
+    - numpy.random.seed(): 수치 계산 라이브러리
+    - random.seed(): Python 기본 랜덤 모듈
+    - xgboost.set_config(): XGBoost 라이브러리 (가능한 경우)
+    
+    사용 예시:
+        # 기본 시드 (42) 설정
+        set_random_seed()
+        
+        # 사용자 정의 시드 설정
+        set_random_seed(123)
+        
+        # 실험 시작 전에 호출
+        set_random_seed(42)
+        result = run_experiment()  # 재현 가능한 결과
+    
+    주의사항:
+    - 실험 시작 시 가장 먼저 호출해야 합니다
+    - 동일한 시드로 여러 번 호출해도 안전합니다
+    - 일부 라이브러리(XGBoost)는 import되지 않은 경우 무시됩니다
     
     Args:
-        seed: 랜덤 시드
+        seed: 랜덤 시드 (기본값: 42)
+        
+    Returns:
+        None
+        
+    Raises:
+        ImportError: XGBoost import 실패 시 (무시됨)
+        
+    Examples:
+        >>> set_random_seed(42)
+        >>> np.random.rand()  # 항상 동일한 값 반환
+        0.3745401188473625
     """
     import numpy as np
     import random

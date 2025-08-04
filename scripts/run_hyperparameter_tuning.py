@@ -17,6 +17,7 @@ import mlflow
 import yaml
 import pandas as pd
 import numpy as np
+import optuna
 from typing import Dict, Any, List
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -317,6 +318,21 @@ def run_hyperparameter_tuning_with_config(config: Dict[str, Any], data_path: str
                 except Exception as e:
                     logger.error(f"결과 저장 실패: {e}")
                     # 결과 저장 실패해도 계속 진행
+                
+                # === 고급 로깅 기능 추가 ===
+                from src.utils.mlflow_logging import log_all_advanced_metrics
+                
+                # 모든 고급 로깅 기능 실행
+                logging_results = log_all_advanced_metrics(tuner, config, run)
+                
+                # 로깅 결과 요약
+                successful_features = [k for k, v in logging_results.items() if v]
+                failed_features = [k for k, v in logging_results.items() if not v]
+                
+                if successful_features:
+                    logger.info(f"고급 로깅 성공: {successful_features}")
+                if failed_features:
+                    logger.warning(f"고급 로깅 실패: {failed_features}")
                 
                 # 결과 추출 (안전하게)
                 if result is None:

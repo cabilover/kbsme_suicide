@@ -95,7 +95,7 @@ features:
     "anxiety_score", "depress_score", "sleep_score", "comp",
     
     # 자살 관련 변수 (원본 데이터에 존재)
-    # "suicide_t", "suicide_a",  # 제외
+    "suicide_t", "suicide_a",
     
     # 정신과 분류 (원본 데이터에 존재)
     "psychia_cate",
@@ -125,6 +125,7 @@ features:
     
     # 결측치 플래그 (전처리에서 생성)
     "anxiety_score_missing", "depress_score_missing", "sleep_score_missing",
+    "suicide_t_missing", "suicide_a_missing",
     
     # next_year 타겟 변수들은 제외 (데이터 누수 방지)
     # "anxiety_score_next_year", "depress_score_next_year", "sleep_score_next_year", "comp_next_year",
@@ -161,7 +162,7 @@ preprocessing:
   # 결측치 플래그 설정
   missing_flags:
     enabled: true  # 결측치 플래그 생성 활성화
-    columns: ["sleep_score", "depress_score", "anxiety_score"]  # 플래그 생성 대상 컬럼
+    columns: ["sleep_score", "depress_score", "anxiety_score", "suicide_t", "suicide_a"]  # 플래그 생성 대상 컬럼
   
   # 수치형 결측치 처리
   numerical_imputation:
@@ -193,8 +194,9 @@ preprocessing:
   
   # 피처 선택
   feature_selection:
-    method: "variance_threshold"
-    threshold: 0.01 
+    method: "none"  # 비활성화: 모든 피처 사용
+    # method: "variance_threshold"
+    # threshold: 0.01 
 
 # 모델 설정
 model:

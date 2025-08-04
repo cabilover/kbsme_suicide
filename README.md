@@ -41,7 +41,8 @@ kbsmc_suicide/
 │   ├── utils/
 │   │   ├── __init__.py               # 유틸리티 패키지 초기화
 │   │   ├── config_manager.py         # ConfigManager 클래스
-│   │   └── mlflow_manager.py         # MLflow 실험 관리 클래스
+│   │   ├── mlflow_manager.py         # MLflow 실험 관리 클래스
+│   │   └── mlflow_logging.py         # MLflow 로깅 통합 모듈 (✅ 최신)
 │   ├── training.py                   # 훈련 파이프라인
 │   ├── evaluation.py                 # 평가 모듈
 │   ├── hyperparameter_tuning.py      # 하이퍼파라미터 튜닝
@@ -435,6 +436,47 @@ python scripts/run_hyperparameter_tuning.py --model-type lightgbm --experiment-t
 python scripts/run_hyperparameter_tuning.py --model-type random_forest --experiment-type resampling --resampling-method time_series_adapted --n-trials 50
 ```
 
+### 시각화 파일 관리 시스템 사용법 (✅ 2025-08-04 최신 기능)
+
+#### 📁 생성되는 폴더 구조
+```
+results/visualizations/
+├── hyperparameter_tuning_experiment_xgboost_20250804_100253/
+│   └── optimization_visualization.png
+├── hyperparameter_tuning_experiment_xgboost_20250804_100254/
+│   ├── cv_score_distribution.png
+│   └── learning_curves.png
+├── resampling_experiment_xgboost_20250804_100933/
+│   └── optimization_visualization.png
+└── resampling_experiment_xgboost_20250804_100934/
+    ├── cv_score_distribution.png
+    └── learning_curves.png
+```
+
+#### 🎯 시각화 파일 종류
+- **`optimization_visualization.png`**: 최적화 과정 종합 시각화 (6개 서브플롯)
+  - 최적화 히스토리 플롯
+  - 파라미터 중요도 플롯
+  - 병렬 좌표 플롯
+  - 슬라이스 플롯
+  - 컨투어 플롯
+  - 수동 파라미터 중요도 플롯
+- **`cv_score_distribution.png`**: 교차 검증 점수 분포 (박스플롯)
+- **`learning_curves.png`**: 폴드별 학습/검증 곡선
+
+#### 🔧 폴더명 규칙
+- **형식**: `{experiment_type}_{model_type}_{timestamp}`
+- **예시**: `hyperparameter_tuning_experiment_xgboost_20250804_100253`
+- **구성 요소**:
+  - `experiment_type`: 실험 타입 (hyperparameter_tuning, resampling_experiment 등)
+  - `model_type`: 모델 타입 (xgboost, lightgbm, catboost, random_forest)
+  - `timestamp`: 실행 시간 (YYYYMMDD_HHMMSS)
+
+#### 📊 MLflow 아티팩트 연동
+- 모든 시각화 파일이 MLflow 아티팩트로 자동 로깅
+- 실험 추적 및 버전 관리 가능
+- MLflow UI에서 시각화 파일 직접 확인 가능
+
 ### 레거시 단일 파일 config 사용 (백워드 호환성)
 ```bash
 python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparameter_tuning.yaml --base_config configs/default_config.yaml
@@ -454,6 +496,8 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **폴드별 메트릭**: 각 교차 검증 폴드의 성능 지표
 - **고급 평가 지표**: Balanced Accuracy, Precision-Recall Curve, ROC-AUC vs PR-AUC 비교
 - **모델 아티팩트**: 학습된 모델 및 결과 요약
+- **메트릭 자동 분류**: 6개 카테고리(fold_metrics, trial_metrics, cv_metrics, feature_importance, model_complexity, basic_metrics)로 자동 분류
+- **Trial별 성능 분석**: 최고/평균/최저 Trial 성능 및 성공한 Trial 수 통계
 
 ### 튜닝 결과 (models/)
 - **best_tuned_model.joblib**: 최적 파라미터로 학습된 모델
@@ -526,12 +570,81 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 ### 불균형 데이터 처리
 - **클래스 가중치, scale_pos_weight**: XGBoost 등에서 불균형 데이터 처리를 위한 가중치 옵션 지원
 
-### 유틸리티 함수 (✅ 최신 추가)
-- **숫자 변환 및 검증**: `safe_float_conversion()`, `is_valid_number()` 함수로 하이퍼파라미터 튜닝 과정에서 안전한 숫자 처리
-- **데이터 품질 보장**: NaN/Inf 값 자동 감지 및 처리로 튜닝 과정의 안정성 향상
-- **ConfigManager**: 계층적 설정 파일 관리 및 자동 병합 시스템
-- **MLflowExperimentManager**: MLflow 실험 관리 및 정리 자동화
-- **실험 로깅 시스템**: 구조화된 로깅 및 콘솔 캡처 기능
+### 🛠️ 공통 유틸리티 시스템 (`src/utils.py`) (✅ 최신 추가)
+
+#### 📝 실험 로깅 시스템
+- **통합 로깅 컨텍스트**: `experiment_logging_context()` 함수로 실험 전체 생명주기 관리
+- **자동 로그 파일 생성**: 실험 타입과 모델 타입별로 구조화된 로그 파일 자동 생성
+- **콘솔 출력 캡처**: `ConsoleCapture` 클래스로 모든 터미널 출력 자동 캡처 및 저장
+- **예외 처리 통합**: 실험 중 발생하는 모든 예외 정보 자동 기록
+- **실험 요약 로깅**: `log_experiment_summary()` 함수로 실험 결과 구조화 저장
+
+#### 🔢 숫자 처리 및 검증 시스템
+- **안전한 숫자 변환**: `safe_float_conversion()`, `safe_float()` 함수로 MLflow 메트릭 로깅 안전성 보장
+- **유효성 검증**: `is_valid_number()` 함수로 NaN/Inf 값 자동 감지 및 처리
+- **데이터 품질 보장**: 하이퍼파라미터 튜닝 과정에서 안전한 숫자 처리
+
+#### 🔧 데이터 처리 유틸리티
+- **컬럼명 매핑**: `find_column_with_remainder()` 함수로 scikit-learn 파이프라인 후 컬럼명 자동 매핑
+- **안전한 피처명**: `safe_feature_name()` 함수로 MLflow 로깅에 안전한 피처명 생성
+- **재현성 보장**: `set_random_seed()` 함수로 numpy, random, xgboost 시드 통합 관리
+
+#### 📊 실험 관리 시스템
+- **ConfigManager**: 계층적 설정 파일 관리 및 자동 병합 시스템 (`src/utils/config_manager.py`)
+- **MLflowExperimentManager**: MLflow 실험 관리 및 정리 자동화 (`src/utils/mlflow_manager.py`)
+- **결과 저장 시스템**: `save_experiment_results()` 함수로 실험 결과를 12개 섹션으로 구조화 저장
+  - **MLflow 메트릭 추출 강화**: 6개 카테고리(fold_metrics, trial_metrics, cv_metrics, feature_importance, model_complexity, basic_metrics)로 자동 분류
+  - **명확한 오류 메시지**: 누락된 정보에 대한 구체적인 원인 설명 제공
+  - **Trial별 성능 요약**: 최고/평균/최저 Trial 성능 및 성공한 Trial 수 표시
+  - **실시간 메트릭 분석**: 각 카테고리별 메트릭 수와 예시를 로그로 출력
+
+#### 🚀 사용 예시
+```python
+from src.utils import experiment_logging_context, log_experiment_summary
+
+# 실험 로깅 컨텍스트 사용
+with experiment_logging_context(
+    experiment_type="hyperparameter_tuning",
+    model_type="xgboost",
+    log_level="INFO",
+    capture_console=True
+) as log_file_path:
+    # 실험 코드 실행
+    result = run_hyperparameter_tuning()
+    
+    # 실험 요약 로깅
+    log_experiment_summary(
+        experiment_type="hyperparameter_tuning",
+        model_type="xgboost",
+        best_score=0.85,
+        best_params={"max_depth": 6},
+        execution_time=3600.5,
+        n_trials=100,
+        data_info={"total_rows": 10000},
+        log_file_path=log_file_path
+    )
+```
+
+### 🚀 MLflow 로깅 시스템 (✅ 2025-08-04 최신 기능)
+- **통합 로깅 모듈**: `src/utils/mlflow_logging.py`로 모든 MLflow 로깅 기능 통합
+- **피처 중요도 로깅**: 상위 20개 피처, 시각화 차트, CSV 파일 저장
+- **모델 아티팩트 저장**: joblib 모델, JSON 파라미터, MLflow 모델 저장
+- **시각화 로깅**: 최적화 진행도, 성능 분포, 파라미터 중요도 차트
+- **메모리 사용량 추적**: 프로세스 및 시스템 메모리 정보
+- **학습 곡선 로깅**: 폴드별 학습/검증 손실 및 정확도
+- **리샘플링 특화 분석**: 클래스 분포, 불균형 비율, 리샘플링 효과
+- **통합 인터페이스**: `log_all_advanced_metrics()` 함수로 모든 로깅 기능 한 번에 실행
+- **코드 중복 제거**: 800줄 이상의 중복 코드 제거로 유지보수성 대폭 향상
+- **재사용성 향상**: 새로운 실험에서도 동일한 로깅 기능 쉽게 적용 가능
+
+### 📊 시각화 파일 관리 시스템 (✅ 2025-08-04 최신 기능)
+- **체계적 파일 관리**: 시각화 파일들을 `results/visualizations/` 폴더에 실험별로 체계적으로 저장
+- **실험별 폴더 구조**: `{experiment_type}_{model_type}_{timestamp}/` 형식으로 명확한 구분
+- **자동 폴더 생성**: 실험 실행 시 자동으로 적절한 폴더 생성 및 파일 저장
+- **MLflow 아티팩트 연동**: MLflow 아티팩트로 올바르게 로깅되어 실험 추적성 향상
+- **루트 폴더 정리**: 더 이상 루트 폴더에 PNG 파일이 생성되지 않아 개발 환경 깔끔하게 유지
+- **실험 추적성 향상**: 폴더명만으로 실험 내용 파악 가능, 타임스탬프로 버전 관리
+- **결과 분석 용이성**: 실험별 시각화 파일들의 체계적 비교 분석 가능
 
 ### 데이터 품질 검증 시스템 (✅ 2025-07-16 신규 추가)
 - **Inf 값 검증**: 모든 수치형 컬럼에서 무한대 값 자동 감지 및 보고
@@ -540,6 +653,24 @@ python scripts/run_hyperparameter_tuning.py --tuning_config configs/hyperparamet
 - **자동화된 품질 리포트**: `infinite_values_analysis.txt`, `data_type_mixture_analysis.txt` 자동 생성
 
 ### 최신 실험 결과
+- **2025-08-04 기준, 시각화 파일 관리 시스템 체계화 완료**
+  - 시각화 파일들을 `results/visualizations/` 폴더에 실험별로 체계적으로 저장
+  - 실험 타입, 모델 타입, 타임스탬프를 포함한 명확한 폴더 구조 생성
+  - 루트 폴더 정리로 개발 환경 깔끔하게 유지
+  - MLflow 아티팩트와 연동하여 실험 추적성 향상
+  - 하이퍼파라미터 튜닝 및 리샘플링 실험 테스트 성공
+- **2025-08-04 기준, MLflow 로깅 시스템 대폭 개선 및 코드 리팩토링 완료**
+  - 공통 MLflow 로깅 기능을 `src/utils/mlflow_logging.py`로 분리
+  - 800줄 이상의 중복 코드 제거로 유지보수성 대폭 향상
+  - 하이퍼파라미터 튜닝과 리샘플링 실험에서 동일한 수준의 상세한 로깅 제공
+  - 새로운 로깅 기능 추가 시 한 곳에서만 수정하면 되도록 모듈화
+- **2025-08-04 기준, 결과 저장 시스템 개선 및 MLflow 메트릭 추출 강화 완료**
+  - MLflow 메트릭 추출 및 분류 시스템 강화
+  - 누락된 정보에 대한 명확한 원인 설명 제공
+  - Trial별 성능 요약 기능 추가
+- **2025-08-02 기준, Feature Selection 비활성화 및 suicide_t, suicide_a 피처 포함 설정 변경 완료**
+  - 모든 피처를 모델에 포함하여 피처엔지니어링 효과 최대화
+  - 자살 예측 성능 향상을 위한 suicide_t, suicide_a 피처 추가
 - **2025-01-XX 기준, 모델별 데이터 검증 최적화 및 평가 로직 중앙화 완료**
 - **2025-06-25 기준, 숫자 검증 유틸리티 함수 추가로 하이퍼파라미터 튜닝 안정성 향상**
 - **2025-06-24 기준, XGBoost, CatBoost, LightGBM, Random Forest 4개 모델 모두 ConfigManager 기반 하이퍼파라미터 튜닝 및 전체 파이프라인 정상 동작 확인**
