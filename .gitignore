@@ -180,4 +180,7 @@ PROJECT_PROGRESS.md
 catboost_info/
 
 # Cursor IDE rules
-.cursor/ 
+.cursor/
+
+# Models directory
+models/ 
