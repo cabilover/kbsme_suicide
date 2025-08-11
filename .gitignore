@@ -168,4 +168,15 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Project documentation files (excluded from git)
+README.md
+projectplan
+projectplan_backup
+
+# CatBoost info directory
+catboost_info/
+
+# Cursor IDE rules
+.cursor/ 
