@@ -336,12 +336,19 @@ class HyperparameterTuner:
                 if focal_loss_params:
                     trial_config['model']['xgboost'].update(focal_loss_params)
             
-            # 데이터 로드
+            # 데이터 로드 (suicide_c, suicide_y, check 컬럼 제외)
             if self.nrows:
                 df = pd.read_csv(self.data_path, nrows=self.nrows)
                 logger.info(f"데이터 로드: {self.nrows}개 행 사용")
             else:
                 df = pd.read_csv(self.data_path)
+            
+            # 불필요한 컬럼 제거 (NaN이 대부분인 컬럼들)
+            columns_to_drop = ['suicide_c', 'suicide_y', 'check']
+            existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
+            if existing_columns_to_drop:
+                df = df.drop(columns=existing_columns_to_drop)
+                logger.info(f"불필요한 컬럼 제거: {existing_columns_to_drop}")
             
             # 테스트 세트 분리
             train_val_df, test_df, _ = split_test_set(df, self.config)

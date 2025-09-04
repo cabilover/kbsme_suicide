@@ -622,6 +622,13 @@ def main():
     data_path = config['data']['file_path']
     df = pd.read_csv(data_path, nrows=10000)
     
+    # 불필요한 컬럼 제거 (NaN이 대부분인 컬럼들)
+    columns_to_drop = ['suicide_c', 'suicide_y', 'check']
+    existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
+    if existing_columns_to_drop:
+        df = df.drop(columns=existing_columns_to_drop)
+        logger.info(f"불필요한 컬럼 제거: {existing_columns_to_drop}")
+    
     logger.info(f"테스트 데이터 로드: {len(df):,} 행")
     
     # 1. 테스트 세트 분리

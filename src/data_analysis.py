@@ -142,6 +142,14 @@ def load_data():
     """Load the raw data and perform initial inspection."""
     print("Loading data...")
     df = pd.read_csv(DATA_DIR / "data.csv")
+    
+    # 불필요한 컬럼 제거 (NaN이 대부분인 컬럼들)
+    columns_to_drop = ['suicide_c', 'suicide_y', 'check']
+    existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
+    if existing_columns_to_drop:
+        df = df.drop(columns=existing_columns_to_drop)
+        print(f"불필요한 컬럼 제거: {existing_columns_to_drop}")
+    
     print(f"Data shape: {df.shape}")
     print(f"Columns: {list(df.columns)}")
     return df

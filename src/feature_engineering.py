@@ -295,13 +295,14 @@ def create_yoy_change_features(df: pd.DataFrame, config: Dict[str, Any]) -> pd.D
 def create_target_variables(df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
     """
     다음 해 예측을 위한 타겟 변수를 생성합니다 (data_analysis.py에서 가져온 기능).
+    다음해 데이터가 없는 경우 해당 행을 제외합니다.
     
     Args:
         df: 데이터프레임
         config: 설정 딕셔너리
         
     Returns:
-        타겟 변수가 추가된 데이터프레임
+        타겟 변수가 추가된 데이터프레임 (다음해 데이터가 없는 행 제외)
     """
     logger.info("타겟 변수 생성 (next_year)")
     
@@ -322,11 +323,32 @@ def create_target_variables(df: pd.DataFrame, config: Dict[str, Any]) -> pd.Data
     # ID별로 정렬
     df_with_targets = df_with_targets.sort_values([id_column, year_column])
     
+    # 원본 데이터 크기
+    original_size = len(df_with_targets)
+    
     # 다음 해 타겟 변수 생성
     for col in target_cols:
         if col in df.columns:
             df_with_targets[f'{col}_next_year'] = df_with_targets.groupby(id_column)[col].shift(-1)
             logger.info(f"  - {col}_next_year 생성 완료")
+    
+    # 다음해 데이터가 없는 행들 제거 (NaN이 있는 행들)
+    # 주요 타겟 변수들에 대해 NaN이 있는 행들을 제거
+    main_target_cols = [f'{col}_next_year' for col in binary_targets if col in df.columns]
+    
+    if main_target_cols:
+        # 주요 타겟 변수들 중 하나라도 NaN이 있으면 해당 행 제거
+        df_with_targets = df_with_targets.dropna(subset=main_target_cols)
+        
+        # 제거 결과 로깅
+        filtered_size = len(df_with_targets)
+        removed_count = original_size - filtered_size
+        removal_rate = (removed_count / original_size) * 100
+        
+        logger.info(f"다음해 데이터가 없는 행 제거 완료:")
+        logger.info(f"  - 원본 데이터: {original_size:,} 행")
+        logger.info(f"  - 필터링 후: {filtered_size:,} 행")
+        logger.info(f"  - 제거된 행: {removed_count:,} 행 ({removal_rate:.2f}%)")
     
     return df_with_targets
 
@@ -723,6 +745,14 @@ time_series:
         raise SystemExit(1)
     
     df = pd.read_csv(data_path)
+    
+    # 불필요한 컬럼 제거 (NaN이 대부분인 컬럼들)
+    columns_to_drop = ['suicide_c', 'suicide_y', 'check']
+    existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
+    if existing_columns_to_drop:
+        df = df.drop(columns=existing_columns_to_drop)
+        logger.info(f"불필요한 컬럼 제거: {existing_columns_to_drop}")
+    
     logger.info(f"데이터 로드 완료: {df.shape}")
     
     # 피처 엔지니어링 실행

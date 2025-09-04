@@ -1,0 +1,34 @@
+Phase 2: 완전한 피처 선택 실험 완료 리포트 (36개 실험)
+================================================
+
+실험 기간: 2025. 08. 12. (화) 10:12:06 KST ~ 2025. 08. 12. (화) 10:20:24 KST
+
+실행된 실험 (총 36개):
+
+1. Mutual Info 피처 선택 (12개)
+   - 10개: XGBoost, CatBoost, LightGBM, RandomForest
+   - 15개: XGBoost, CatBoost, LightGBM, RandomForest
+   - 20개: XGBoost, CatBoost, LightGBM, RandomForest
+
+2. Chi2 피처 선택 (12개)
+   - 10개: XGBoost, CatBoost, LightGBM, RandomForest
+   - 15개: XGBoost, CatBoost, LightGBM, RandomForest
+   - 20개: XGBoost, CatBoost, LightGBM, RandomForest
+
+3. Recursive Feature Elimination (12개)
+   - 10개: XGBoost, CatBoost, LightGBM, RandomForest
+   - 15개: XGBoost, CatBoost, LightGBM, RandomForest
+   - 20개: XGBoost, CatBoost, LightGBM, RandomForest
+
+실험 매트릭스:
+- 모델: 4개 (XGBoost, CatBoost, LightGBM, RandomForest)
+- 피처 선택 방법: 3개 (Mutual Info, Chi2, RFE)
+- 피처 수: 3개 (10, 15, 20)
+- 총 실험 수: 4 × 3 × 3 = 36개
+
+다음 단계:
+- MLflow UI에서 36개 실험 결과 종합 분석
+- 최적 피처 선택 방법과 피처 수 조합 도출
+- Phase 3: 리샘플링 실험 진행
+
+MLflow UI 접속: http://localhost:5000

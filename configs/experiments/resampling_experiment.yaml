@@ -328,6 +328,41 @@ cv:
     min_positive_samples_per_fold: 1
     balance_threshold: 0.1
 
+# 피처 선택 설정 (실제 생성되는 컬럼명과 일치)
+features:
+  selected_features:
+    # 전처리 파이프라인에서 생성되는 컬럼들 (num__, cat__ 접두사 포함)
+    - num__age
+    - num__anxiety_score
+    - num__anxiety_score_missing
+    - num__comp
+    - num__depress_score
+    - num__depress_score_missing
+    - num__sleep_score
+    - num__sleep_score_missing
+    - num__suicide_a_missing
+    - num__suicide_t_missing
+    - cat__sex
+    
+    # 통과 컬럼들 (passthrough)
+    - suicide_t
+    - suicide_a
+    - psychia_cate
+    - sleep_score_missing
+    - depress_score_missing
+    - anxiety_score_missing
+    - suicide_t_missing
+    - suicide_a_missing
+    - yov
+    - dov
+    
+    # 피처 엔지니어링에서 생성되는 컬럼들
+    - suicide_t_next_year
+    - suicide_a_next_year
+    - month
+    - day_of_week
+    - day_of_year
+
 # 결과 저장 설정
 results:
   save_best_model: true

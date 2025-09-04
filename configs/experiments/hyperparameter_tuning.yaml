@@ -212,7 +212,7 @@ lightgbm_params:
 
   boosting_type:
     type: "categorical"
-    choices: ["gbdt", "dart", "goss"]
+    choices: ["gbdt", "dart"]
 
 # CatBoost 하이퍼파라미터 검색 범위
 catboost_params:
@@ -331,28 +331,28 @@ random_forest_params:
     log: true
 
 # 평가 설정
-  evaluation:
-    # 극도 불균형 데이터에 적합한 평가 지표
-    primary_metric: "f1"  # F1-Score (Precision과 Recall의 조화평균)
-    secondary_metrics: ["recall", "precision", "pr_auc", "balanced_accuracy", "roc_auc"]
+evaluation:
+  # 극도 불균형 데이터에 적합한 평가 지표
+  primary_metric: "f1"  # F1-Score (Precision과 Recall의 조화평균)
+  secondary_metrics: ["recall", "precision", "pr_auc", "balanced_accuracy", "roc_auc"]
+
+# 평가 지표 설정
+metrics:
+  # 분류 메트릭
+  classification_metrics: ["precision", "recall", "f1", "roc_auc", "balanced_accuracy", "pr_auc"]
   
-  # 평가 지표 설정
-  metrics:
-    # 분류 메트릭
-    classification_metrics: ["precision", "recall", "f1", "roc_auc", "balanced_accuracy", "pr_auc"]
-    
-    # 회귀 메트릭
-    regression_metrics: ["mae", "rmse", "r2"]
-    
-    # 교차 검증 메트릭
-    cv_metrics: ["accuracy", "f1", "auc", "rmse", "r2", "pr_auc"]
+  # 회귀 메트릭
+  regression_metrics: ["mae", "rmse", "r2"]
   
-  # 결과 저장 설정
-  save_predictions: true
-  save_feature_importance: true
-  save_confusion_matrix: true
-  save_roc_curve: true
-  save_precision_recall_curve: true
+  # 교차 검증 메트릭
+  cv_metrics: ["accuracy", "f1", "auc", "rmse", "r2", "pr_auc"]
+
+# 결과 저장 설정
+save_predictions: true
+save_feature_importance: true
+save_confusion_matrix: true
+save_roc_curve: true
+save_precision_recall_curve: true
 
 # 교차 검증 설정
 cv:

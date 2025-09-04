@@ -31,9 +31,9 @@ echo "메모리 제한 설정: ${MEMORY_LIMIT}GB"
 N_JOBS=4
 echo "병렬 처리 설정: n_jobs=${N_JOBS} (메모리 안정성 확보)"
 
-# 메모리 임계값 설정 (GB) - 이 값을 넘으면 자동 정리
-MEMORY_THRESHOLD=40
-echo "메모리 임계값 설정: ${MEMORY_THRESHOLD}GB"
+# 메모리 임계값 설정 (%) - 이 값을 넘으면 자동 정리
+MEMORY_THRESHOLD=75
+echo "메모리 임계값 설정: ${MEMORY_THRESHOLD}%"
 
 # 타임스탬프 생성
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
@@ -174,13 +174,30 @@ echo "==================================================================="
 start_time=$(date)
 echo "실험 시작 시간: $start_time"
 
+# 가상환경 활성화 확인
+if [[ -z "$CONDA_DEFAULT_ENV" ]]; then
+    echo "⚠️  conda 가상환경이 활성화되지 않았습니다."
+    echo "conda 가상환경을 활성화합니다..."
+    conda activate simcare
+    echo "conda 가상환경 활성화 완료: $CONDA_DEFAULT_ENV"
+else
+    echo "✅ conda 가상환경이 활성화되어 있습니다: $CONDA_DEFAULT_ENV"
+fi
+
+# 의존성 체크
+echo "필요한 패키지 설치 확인 중..."
+python -c "import psutil; print('✅ psutil 설치됨')" 2>/dev/null || {
+    echo "❌ psutil이 설치되지 않았습니다. 설치 중..."
+    pip install psutil
+}
+
 # 초기 메모리 상태 확인
 echo "초기 메모리 상태:"
 check_memory
 
-    # 메모리 사용량 체크
-    echo "현재 시스템 상태 체크 중..."
-    python scripts/check_cpu_usage.py
+# 메모리 사용량 체크
+echo "현재 시스템 상태 체크 중..."
+python scripts/check_cpu_usage.py
 
 echo ""
 echo ">>> Phase 1-1: XGBoost 기준선 실험"
